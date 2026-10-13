@@ -1,0 +1,1993 @@
+{
+ "outlet": {
+  "id": "OUT-1",
+  "name": "FRYZO GRILL",
+  "currency": "AED",
+  "vat_rate": 5
+ },
+ "categories": [
+  {
+   "id": "falooda",
+   "name": "Falooda",
+   "sort": 0,
+   "tint": "#FFF3BF"
+  },
+  {
+   "id": "mixjuice",
+   "name": "Mix Juice",
+   "sort": 1,
+   "tint": "#DCEBFB"
+  },
+  {
+   "id": "passion",
+   "name": "Passion",
+   "sort": 2,
+   "tint": "#DCF2E3"
+  },
+  {
+   "id": "roob",
+   "name": "Roob",
+   "sort": 3,
+   "tint": "#FBE0E6"
+  },
+  {
+   "id": "drinks",
+   "name": "Drinks",
+   "sort": 4,
+   "tint": "#EBE2FA"
+  },
+  {
+   "id": "extras",
+   "name": "Extras",
+   "sort": 5,
+   "tint": "#FDE8D3"
+  },
+  {
+   "id": "grillkubz",
+   "name": "Grill-Kubz",
+   "sort": 6,
+   "tint": "#D6F2F1"
+  },
+  {
+   "id": "grillrice",
+   "name": "Grill-Rice",
+   "sort": 7,
+   "tint": "#E7EFDC"
+  },
+  {
+   "id": "freshjuice",
+   "name": "Fresh Juice",
+   "sort": 8,
+   "tint": "#E6E9EF"
+  },
+  {
+   "id": "club",
+   "name": "Club",
+   "sort": 9,
+   "tint": "#FFF3BF"
+  },
+  {
+   "id": "wrap",
+   "name": "Wrap",
+   "sort": 10,
+   "tint": "#DCEBFB"
+  },
+  {
+   "id": "crushmilk",
+   "name": "Crush Milk",
+   "sort": 11,
+   "tint": "#DCF2E3"
+  },
+  {
+   "id": "mojito",
+   "name": "Mojito",
+   "sort": 12,
+   "tint": "#FBE0E6"
+  },
+  {
+   "id": "bottlejuice",
+   "name": "Bottle Juice",
+   "sort": 13,
+   "tint": "#EBE2FA"
+  },
+  {
+   "id": "broasted",
+   "name": "Broasted",
+   "sort": 14,
+   "tint": "#FDE8D3"
+  },
+  {
+   "id": "grill",
+   "name": "Grill",
+   "sort": 15,
+   "tint": "#D6F2F1"
+  },
+  {
+   "id": "burger",
+   "name": "Burger",
+   "sort": 16,
+   "tint": "#E7EFDC"
+  },
+  {
+   "id": "shawarma",
+   "name": "Shawarma",
+   "sort": 17,
+   "tint": "#E6E9EF"
+  }
+ ],
+ "items": [
+  {
+   "id": "CL01",
+   "code": "CL01",
+   "name": "Fries Club",
+   "category_id": "club",
+   "price": 15.0,
+   "veg": true,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "CL02",
+   "code": "CL02",
+   "name": "Khaleej Club",
+   "category_id": "club",
+   "price": 15.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "CL03",
+   "code": "CL03",
+   "name": "Lulu Club",
+   "category_id": "club",
+   "price": 15.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "CL04",
+   "code": "CL04",
+   "name": "Zinger Club",
+   "category_id": "club",
+   "price": 15.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": true,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "MJ01",
+   "code": "MJ01",
+   "name": "Fruit Salad",
+   "category_id": "mixjuice",
+   "price": 15.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "MJ02",
+   "code": "MJ02",
+   "name": "Avocado Mix",
+   "category_id": "mixjuice",
+   "price": 16.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "PA01",
+   "code": "PA01",
+   "name": "Passion Ruman",
+   "category_id": "passion",
+   "price": 15.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "d1",
+     "name": "Less sugar",
+     "price": 0
+    },
+    {
+     "id": "d2",
+     "name": "Add ice cream",
+     "price": 3
+    },
+    {
+     "id": "d3",
+     "name": "Large size",
+     "price": 4
+    },
+    {
+     "id": "d4",
+     "name": "No ice",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "PA02",
+   "code": "PA02",
+   "name": "Passion Strawberry",
+   "category_id": "passion",
+   "price": 15.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "d1",
+     "name": "Less sugar",
+     "price": 0
+    },
+    {
+     "id": "d2",
+     "name": "Add ice cream",
+     "price": 3
+    },
+    {
+     "id": "d3",
+     "name": "Large size",
+     "price": 4
+    },
+    {
+     "id": "d4",
+     "name": "No ice",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "PA03",
+   "code": "PA03",
+   "name": "Passion Mango",
+   "category_id": "passion",
+   "price": 15.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "d1",
+     "name": "Less sugar",
+     "price": 0
+    },
+    {
+     "id": "d2",
+     "name": "Add ice cream",
+     "price": 3
+    },
+    {
+     "id": "d3",
+     "name": "Large size",
+     "price": 4
+    },
+    {
+     "id": "d4",
+     "name": "No ice",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "PA04",
+   "code": "PA04",
+   "name": "Passion Orange",
+   "category_id": "passion",
+   "price": 15.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "d1",
+     "name": "Less sugar",
+     "price": 0
+    },
+    {
+     "id": "d2",
+     "name": "Add ice cream",
+     "price": 3
+    },
+    {
+     "id": "d3",
+     "name": "Large size",
+     "price": 4
+    },
+    {
+     "id": "d4",
+     "name": "No ice",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "PA05",
+   "code": "PA05",
+   "name": "Passion Pineapple",
+   "category_id": "passion",
+   "price": 15.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "d1",
+     "name": "Less sugar",
+     "price": 0
+    },
+    {
+     "id": "d2",
+     "name": "Add ice cream",
+     "price": 3
+    },
+    {
+     "id": "d3",
+     "name": "Large size",
+     "price": 4
+    },
+    {
+     "id": "d4",
+     "name": "No ice",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "FA01",
+   "code": "FA01",
+   "name": "Mango Falooda",
+   "category_id": "falooda",
+   "price": 15.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": true,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "d1",
+     "name": "Less sugar",
+     "price": 0
+    },
+    {
+     "id": "d2",
+     "name": "Add ice cream",
+     "price": 3
+    },
+    {
+     "id": "d3",
+     "name": "Large size",
+     "price": 4
+    },
+    {
+     "id": "d4",
+     "name": "No ice",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "FA02",
+   "code": "FA02",
+   "name": "Strawberry Falooda",
+   "category_id": "falooda",
+   "price": 15.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "d1",
+     "name": "Less sugar",
+     "price": 0
+    },
+    {
+     "id": "d2",
+     "name": "Add ice cream",
+     "price": 3
+    },
+    {
+     "id": "d3",
+     "name": "Large size",
+     "price": 4
+    },
+    {
+     "id": "d4",
+     "name": "No ice",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "FA03",
+   "code": "FA03",
+   "name": "Falooda",
+   "category_id": "falooda",
+   "price": 15.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "d1",
+     "name": "Less sugar",
+     "price": 0
+    },
+    {
+     "id": "d2",
+     "name": "Add ice cream",
+     "price": 3
+    },
+    {
+     "id": "d3",
+     "name": "Large size",
+     "price": 4
+    },
+    {
+     "id": "d4",
+     "name": "No ice",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "RO01",
+   "code": "RO01",
+   "name": "Roob Passion",
+   "category_id": "roob",
+   "price": 12.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "RO02",
+   "code": "RO02",
+   "name": "Roob Grape",
+   "category_id": "roob",
+   "price": 12.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "RO03",
+   "code": "RO03",
+   "name": "Roob Ruman",
+   "category_id": "roob",
+   "price": 12.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "RO04",
+   "code": "RO04",
+   "name": "Roob Blueberry",
+   "category_id": "roob",
+   "price": 12.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "RO05",
+   "code": "RO05",
+   "name": "Roob Mango",
+   "category_id": "roob",
+   "price": 12.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "RO06",
+   "code": "RO06",
+   "name": "Roob Strawberry",
+   "category_id": "roob",
+   "price": 12.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "WR01",
+   "code": "WR01",
+   "name": "Italian Wrap",
+   "category_id": "wrap",
+   "price": 15.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "WR02",
+   "code": "WR02",
+   "name": "Spanish Wrap",
+   "category_id": "wrap",
+   "price": 15.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "WR03",
+   "code": "WR03",
+   "name": "Tikka Wrap",
+   "category_id": "wrap",
+   "price": 15.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "WR04",
+   "code": "WR04",
+   "name": "Chilli Wrap",
+   "category_id": "wrap",
+   "price": 15.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "WR05",
+   "code": "WR05",
+   "name": "Zinger Wrap",
+   "category_id": "wrap",
+   "price": 15.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "WR06",
+   "code": "WR06",
+   "name": "Nuggets Wrap",
+   "category_id": "wrap",
+   "price": 15.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "EX01",
+   "code": "EX01",
+   "name": "Hummus",
+   "category_id": "extras",
+   "price": 3.0,
+   "veg": true,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "EX02",
+   "code": "EX02",
+   "name": "Garlic Sauce",
+   "category_id": "extras",
+   "price": 1.0,
+   "veg": true,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "EX03",
+   "code": "EX03",
+   "name": "Cookies Bites",
+   "category_id": "extras",
+   "price": 8.0,
+   "veg": true,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "EX04",
+   "code": "EX04",
+   "name": "French Fries",
+   "category_id": "extras",
+   "price": 6.0,
+   "veg": true,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "DR01",
+   "code": "DR01",
+   "name": "Milk Tea",
+   "category_id": "drinks",
+   "price": 2.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "DR02",
+   "code": "DR02",
+   "name": "Maska Bun With Tea",
+   "category_id": "drinks",
+   "price": 5.0,
+   "veg": true,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "DR03",
+   "code": "DR03",
+   "name": "Mirinda Medium",
+   "category_id": "drinks",
+   "price": 5.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "DR04",
+   "code": "DR04",
+   "name": "Pepsi Medium",
+   "category_id": "drinks",
+   "price": 5.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "DR05",
+   "code": "DR05",
+   "name": "7Up Medium",
+   "category_id": "drinks",
+   "price": 5.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "DR06",
+   "code": "DR06",
+   "name": "Water 500ml",
+   "category_id": "drinks",
+   "price": 1.5,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "GK01",
+   "code": "GK01",
+   "name": "Grill Kubz Half",
+   "category_id": "grillkubz",
+   "price": 18.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "GK02",
+   "code": "GK02",
+   "name": "Grill Kubz Full",
+   "category_id": "grillkubz",
+   "price": 32.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "GR01",
+   "code": "GR01",
+   "name": "Grill Rice Half",
+   "category_id": "grillrice",
+   "price": 22.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "GR02",
+   "code": "GR02",
+   "name": "Grill Rice Full",
+   "category_id": "grillrice",
+   "price": 40.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "FJ01",
+   "code": "FJ01",
+   "name": "Orange Juice",
+   "category_id": "freshjuice",
+   "price": 10.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "d1",
+     "name": "Less sugar",
+     "price": 0
+    },
+    {
+     "id": "d2",
+     "name": "Add ice cream",
+     "price": 3
+    },
+    {
+     "id": "d3",
+     "name": "Large size",
+     "price": 4
+    },
+    {
+     "id": "d4",
+     "name": "No ice",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "FJ02",
+   "code": "FJ02",
+   "name": "Watermelon Juice",
+   "category_id": "freshjuice",
+   "price": 9.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "d1",
+     "name": "Less sugar",
+     "price": 0
+    },
+    {
+     "id": "d2",
+     "name": "Add ice cream",
+     "price": 3
+    },
+    {
+     "id": "d3",
+     "name": "Large size",
+     "price": 4
+    },
+    {
+     "id": "d4",
+     "name": "No ice",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "FJ03",
+   "code": "FJ03",
+   "name": "Lemon Mint",
+   "category_id": "freshjuice",
+   "price": 8.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "d1",
+     "name": "Less sugar",
+     "price": 0
+    },
+    {
+     "id": "d2",
+     "name": "Add ice cream",
+     "price": 3
+    },
+    {
+     "id": "d3",
+     "name": "Large size",
+     "price": 4
+    },
+    {
+     "id": "d4",
+     "name": "No ice",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "CM01",
+   "code": "CM01",
+   "name": "Oreo Crush",
+   "category_id": "crushmilk",
+   "price": 14.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "d1",
+     "name": "Less sugar",
+     "price": 0
+    },
+    {
+     "id": "d2",
+     "name": "Add ice cream",
+     "price": 3
+    },
+    {
+     "id": "d3",
+     "name": "Large size",
+     "price": 4
+    },
+    {
+     "id": "d4",
+     "name": "No ice",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "CM02",
+   "code": "CM02",
+   "name": "Lotus Crush",
+   "category_id": "crushmilk",
+   "price": 16.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "d1",
+     "name": "Less sugar",
+     "price": 0
+    },
+    {
+     "id": "d2",
+     "name": "Add ice cream",
+     "price": 3
+    },
+    {
+     "id": "d3",
+     "name": "Large size",
+     "price": 4
+    },
+    {
+     "id": "d4",
+     "name": "No ice",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "CM03",
+   "code": "CM03",
+   "name": "KitKat Crush",
+   "category_id": "crushmilk",
+   "price": 14.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "d1",
+     "name": "Less sugar",
+     "price": 0
+    },
+    {
+     "id": "d2",
+     "name": "Add ice cream",
+     "price": 3
+    },
+    {
+     "id": "d3",
+     "name": "Large size",
+     "price": 4
+    },
+    {
+     "id": "d4",
+     "name": "No ice",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "MO01",
+   "code": "MO01",
+   "name": "Blue Mojito",
+   "category_id": "mojito",
+   "price": 12.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "MO02",
+   "code": "MO02",
+   "name": "Passion Mojito",
+   "category_id": "mojito",
+   "price": 12.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "MO03",
+   "code": "MO03",
+   "name": "Strawberry Mojito",
+   "category_id": "mojito",
+   "price": 12.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "BJ01",
+   "code": "BJ01",
+   "name": "Mango Bottle",
+   "category_id": "bottlejuice",
+   "price": 7.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "BJ02",
+   "code": "BJ02",
+   "name": "Avocado Bottle",
+   "category_id": "bottlejuice",
+   "price": 9.0,
+   "veg": true,
+   "bev": true,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [],
+   "active": true
+  },
+  {
+   "id": "BR01",
+   "code": "BR01",
+   "name": "Broasted 4 Pcs",
+   "category_id": "broasted",
+   "price": 20.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "BR02",
+   "code": "BR02",
+   "name": "Broasted 8 Pcs",
+   "category_id": "broasted",
+   "price": 38.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "BR03",
+   "code": "BR03",
+   "name": "Family Broasted Combo",
+   "category_id": "broasted",
+   "price": 55.0,
+   "veg": false,
+   "bev": false,
+   "combo": true,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "GL01",
+   "code": "GL01",
+   "name": "Alfaham Quarter",
+   "category_id": "grill",
+   "price": 14.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "GL02",
+   "code": "GL02",
+   "name": "Alfaham Half",
+   "category_id": "grill",
+   "price": 24.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "GL03",
+   "code": "GL03",
+   "name": "Alfaham Full",
+   "category_id": "grill",
+   "price": 45.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "BU01",
+   "code": "BU01",
+   "name": "Zinger Burger",
+   "category_id": "burger",
+   "price": 13.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "BU02",
+   "code": "BU02",
+   "name": "Beef Burger",
+   "category_id": "burger",
+   "price": 16.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "BU03",
+   "code": "BU03",
+   "name": "Veg Burger",
+   "category_id": "burger",
+   "price": 11.0,
+   "veg": true,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "BU04",
+   "code": "BU04",
+   "name": "Burger Meal Combo",
+   "category_id": "burger",
+   "price": 22.0,
+   "veg": false,
+   "bev": false,
+   "combo": true,
+   "promo": true,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "SH01",
+   "code": "SH01",
+   "name": "Chicken Shawarma Roll",
+   "category_id": "shawarma",
+   "price": 7.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "SH02",
+   "code": "SH02",
+   "name": "Shawarma Plate",
+   "category_id": "shawarma",
+   "price": 18.0,
+   "veg": false,
+   "bev": false,
+   "combo": false,
+   "promo": false,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  },
+  {
+   "id": "SH03",
+   "code": "SH03",
+   "name": "Shawarma Combo",
+   "category_id": "shawarma",
+   "price": 20.0,
+   "veg": false,
+   "bev": false,
+   "combo": true,
+   "promo": true,
+   "image": null,
+   "modifiers": [
+    {
+     "id": "m1",
+     "name": "Extra cheese",
+     "price": 2
+    },
+    {
+     "id": "m2",
+     "name": "Extra garlic sauce",
+     "price": 1
+    },
+    {
+     "id": "m3",
+     "name": "Spicy",
+     "price": 0
+    },
+    {
+     "id": "m4",
+     "name": "No pickles",
+     "price": 0
+    }
+   ],
+   "active": true
+  }
+ ],
+ "waiters": [
+  {
+   "id": 1,
+   "name": "Default Waiter"
+  },
+  {
+   "id": 2,
+   "name": "Anas K"
+  },
+  {
+   "id": 3,
+   "name": "Rahul M"
+  },
+  {
+   "id": 4,
+   "name": "Fathima S"
+  },
+  {
+   "id": 5,
+   "name": "Joseph V"
+  }
+ ],
+ "customers": [
+  {
+   "id": 1,
+   "name": "Walk-in Customer",
+   "phone": ""
+  },
+  {
+   "id": 2,
+   "name": "Ahmed Al Mansoori",
+   "phone": "050 123 4567"
+  },
+  {
+   "id": 3,
+   "name": "Priya Nair",
+   "phone": "055 987 6543"
+  },
+  {
+   "id": 4,
+   "name": "Omar Haddad",
+   "phone": "052 456 7890"
+  }
+ ],
+ "delivery_partners": [
+  {
+   "id": 1,
+   "name": "Talabat"
+  },
+  {
+   "id": 2,
+   "name": "Deliveroo"
+  },
+  {
+   "id": 3,
+   "name": "Careem"
+  },
+  {
+   "id": 4,
+   "name": "Noon Food"
+  },
+  {
+   "id": 5,
+   "name": "Own rider"
+  }
+ ],
+ "tables": [
+  {
+   "id": "T1",
+   "name": "T1",
+   "area": "Indoor",
+   "seats": 6
+  },
+  {
+   "id": "T2",
+   "name": "T2",
+   "area": "Indoor",
+   "seats": 4
+  },
+  {
+   "id": "T3",
+   "name": "T3",
+   "area": "Indoor",
+   "seats": 4
+  },
+  {
+   "id": "T4",
+   "name": "T4",
+   "area": "Indoor",
+   "seats": 6
+  },
+  {
+   "id": "T5",
+   "name": "T5",
+   "area": "Indoor",
+   "seats": 4
+  },
+  {
+   "id": "T6",
+   "name": "T6",
+   "area": "Indoor",
+   "seats": 4
+  },
+  {
+   "id": "T7",
+   "name": "T7",
+   "area": "Indoor",
+   "seats": 6
+  },
+  {
+   "id": "T8",
+   "name": "T8",
+   "area": "Indoor",
+   "seats": 4
+  },
+  {
+   "id": "O1",
+   "name": "O1",
+   "area": "Outdoor",
+   "seats": 4
+  },
+  {
+   "id": "O2",
+   "name": "O2",
+   "area": "Outdoor",
+   "seats": 4
+  },
+  {
+   "id": "O3",
+   "name": "O3",
+   "area": "Outdoor",
+   "seats": 4
+  },
+  {
+   "id": "O4",
+   "name": "O4",
+   "area": "Outdoor",
+   "seats": 4
+  },
+  {
+   "id": "O5",
+   "name": "O5",
+   "area": "Outdoor",
+   "seats": 4
+  },
+  {
+   "id": "F1",
+   "name": "F1",
+   "area": "Family",
+   "seats": 8
+  },
+  {
+   "id": "F2",
+   "name": "F2",
+   "area": "Family",
+   "seats": 8
+  },
+  {
+   "id": "F3",
+   "name": "F3",
+   "area": "Family",
+   "seats": 8
+  },
+  {
+   "id": "F4",
+   "name": "F4",
+   "area": "Family",
+   "seats": 8
+  }
+ ],
+ "payment_methods": [
+  {
+   "id": "cash",
+   "name": "Cash"
+  },
+  {
+   "id": "card",
+   "name": "Card"
+  },
+  {
+   "id": "online",
+   "name": "Online / Wallet"
+  }
+ ],
+ "staff": [
+  {
+   "id": 1,
+   "name": "Anas K",
+   "role": "Cashier",
+   "pin": "1234"
+  },
+  {
+   "id": 2,
+   "name": "Admin",
+   "role": "Manager",
+   "pin": "0000",
+   "username": "admin",
+   "password": "admin"
+  }
+ ]
+}

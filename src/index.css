@@ -1,0 +1,4 @@
+/* Global reset — each screen injects its own styles */
+html, body, #root { height: 100%; margin: 0; }
+body { background: #EDF0F4; overflow: hidden; }
+*, *::before, *::after { box-sizing: border-box; }
