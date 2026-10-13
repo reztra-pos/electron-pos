@@ -74,8 +74,8 @@ export default function Activate({ onActivated }) {
           <div><h1>Activate this POS</h1><p>Connect this computer to your outlet with a device key.</p></div>
         </div>
         <ol>
-          <li>In the web app, open <b>Settings → Devices</b> and add a device (or pick an existing one).</li>
-          <li>Click <b>Generate API key</b> and copy it.</li>
+          <li>In the web app, open <b>Settings → POS Devices</b> and add this till (or click <b>Generate key</b> on an existing one).</li>
+          <li>Click <b>Copy key</b>.</li>
           <li>Paste it below and click <b>Activate</b>.</li>
         </ol>
 

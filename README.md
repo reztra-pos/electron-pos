@@ -102,4 +102,3 @@ npm run dev           # paste the key, then PIN 1234
 | `POS_TERMINAL_ID=POS-02` | Terminal name shown on login and sent with PIN logins    |
 
 Example (PowerShell): `$env:POS_KIOSK="1"; npm start`
-# electron-pos
