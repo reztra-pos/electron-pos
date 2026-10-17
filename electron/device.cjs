@@ -1,6 +1,7 @@
 // Device registration: stores the decrypted connection + device token on this PC.
 // Saved in %APPDATA%\Reztra POS\device.dat, encrypted with Windows DPAPI (Electron safeStorage).
-const { app, safeStorage } = require("electron");
+const { app, safeStorage, net } = require("electron");
+const { netReason } = require("./net-error.cjs");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -40,7 +41,8 @@ async function activate(apiKey) {
   const k = decryptApiKey(apiKey);
   let res;
   try {
-    res = await fetch(`${k.url}/v1/devices/activate`, {
+    // net.fetch = Chromium networking: trusts the same certificates as Chrome / Windows (incl. mkcert for ddev)
+    res = await net.fetch(`${k.url}/v1/devices/activate`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
@@ -50,11 +52,16 @@ async function activate(apiKey) {
       }),
       signal: AbortSignal.timeout(15000),
     });
-  } catch {
-    throw new Error(`Can't reach the server at ${k.url}. Check the internet connection and try again.`);
+  } catch (e) {
+    throw new Error(`Can't reach the server at ${k.url}. ${netReason(e)}`);
   }
-  const raw = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(raw.message || `The server refused the activation (HTTP ${res.status}).`);
+  const text = await res.text().catch(() => "");
+  let raw = {};
+  try { raw = JSON.parse(text); } catch { /* not JSON: an HTML error page from the server */ }
+  if (!res.ok) {
+    const page = text.replace(/<(head|style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    throw new Error(raw.message || `The server refused the activation (HTTP ${res.status}).${page ? " " + page.slice(0, 300) : ""}`);
+  }
   const body = raw && "success" in raw && "data" in raw ? raw.data : raw;   // { success, message, data } envelope
   if (!body.device_token) throw new Error("The server response is missing the device token.");
 

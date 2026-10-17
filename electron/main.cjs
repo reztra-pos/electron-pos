@@ -1,16 +1,18 @@
-// Electron main process
+// Electron main process — ONLINE mode.
+// The POS screen talks to the server for everything (menu, orders, kitchen, payments, ZATCA).
+// Only the device registration is kept on this PC (device.cjs). No local database, no offline queue.
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const path = require("path");
-const db = require("./db.cjs");
 const device = require("./device.cjs");
-const sync = require("./sync.cjs");
-const { hashPin } = require("./crypto.cjs");
+const api = require("./api.cjs");
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;       // set by `npm run dev`
 const KIOSK = process.env.POS_KIOSK === "1";            // POS_KIOSK=1 -> fullscreen kiosk mode
 const FRAMELESS = process.env.POS_FRAMELESS === "1";    // POS_FRAMELESS=1 -> no Windows title bar
+const DEVICE_CHECK_MS = 60_000;                         // how often to confirm the device is still enabled
 
 let win;
+let deviceTimer = null;
 
 function createWindow() {
   win = new BrowserWindow({
@@ -25,10 +27,27 @@ function createWindow() {
 }
 
 const send = (channel, payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); };
-// wrap handlers so the renderer receives { ok, data } or { ok:false, error } instead of a raw exception
+// handlers answer { ok, data } or { ok:false, error, code, status, errors } so the screen gets the server's reason
 const handle = (channel, fn) => ipcMain.handle(channel, async (_e, ...args) => {
-  try { return { ok: true, data: await fn(...args) }; } catch (e) { return { ok: false, error: e.message || String(e) }; }
+  try { return { ok: true, data: await fn(...args) }; }
+  catch (e) { return { ok: false, error: e.message || String(e), code: e.code || "", status: e.status || 0, errors: e.errors || null, network: !!e.network }; }
 });
+
+/* ---------- device disabled / session ended: tell the screen ---------- */
+api.setHandlers({
+  revoked: (message) => {
+    device.clear();                                     // this PC must be activated again with a new key
+    stopDeviceCheck();
+    send("device:revoked", message);
+  },
+  sessionEnded: (message) => send("session:ended", message),
+});
+
+function startDeviceCheck() {
+  stopDeviceCheck();
+  deviceTimer = setInterval(() => { if (device.load()) api.checkDevice().catch(() => {}); }, DEVICE_CHECK_MS);
+}
+function stopDeviceCheck() { if (deviceTimer) clearInterval(deviceTimer); deviceTimer = null; }
 
 /* ---------- window + app ---------- */
 ipcMain.on("win:minimize", () => win?.minimize());
@@ -44,59 +63,55 @@ handle("device:get", () => device.publicInfo());
 handle("device:preview", (key) => device.preview(key));
 handle("device:activate", async (key) => {
   const info = await device.activate(key);
-  db.wipe();                         // fresh data for the new outlet (queued invoices are kept)
-  await sync.pull(true);             // first full download — required before going offline
-  sync.start((s) => send("sync:status", s));
+  startDeviceCheck();
   return info;
 });
-handle("device:reset", (force) => {
-  if (!force && db.countPending() > 0) throw new Error(`${db.countPending()} invoices are not synced yet. Connect to the internet first, or force the reset.`);
-  sync.stop(); device.clear(); db.wipe();
-  return true;
-});
-
-/* ---------- data ---------- */
-handle("data:catalog", () => db.getCatalog());
-handle("data:refresh", async () => { await sync.run({ forcePull: true }); return db.getCatalog(); });
-
-/* ---------- login ---------- */
-let currentStaffId = null;
-handle("auth:pin", async (pin) => {
-  // checked against the staff list stored on this PC, so it works offline
-  const staff = db.findStaffByPinHash(hashPin, String(pin));
-  if (!staff) throw new Error("Incorrect PIN. Please try again.");
-  currentStaffId = staff.id;           // offline invoices are recorded under this user on the server
-  return { ...staff, device: device.publicInfo()?.device_name };
-});
-handle("auth:password", async (username, password) => {
-  try {
-    const d = device.load();
-    const data = await sync.request("/v1/auth/login", {
-      method: "POST", body: { email: username, password, client: `windows-pos ${app.getVersion()}` },
-      headers: d ? { "X-Device-Token": d.device_token } : {},
-    });
-    currentStaffId = data.user?.id ?? null;
-    return { ...data.user, token: data.token };
-  } catch (e) {
-    if (e.network) throw new Error("Username login needs an internet connection. Use your PIN to work offline.");
-    throw e;
+// startup check: is the saved registration still enabled on the server?
+handle("device:check", async () => {
+  if (!device.load()) return { active: false };
+  try { await api.checkDevice(); return { active: true }; }
+  catch (e) {
+    if (/^DEVICE_/.test(e.code || "")) return { active: false, message: e.message };
+    return { active: true, offline: !!e.network, message: e.message };   // server unreachable: keep the registration
   }
 });
+handle("device:reset", async () => { await api.logout(); device.clear(); stopDeviceCheck(); return true; });
 
-/* ---------- invoices + running orders ---------- */
-handle("invoices:save", (payload) => {
-  const d = device.load();
-  const saved = db.saveInvoice({ ...payload, user_id: currentStaffId, device_id: d?.device_id, outlet_id: d?.outlet_id }, d?.device_short || "POS");
-  setTimeout(() => sync.run().catch(() => {}), 50);   // try to send right away; stays queued if offline/slow
-  return saved;
+/* ---------- login ---------- */
+const sessionUser = (data) => ({
+  ...data.user,
+  permissions: data.permissions,
+  outlet: data.outlet,
+  company: data.company,
+  device: device.publicInfo()?.device_name,
 });
-handle("invoices:recent", (limit) => db.recentInvoices(limit));
-handle("orders:load", () => db.getMeta("running_orders", []));
-handle("orders:save", (orders) => db.setMeta("running_orders", orders));
+handle("auth:pin", async (pin) => sessionUser(await api.login({ pin: String(pin), client: `windows-pos ${app.getVersion()}` })));
+handle("auth:password", async (email, password) => sessionUser(await api.login({ email, password, client: `windows-pos ${app.getVersion()}` })));
+handle("auth:logout", () => api.logout());
+handle("auth:active", () => api.hasUser());
 
-/* ---------- sync ---------- */
-handle("sync:status", () => sync.status());
-handle("sync:now", () => sync.run({ forcePull: true }));
+/* ---------- every POS action ---------- */
+// call(method, path, body, { idempotencyKey }) -> data. Idempotency keys make retries safe (no double orders / payments).
+handle("api:call", (method, apiPath, body, opts = {}) => {
+  if (typeof apiPath !== "string" || !apiPath.startsWith("/v1/")) throw new Error("Invalid API path");
+  return api.request(String(method || "GET").toUpperCase(), apiPath, body, { idempotencyKey: opts.idempotencyKey || null });
+});
+handle("api:newKey", () => api.newKey());
+
+/* ---------- printing (receipt HTML built by the screen) ---------- */
+handle("print:html", (html, { silent = true } = {}) => new Promise((resolve, reject) => {
+  const pw = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } });
+  pw.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`).then(() => {
+    const done = (ok, reason) => {
+      if (ok || !silent) { pw.destroy(); return ok ? resolve(true) : reject(new Error(reason || "Printing failed")); }
+      // no default printer / silent print refused: show the normal print dialog instead
+      pw.webContents.print({ silent: false, printBackground: true }, (ok2, reason2) => {
+        pw.destroy(); ok2 ? resolve(true) : reject(new Error(reason2 || "Printing was cancelled"));
+      });
+    };
+    pw.webContents.print({ silent, printBackground: true, margins: { marginType: "none" } }, done);
+  }).catch((e) => { pw.destroy(); reject(e); });
+}));
 
 /* ---------- startup ---------- */
 if (!app.requestSingleInstanceLock()) {
@@ -104,10 +119,9 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on("second-instance", () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
   app.whenReady().then(() => {
-    db.open(app.getPath("userData"));
     createWindow();
-    if (device.load()) sync.start((s) => send("sync:status", s));
+    if (device.load()) startDeviceCheck();
   });
-  app.on("window-all-closed", () => { sync.stop(); if (process.platform !== "darwin") app.quit(); });
+  app.on("window-all-closed", () => { stopDeviceCheck(); if (process.platform !== "darwin") app.quit(); });
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 }

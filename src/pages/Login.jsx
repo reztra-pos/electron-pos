@@ -25,7 +25,8 @@ import {
    CONFIG + API (replace with real endpoints)
    ========================================================================== */
 const CONFIG = {
-  pinLength: 4,
+  pinMin: 4,               // staff PINs can be 4 to 8 digits (same limit as the server)
+  pinMax: 8,
   maxAttempts: 5,          // wrong PINs before a temporary lock
   lockSeconds: 30,
   brand: "Reztra",
@@ -182,7 +183,7 @@ export default function PosLogin({ onLoginSuccess = (u) => console.log("Logged i
     const t = setInterval(() => setNow(new Date()), 1000);
     const on = () => setOnline(true), off = () => setOnline(false);
     window.addEventListener("online", on); window.addEventListener("offline", off);
-    electron?.getAppInfo?.().then((i) => i && setAppInfo((a) => ({ ...a, ...i }))).catch(() => {});
+    electron?.getAppInfo?.().then((i) => i && setAppInfo((a) => ({ ...a, ...i }))).catch(() => { });
     return () => { clearInterval(t); window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, [electron]);
 
@@ -197,7 +198,7 @@ export default function PosLogin({ onLoginSuccess = (u) => console.log("Logged i
 
   const submitPin = useCallback(async (value = pin) => {
     if (loading || locked) return;
-    if (value.length !== CONFIG.pinLength) return fail(`Enter your ${CONFIG.pinLength}-digit PIN`);
+    if (value.length < CONFIG.pinMin) return fail(`Enter your PIN (at least ${CONFIG.pinMin} digits)`);
     setLoading(true); setError("");
     try {
       const user = await api.loginWithPin(value);
@@ -225,12 +226,7 @@ export default function PosLogin({ onLoginSuccess = (u) => console.log("Logged i
     if (k === "back") { setPin((p) => p.slice(0, -1)); setError(""); return; }
     if (k === "enter") { submitPin(); return; }
     setError("");
-    setPin((p) => {
-      if (p.length >= CONFIG.pinLength) return p;
-      const next = p + k;
-      if (next.length === CONFIG.pinLength) setTimeout(() => submitPin(next), 120); // auto-submit on last digit
-      return next;
-    });
+    setPin((p) => (p.length >= CONFIG.pinMax ? p : p + k));   // PINs differ in length: submit with Login / Enter
   }, [loading, locked, submitPin]);
 
   // physical keyboard / numpad support in PIN mode
@@ -249,7 +245,7 @@ export default function PosLogin({ onLoginSuccess = (u) => console.log("Logged i
   const submitPassword = async (e) => {
     e?.preventDefault();
     if (loading) return;
-    if (!username.trim() || !password) return fail("Enter your username and password");
+    if (!username.trim() || !password) return fail("Enter your email and password");
     setLoading(true); setError("");
     try {
       const user = await api.loginWithPassword(username.trim(), password);
@@ -307,10 +303,10 @@ export default function PosLogin({ onLoginSuccess = (u) => console.log("Logged i
           {mode === "pin" ? (
             <>
               <h2>Sign into your account</h2>
-              <p className="sub">Enter your {CONFIG.pinLength}-digit staff PIN</p>
+              <p className="sub">Enter your staff PIN and press Login</p>
 
               <div className={`pins ${shake ? "shake" : ""}`} role="group" aria-label="PIN">
-                {Array.from({ length: CONFIG.pinLength }, (_, i) => {
+                {Array.from({ length: Math.max(CONFIG.pinMin, pin.length) }, (_, i) => {
                   const ch = pin[i];
                   const cls = error && !pin ? "err" : ch ? "filled" : i === pin.length && !locked ? "active" : "";
                   return (
@@ -343,22 +339,22 @@ export default function PosLogin({ onLoginSuccess = (u) => console.log("Logged i
                 <button className={`key fn ${pressed === "back" ? "pressed" : ""}`} onClick={() => press("back")} disabled={loading || locked} aria-label="Backspace"><Delete size={20} /></button>
               </div>
 
-              <button className="primary" onClick={() => submitPin()} disabled={loading || locked || pin.length !== CONFIG.pinLength}>
+              <button className="primary" onClick={() => submitPin()} disabled={loading || locked || pin.length < CONFIG.pinMin}>
                 {loading ? <><Loader2 size={18} className="spin" />Signing in…</> : "Login"}
               </button>
 
               <div className="or">Or login with</div>
-              <button className="alt" onClick={() => switchMode("password")}><User size={16} />Username and password</button>
+              <button className="alt" onClick={() => switchMode("password")}><User size={16} />Email and password</button>
             </>
           ) : (
             <>
               <h2>Sign in with password</h2>
-              <p className="sub">Use your back-office username and password</p>
+              <p className="sub">Use your back-office email and password</p>
 
               <form className={`form ${shake ? "pins shake" : ""}`} onSubmit={submitPassword} style={{ display: "grid" }}>
-                <label className="field">Username
+                <label className="field">Email
                   <div className="inp"><User size={17} className="lead" />
-                    <input ref={userRef} value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" disabled={loading} />
+                    <input ref={userRef} value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" inputMode="email" disabled={loading} />
                   </div>
                 </label>
                 <label className="field">Password

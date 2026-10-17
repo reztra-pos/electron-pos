@@ -1,7 +1,7 @@
 /**
- * First-run screen: paste the device API key generated in the web app.
- * The key is decrypted inside Electron (main process), the device is registered with the server,
- * and all master data (items, categories, tables, staff...) is downloaded into SQLite.
+ * First-run screen: paste the device API key generated in the web app (Settings -> POS Devices).
+ * The key is decrypted inside Electron (main process) and the device is registered with the server.
+ * Also shown when the device was disabled in the web app ("notice" says why).
  */
 import React, { useState } from "react";
 import { KeyRound, Server, Monitor, Store, Loader2, ShieldAlert, CheckCircle2, ClipboardPaste, CalendarClock } from "lucide-react";
@@ -35,7 +35,7 @@ const CSS = `
 .act .spin{animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 `;
 
-export default function Activate({ onActivated }) {
+export default function Activate({ onActivated, notice = "" }) {
   const api = window.electronAPI;
   const [key, setKey] = useState("");
   const [preview, setPreview] = useState(null);
@@ -56,7 +56,7 @@ export default function Activate({ onActivated }) {
   const activate = async () => {
     setBusy(true); setError("");
     try {
-      setStep("Connecting to the server and downloading menu, tables and staff…");
+      setStep("Connecting to the server…");
       const info = await api.device.activate(key);
       setStep("");
       onActivated(info);
@@ -73,6 +73,7 @@ export default function Activate({ onActivated }) {
           <span className="mark"><KeyRound size={24} /></span>
           <div><h1>Activate this POS</h1><p>Connect this computer to your outlet with a device key.</p></div>
         </div>
+        {notice && <div className="msg err" role="alert" style={{ marginTop: 14 }}><ShieldAlert size={16} />{notice}</div>}
         <ol>
           <li>In the web app, open <b>Settings → POS Devices</b> and add this till (or click <b>Generate key</b> on an existing one).</li>
           <li>Click <b>Copy key</b>.</li>
@@ -82,6 +83,7 @@ export default function Activate({ onActivated }) {
         <label htmlFor="key">Device API key</label>
         <textarea id="key" value={key} placeholder="RZT1.xxxxxxxx…" spellCheck={false} disabled={busy}
           onChange={(e) => { setKey(e.target.value); setPreview(null); setError(""); }}
+          onPaste={(e) => { const t = e.clipboardData.getData("text").trim(); if (t) { e.preventDefault(); setKey(t); check(t); } }}
           onBlur={() => check()} />
 
         {preview && (
