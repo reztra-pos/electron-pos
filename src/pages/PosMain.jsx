@@ -26,7 +26,7 @@ import {
   GlassWater, Cookie, Martini, Flame, Soup, Image as ImageIcon, List, ShoppingBag, WifiOff, Loader2,
   ShieldCheck, ShieldAlert, Settings2,
 } from "lucide-react";
-import { get, post, put, del, newKey, printHtml } from "../api/pos.js";
+import { get, post, put, del, newKey, printHtml, printRaw } from "../api/pos.js";
 
 /* ============================================================================
    DATA FROM THE SERVER (filled by applyCatalog() before this screen is shown)
@@ -41,7 +41,7 @@ let ITEM_BY_ID = {};       // every sellable item incl. variations, by server id
 let WAITERS = [];          // [{ id, name }]
 let INITIAL_CUSTOMERS = [];// [{ id, name, phone, email, address }]
 let DEFAULT_CUSTOMER_ID = 1;
-let PARTNERS = [];         // [{ id, name }]
+let PARTNERS = [];         // [{ id, name, logo }]
 let PAYMENT_METHODS = [];  // [{ id, name, icon, cash }]
 let REGISTER_OPEN = null;  // true / false / null (waiters: no register)
 
@@ -94,7 +94,7 @@ export function applyCatalog(boot, customers = []) {
   const list = (Array.isArray(customers) ? customers : []).map((c) => ({ id: c.id, name: c.name, phone: c.phone || "", email: c.email || "", address: c.address || "" }));
   if (dc && !list.some((c) => c.id === dc.id)) list.unshift({ id: dc.id, name: dc.name, phone: dc.phone || "", email: "", address: "" });
   INITIAL_CUSTOMERS = list.sort((a, b) => (a.id === DEFAULT_CUSTOMER_ID ? -1 : b.id === DEFAULT_CUSTOMER_ID ? 1 : 0));
-  PARTNERS = (boot.delivery_partners || []).map((p) => ({ id: p.id, name: p.name }));
+  PARTNERS = (boot.delivery_partners || []).map((p) => ({ id: p.id, name: p.name, logo: p.logo_url || null }));
   // loyalty points need a points field on the payment screen: use the web POS for those payments
   PAYMENT_METHODS = (boot.payment_methods || []).filter((m) => !m.is_loyalty)
     .map((m) => ({ id: m.id, name: m.name, icon: PAY_ICON(m.name), cash: m.id === 1 || /cash/i.test(m.name) }));
@@ -111,6 +111,15 @@ const ORDER_TYPES = {
   delivery: { label: "Delivery", icon: Truck, id: 3 },
 };
 const TYPE_KEY = { 1: "dine", 2: "take", 3: "delivery" };
+// the order can sit on several tables: [{ id, name, persons }]
+const hasTables = (t) => Array.isArray(t) && t.length > 0;
+const tblText = (t) => (t || []).map((x) => x.name).join(", ");
+const tblPersons = (t) => (t || []).reduce((s, x) => s + (Number(x.persons) || 0), 0);
+// open price, combo choices or modifiers: ask before adding to the cart
+// item discount in the item popup is switched off for now; set to true to bring it back
+const ITEM_DISCOUNT_ENABLED = false;
+const needsOptions = (it) => !!(it && (it.openPrice || it.comboGroups || it.modifiers?.length));
+const partnerById = (id) => PARTNERS.find((p) => String(p.id) === String(id));
 const defaultTypeKey = () => TYPE_KEY[Number(SETTINGS.default_order_type)] || null;
 
 /** list price of an item for an order type / delivery partner (same rule as the server) */
@@ -154,53 +163,10 @@ h1{font-size:16px;margin:0 0 2px;text-align:center}h2{font-size:14px;margin:6px 
 .m{margin:2px 0}table{width:100%;border-collapse:collapse}td{padding:2px 0;vertical-align:top}.hr{border-top:1px dashed #000;margin:6px 0}
 .b{font-weight:bold}.big{font-size:15px;font-weight:bold}.small{font-size:11px}img.qr{display:block;margin:6px auto;width:40mm;height:40mm}
 .kitchen{page-break-after:always}.kitchen:last-child{page-break-after:auto}`;
-const qrSrc = (q) => (!q ? null : /^data:image\//.test(q) ? q : /^iVBOR/.test(q) ? `data:image/png;base64,${q}` : null);
 
 // item amount after its discount + its modifiers (modifier price × qty), as stored by the server
 const lineAmount = (it) => (Number(it.price_with_discount) || 0) + (it.modifiers || []).reduce((s, m) => s + (m.total != null ? Number(m.total) : (Number(m.price) || 0) * (Number(it.qty) || 0)), 0);
 
-function invoiceHtml(inv, { bill = false } = {}) {
-  const p = inv.print || {};
-  const o = p.outlet || {};
-  const t = inv.totals || {};
-  const cur = p.currency || OUTLET.currency;
-  const rows = (inv.items || []).map((it) => `<tr><td>${esc(it.qty)} × ${esc(it.name)}${it.secondary_name ? `<div class="small">${esc(it.secondary_name)}</div>` : ""}${(it.modifiers || []).map((m) => `<div class="small">+ ${esc(m.name)}${m.price ? ` (${money(m.price)})` : ""}</div>`).join("")}${it.note ? `<div class="small">“${esc(it.note)}”</div>` : ""}</td><td class="r">${money(lineAmount(it))}</td></tr>`).join("");
-  const taxes = (t.taxes || []).map((x) => `<tr><td>${esc(x.tax_field_type)}</td><td class="r">${money(x.tax_field_amount)}</td></tr>`).join("");
-  const pays = (inv.payments || []).map((x) => `<tr><td>${esc(x.name)}</td><td class="r">${money(x.amount)}</td></tr>`).join("");
-  const qr = qrSrc(p.qr_code);
-  return `<!doctype html><html><head><meta charset="utf-8"><style>${RECEIPT_CSS}</style></head><body>
-<h1>${esc(o.firm_name_1 || o.name || OUTLET.name)}</h1>${o.firm_name_2 ? `<div class="c">${esc(o.firm_name_2)}</div>` : ""}
-<div class="c small">${esc(o.address || "")}${o.phone ? `<br>${esc(o.phone)}` : ""}${o.trn ? `<br>${esc(p.tax_title || "VAT")} No: ${esc(o.trn)}` : ""}</div>
-<h2>${bill ? "BILL" : (p.tax_title ? "TAX INVOICE" : "INVOICE")}</h2>
-<div class="m">${bill ? "Order" : "Invoice"}: <b>${esc(inv.sale_no)}</b></div>
-<div class="m">Date: ${esc(inv.date_time || "")}</div>
-<div class="m">${esc(inv.order_type_name || "")}${inv.tables_text ? ` · Table ${esc(inv.tables_text)}` : ""}${inv.token_number ? ` · Token ${esc(inv.token_number)}` : ""}</div>
-<div class="m">Customer: ${esc(inv.customer?.name || "")}</div>
-${inv.waiter ? `<div class="m">Waiter: ${esc(typeof inv.waiter === "object" ? inv.waiter.name : inv.waiter)}</div>` : ""}${inv.cashier ? `<div class="m">Cashier: ${esc(inv.cashier)}</div>` : ""}
-<div class="hr"></div><table>${rows}</table><div class="hr"></div>
-<table><tr><td>Subtotal</td><td class="r">${money(t.sub_total)}</td></tr>
-${Number(t.total_discount_amount) ? `<tr><td>Discount</td><td class="r">-${money(t.total_discount_amount)}</td></tr>` : ""}
-${Number(t.charge_amount) ? `<tr><td>${t.charge_type === "delivery" ? "Delivery charge" : "Service charge"}</td><td class="r">${money(t.charge_amount)}</td></tr>` : ""}
-${Number(t.tips_amount) ? `<tr><td>Tips</td><td class="r">${money(t.tips_amount)}</td></tr>` : ""}${taxes}
-${Number(t.rounding_amount) ? `<tr><td>Rounding</td><td class="r">${money(t.rounding_amount)}</td></tr>` : ""}
-<tr><td class="big">Total</td><td class="r big">${esc(cur)} ${money(t.total_payable)}</td></tr></table>
-${bill ? "" : `<div class="hr"></div><table>${pays}${Number(t.change_amount) ? `<tr><td>Change</td><td class="r">${money(t.change_amount)}</td></tr>` : ""}${Number(t.due_amount) ? `<tr><td class="b">Due</td><td class="r b">${money(t.due_amount)}</td></tr>` : ""}</table>`}
-${!bill && qr ? `<img class="qr" src="${qr}" alt="">` : ""}
-${p.invoice?.footer ? `<div class="hr"></div><div class="c small">${esc(p.invoice.footer)}</div>` : ""}
-</body></html>`;
-}
-
-function kotHtml(kot) {
-  const blocks = (kot.kitchens || []).map((k) => `<div class="kitchen">
-<h1>${esc(k.kitchen_name || "Kitchen")}</h1><h2>${kot.reprint ? "KOT (REPRINT)" : "KOT"}</h2>
-<div class="m big">Order ${esc(kot.order_number || kot.sale_no)}</div>
-<div class="m">${esc(kot.order_type)}${kot.tables ? ` · Table ${esc(kot.tables)}` : ""}</div>
-<div class="m">Waiter: ${esc(kot.waiter)} · ${esc(kot.customer)}</div><div class="m small">${esc(kot.date_time)}</div>
-<div class="hr"></div><table>${(k.items || []).map((it) => `<tr><td class="big">${esc(it.qty)} ×</td><td class="big">${esc(it.name)}${(it.modifiers || []).map((m) => `<div class="small">+ ${esc(m)}</div>`).join("")}${it.combo_items ? `<div class="small">${esc(it.combo_items)}</div>` : ""}${it.note ? `<div class="small b">“${esc(it.note)}”</div>` : ""}</td></tr>`).join("")}</table>
-${(k.cancelled || []).length ? `<div class="hr"></div><div class="b">CANCELLED</div><table>${k.cancelled.map((c) => `<tr><td>${esc(c.qty)} ×</td><td><s>${esc(c.name)}</s></td></tr>`).join("")}</table>` : ""}
-</div>`).join("");
-  return `<!doctype html><html><head><meta charset="utf-8"><style>${RECEIPT_CSS}</style></head><body>${blocks}</body></html>`;
-}
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
@@ -278,7 +244,7 @@ const CSS = `
 .cart-head{height:36px;background:#F6F7F9;border-bottom:1px solid var(--line);font-size:12px;font-weight:800;color:var(--ink2)}
 .cart-head .r,.cart-row .r{text-align:right}
 .cart-body{flex:1;overflow-y:auto}
-.cart-row{min-height:50px;border-bottom:1px solid #EEF1F5;padding-top:6px;padding-bottom:6px}
+.cart-row{user-select:none;min-height:50px;border-bottom:1px solid #EEF1F5;padding-top:6px;padding-bottom:6px}
 .cart-row:hover{background:#FAFAFD}
 .cart-name{border:0;background:transparent;text-align:left;padding:0;font-weight:700;font-size:13.5px;min-width:0}
 .cart-name small{display:block;font-weight:500;font-size:11.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -297,7 +263,7 @@ const CSS = `
 .total-bar .amount{font-size:24px;font-weight:800;color:var(--ink)}
 .total-bar .lbl{font-size:15px;font-weight:600;color:var(--ink2);margin-right:4px}
 .date-pop{position:absolute;bottom:54px;left:0;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;box-shadow:0 10px 30px rgba(20,24,40,.18);z-index:5;display:grid;gap:6px;font-size:12px;font-weight:700}
-.act-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:8px 10px 10px}
+.act-row{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;padding:8px 10px 10px}
 .act{height:46px;border:0;border-radius:8px;color:#fff !important;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
 .act.cancel{background:var(--danger)}.act.quick{background:#7C4DEB}.act.place{background:var(--info)}
 .act:hover{filter:brightness(1.07)}
@@ -451,6 +417,43 @@ const CSS = `
 
 /* extra styles for the online screen (connection banner, server totals, invoice result) */
 const CSS_ONLINE = `
+.ro-filter{display:grid;grid-template-columns:auto repeat(3,1fr);gap:4px;padding:0 10px 8px}
+.ro-filter button{border:1px solid var(--line);background:#fff;border-radius:8px;height:32px;display:flex;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:700;color:var(--ink2);padding:0 4px;min-width:0}
+.ro-filter button .lbl{white-space:nowrap}
+.ro-filter button .n{background:#EEF0F5;border-radius:999px;padding:0 6px;font-size:11px;line-height:17px}
+.ro-filter button[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:#fff}
+.ro-filter button[aria-pressed=true] .n{background:rgba(255,255,255,.25)}
+.partner-pick{display:flex;align-items:center;gap:6px;text-align:left;overflow:hidden;white-space:nowrap;cursor:pointer}
+.partner-pick img{width:22px;height:22px;object-fit:contain;border-radius:4px;flex:none}
+.partner-pick span{overflow:hidden;text-overflow:ellipsis}
+.partner-pick:disabled{opacity:.55;cursor:not-allowed}
+.partners{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-bottom:16px}
+.partner{position:relative;border:2px solid var(--line);border-radius:12px;background:#fff;padding:12px 8px;display:grid;justify-items:center;gap:8px;font-weight:800;font-size:14px}
+.partner .logo{width:84px;height:84px;border-radius:14px;display:grid;place-items:center;overflow:hidden;background:#F4F5F9;font-size:26px;color:var(--brand)}
+.partner .logo img{width:100%;height:100%;object-fit:contain}
+.partner[aria-pressed=true]{border-color:var(--brand);background:var(--brand-2);box-shadow:0 6px 18px rgba(91,63,209,.15)}
+.partner .tick{position:absolute;top:-9px;left:-9px;width:24px;height:24px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center}
+.tsearch{margin-bottom:10px}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:10px;margin-top:10px;align-items:start}
+.tcard{border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:10px;background:#fff;padding:10px;display:grid;gap:8px}
+.tcard.part{border-left-color:#E5A11A}.tcard.full{border-left-color:var(--danger)}
+.tcard.sel{border-color:var(--brand);border-left-color:var(--brand);background:var(--brand-2)}
+.tcard .th{display:flex;justify-content:space-between;align-items:flex-start;gap:6px}
+.tcard .th b{font-size:15px;display:block}
+.tcard .th-r{display:flex;gap:6px;align-items:center}
+.bk-btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:800;color:var(--brand);cursor:pointer}
+.bk-btn:hover{border-color:var(--brand);background:var(--brand-2)}.tcard .th small{color:var(--ink2);font-size:11.5px}
+.tcard .seats{border-radius:999px;padding:2px 8px;font-size:12px;font-weight:800;white-space:nowrap;background:#E3F6EC;color:var(--ok)}
+.tcard.part .seats{background:#FFF1D6;color:#9A6400}.tcard.full .seats{background:#FDECEA;color:var(--danger)}
+.bk{width:100%;font-size:13.5px;border-collapse:collapse;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.bk th{background:#EEE9FF;color:#3F2A9E;text-align:left;padding:8px 10px;font-weight:700;font-size:12.5px}
+.bk td{padding:8px 10px;border-top:1px solid #EEF1F5}.bk td:first-child{font-weight:700}
+.tcard .add{display:flex;gap:6px;align-items:center}
+.tcard .add .qty{flex:none}.tcard .add .btn.primary{flex:1;justify-content:center}
+.tcard .add .btn{height:34px;padding:0 12px}
+.tchips{display:flex;flex-wrap:wrap;gap:6px;margin-right:auto;align-items:center;font-weight:700;font-size:13px}
+.tchip{display:inline-flex;align-items:center;gap:6px;background:var(--brand-2);color:var(--brand-d,#3F2A9E);border-radius:999px;padding:4px 6px 4px 10px;font-size:12.5px;font-weight:700}
+.tchip button{border:0;background:transparent;color:inherit;display:grid;place-items:center;padding:0;cursor:pointer}
 .conn{display:flex;align-items:center;gap:8px;justify-content:center;background:#FDECEA;color:#A4262C;font-weight:700;font-size:13px;padding:6px 10px;border-bottom:1px solid #F5C2C0}
 .who{font-size:12px;color:var(--ink2);white-space:nowrap;padding:0 6px;display:flex;flex-direction:column;line-height:1.2;text-align:right}
 .who b{color:var(--ink);font-size:13px}
@@ -516,7 +519,7 @@ const KITCHEN_TAG = { new: ["new", "New"], cooking: ["cooking", "Cooking"], read
 const RUNNING_POLL_MS = 10000;     // running orders + kitchen status (live sync with web POS / kitchen screen)
 const NOTIF_POLL_MS = 15000;
 
-export default function PosMainScreen({ user, onLogout = () => { } }) {
+export default function PosMainScreen({ user, onLogout = () => {} }) {
   const isWaiter = !!user?.permissions?.is_waiter;
   const canPay = !isWaiter || !!user?.permissions?.pos?.pos_1;
 
@@ -530,11 +533,13 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
   const firstWaiter = () => (isWaiter && WAITERS.some((w) => w.id === user.id) ? user.id : Number(SETTINGS.default_waiter_id) || WAITERS[0]?.id || "");
   const [cart, setCart] = useState([]);
   const [orderType, setOrderType] = useState(defaultTypeKey);
-  const [table, setTable] = useState(null);                  // { id, name, persons }
+  const [table, setTable] = useState(null);                  // [{ id, name, persons }] - one or more tables
   const [waiter, setWaiter] = useState(firstWaiter);
   const [customers, setCustomers] = useState(INITIAL_CUSTOMERS);
   const [customerId, setCustomerId] = useState(DEFAULT_CUSTOMER_ID);
   const [partner, setPartner] = useState("");                // delivery partner id or ""
+  const [partnerRef, setPartnerRef] = useState("");          // partner's order / reference number
+  const [roType, setRoType] = useState("all");               // running orders filter: all | dine | take | delivery
   const [orderDate, setOrderDate] = useState(new Date().toISOString().slice(0, 10));
   const [discount, setDiscount] = useState({ mode: "fixed", value: 0 });
   const [charge, setCharge] = useState({ mode: "percent", value: 0 });
@@ -565,7 +570,7 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
   const [sheet, setSheet] = useState(false);
   const [datePop, setDatePop] = useState(false);
   const [isFull, setIsFull] = useState(false);
-  const [prefs, setPrefs] = useState(() => lsGet("pos.prefs", { printKot: false, printInvoice: true }));
+  const [prefs, setPrefs] = useState(() => lsGet("pos.prefs", { printKot: true, printInvoice: true }));
   const searchRef = useRef(null);
   const calcSeq = useRef(0);
 
@@ -579,10 +584,10 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
   const itemCount = cart.reduce((s, l) => s + l.qty, 0);
   const totals = calc?.totals || null;
 
-  const notify = (text) => {
+  const notify = (text, ms = 3200) => {
     setToast(text);
     clearTimeout(notify.t);
-    notify.t = setTimeout(() => setToast(null), 3200);
+    notify.t = setTimeout(() => setToast(null), ms);
   };
   // every failed call goes through here: network -> banner, register closed -> open register, else the server's message
   const onError = useCallback((e, fallback) => {
@@ -641,7 +646,8 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
       customer_id: Number(customerId) || DEFAULT_CUSTOMER_ID,
       waiter_id: waiter ? Number(waiter) : null,
       delivery_partner_id: t === "delivery" && partner ? Number(partner) : null,
-      tables: t === "dine" && tbl ? [{ table_id: tbl.id, persons: tbl.persons || 1 }] : [],
+      delivery_partner_ref_no: t === "delivery" && partner ? partnerRef.trim() : "",
+      tables: t === "dine" && hasTables(tbl) ? tbl.map((x) => ({ table_id: x.id, persons: Number(x.persons) || 1 })) : [],
       sale_date: orderDate,
       discount: amountStr(discount),
       tips: Number(tips) > 0 ? String(Number(tips)) : "",
@@ -681,7 +687,7 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
       } finally { if (seq === calcSeq.current) setCalcBusy(false); }
     }, 300);
     return () => clearTimeout(t);
-  }, [cart, orderType, table, waiter, customerId, partner, discount, chargeTouched, chargeTouched && charge, tips, orderDate, editingId]); // eslint-disable-line
+  }, [cart, orderType, table, waiter, customerId, partner, partnerRef, discount, chargeTouched, chargeTouched && charge, tips, orderDate, editingId]); // eslint-disable-line
 
   // list prices follow the order type / delivery partner (lines already in the kitchen keep their price)
   useEffect(() => {
@@ -726,7 +732,7 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
     if (item.unavailable) return notify(`${item.name} is not available right now`);
     if (!orderType) return setModal({ name: "orderType", then: { kind: "add", item } });
     if (item.variations.length) return setModal({ name: "variations", item });
-    if (item.openPrice || item.comboGroups) return setModal({ name: "item", item });
+    if (needsOptions(item)) return setModal({ name: "item", item });
     addToCart(item);
   };
   const setLineQty = (key, q) => setCart((c) => (q <= 0 ? c.filter((l) => l.key !== key) : c.map((l) => (l.key === key ? { ...l, qty: q } : l))));
@@ -734,24 +740,52 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
 
   const resetOrder = () => {
     setCart([]); setOrderType(defaultTypeKey()); setTable(null); setWaiter(firstWaiter()); setCustomerId(DEFAULT_CUSTOMER_ID);
-    setPartner(""); setDiscount({ mode: "fixed", value: 0 }); setCharge({ mode: "percent", value: 0 }); setChargeTouched(false);
+    setPartner(""); setPartnerRef(""); setDiscount({ mode: "fixed", value: 0 }); setCharge({ mode: "percent", value: 0 }); setChargeTouched(false);
     setTips(0); setEditingId(null); setOrderDate(new Date().toISOString().slice(0, 10)); setCalc(null); setCalcErr("");
   };
 
-  /* ---------- printing ---------- */
-  const print = async (html, what) => {
+  /* ---------- printing ----------
+     KOT / draft / invoice are raw ESC/POS bytes made on the server (Escposbuilder) and sent by the
+     desktop app straight to the printer set in the web app (network ip:port or Windows shared printer). */
+  const print = async (html, what) => {          // register report only (HTML, default Windows printer)
     try { await printHtml(html); notify(`${what} sent to the printer`); }
     catch (e) { notify(`${what} not printed: ${e.message}`); }
   };
-  const printKot = (kot) => { if (kot?.kitchens?.length) print(kotHtml(kot), "KOT"); };
-  const printInvoice = (inv) => print(invoiceHtml(inv), `Invoice ${inv.sale_no}`);
+  // one job -> { ok, title, error }
+  const runJob = async (job) => {
+    if (!job) return { ok: false, title: "Receipt", error: "Nothing to print." };
+    if (!job.print_bytes) return { ok: false, title: job.title, error: job.error || "Nothing to print." };
+    try { await printRaw(job); return { ok: true, title: job.title }; }
+    catch (e) { return { ok: false, title: job.title, error: e.message }; }
+  };
+  const printJob = async (job) => {
+    const r = await runJob(job);
+    if (r.ok) notify(`${r.title} sent to the printer`);
+    else notify(`${r.title || "Receipt"} not printed: ${r.error}`, 8000);
+    return r.ok;
+  };
+  // KOT: one ticket per kitchen, each on its own kitchen printer
+  const printKot = async (kot) => {
+    const jobs = kot?.prints || [];
+    if (!jobs.length) return;
+    const res = [];
+    for (const j of jobs) res.push(await runJob(j));      // one after the other: a busy printer is not hit twice at once
+    const okNames = res.filter((r) => r.ok).map((r) => r.title.replace(/^KOT /, ""));
+    const bad = res.filter((r) => !r.ok);
+    if (!bad.length) notify(`KOT sent to ${okNames.join(", ")}`);
+    else notify(`${okNames.length ? `KOT sent to ${okNames.join(", ")}. ` : ""}Not printed: ${bad.map((r) => `${r.title.replace(/^KOT /, "")} (${r.error})`).join("; ")}`, 8000);
+  };
+  // reprint of a saved invoice (same receipt; ZATCA data untouched)
+  const reprintInvoice = async (saleId) => {
+    try { await printJob(await get(`/v1/invoices/${saleId}/print`)); } catch (e) { onError(e); }
+  };
 
   /* ---------- order flow ---------- */
   // action: "place" | "invoice"
   const proceed = (action, type = orderType, tbl = table) => {
     if (!cart.length) return notify("Add at least one item to the order");
     if (!type) return setModal({ name: "orderType", then: { kind: action } });
-    if (type === "dine" && !tbl) return setModal({ name: "table", then: { kind: action, type } });
+    if (type === "dine" && !hasTables(tbl)) return setModal({ name: "table", then: { kind: action, type } });
     if (action === "place") return commitOrder(type, tbl);
     if (!canPay) return notify("Waiters can't take payment. Place the order and send it to the cashier.");
     if (editingId) return notify("Update the order first, then use Invoice in Running Orders.");
@@ -768,12 +802,12 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
         : await post("/v1/orders", body, { idempotencyKey: await newKey() });
       ok();
       notify(`Order ${r.order.order_number || r.order.sale_no} ${editingId ? "updated" : "placed"} — sent to the kitchen`);
-      if (prefs.printKot && r.kot?.print_needed) printKot(r.kot);
+      if (prefs.printKot && r.kot?.prints?.length) printKot(r.kot);
       resetOrder();
       setModal(null);
       setTab("menu");
+      await refreshRunning();                 // select it once it is in the list (otherwise the selection is dropped)
       setSelectedRunning(r.order.id);
-      refreshRunning();
     } catch (e) { onError(e, "The order was not saved."); }
     finally { setBusy(null); }
   };
@@ -784,7 +818,7 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
     try {
       const r = await post("/v1/orders/calculate", orderBody(type, tbl));
       setCalc(r);
-      setModal({ name: "payment", source: "cart", type, tbl, due: r.totals.total_payable, label: `${ORDER_TYPES[type].label}${tbl ? ` · Table ${tbl.name}` : ""} · ${customer.name}` });
+      setModal({ name: "payment", source: "cart", type, tbl, due: r.totals.total_payable, label: `${ORDER_TYPES[type].label}${hasTables(tbl) ? ` · Table ${tblText(tbl)}` : ""}${type === "delivery" && partner ? ` · ${partnerById(partner)?.name || ""}` : ""} · ${customer.name}` });
     } catch (e) { onError(e); }
     finally { setBusy(null); }
   };
@@ -815,7 +849,7 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
       } else {
         const r = await post("/v1/invoices/quick", { ...orderBody(m.type, m.tbl), ...payBody }, { idempotencyKey: key });
         invoice = r.invoice;
-        if (prefs.printKot && r.kot?.print_needed) printKot(r.kot);
+        if (prefs.printKot && r.kot?.prints?.length) printKot(r.kot);
         resetOrder();
       }
       ok();
@@ -823,7 +857,9 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
       refreshRunning();
       setSales((s) => [invoice, ...s.filter((x) => x.id !== invoice.id)]);
       setModal({ name: "done", invoice });
-      if (prefs.printInvoice) printInvoice(invoice);
+      if (prefs.printInvoice && invoice.print_job) {
+        printJob(invoice.print_job).then((ok) => ok && setModal((md) => (md?.name === "done" && md.invoice.id === invoice.id ? { ...md, printed: true } : md)));
+      }
     } catch (e) { onError(e, "Payment was not saved."); }
     finally { setBusy(null); }
   };
@@ -833,12 +869,14 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
     const then = modal?.then;
     setModal(null);
     if (type !== "dine") setTable(null);
-    if (!then) { if (type === "dine") setModal({ name: "table" }); return; }
+    if (type !== "delivery") { setPartner(""); setPartnerRef(""); }
+    if (!then) { if (type === "dine" && !hasTables(table)) setModal({ name: "table" }); else if (type === "delivery") setModal({ name: "partner" }); return; }
     if (then.kind === "add") {
       if (then.item.variations.length) return setModal({ name: "variations", item: then.item });
-      if (then.item.openPrice || then.item.comboGroups) return setModal({ name: "item", item: then.item });
+      if (needsOptions(then.item)) return setModal({ name: "item", item: then.item });
       addToCart(then.item);
-      if (type === "dine" && !table) setModal({ name: "table" });
+      if (type === "dine" && !hasTables(table)) setModal({ name: "table" });
+      else if (type === "delivery" && !partner) setModal({ name: "partner" });
     } else proceed(then.kind, type, table);
   };
 
@@ -851,10 +889,12 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
 
   /* ---------- running orders ---------- */
   const sel = running.find((o) => o.id === selectedRunning);
+  const typeCount = (k) => running.filter((o) => TYPE_KEY[o.order_type] === k).length;
   const filteredRunning = running.filter((o) => {
+    if (roType !== "all" && TYPE_KEY[o.order_type] !== roType) return false;
     const q = roQuery.trim().toLowerCase();
     if (!q) return true;
-    return [o.sale_no, o.order_number, o.tables_text, o.waiter?.name, o.customer?.name].some((v) => String(v || "").toLowerCase().includes(q));
+    return [o.sale_no, o.order_number, o.tables_text, o.waiter?.name, o.customer?.name, partnerById(o.delivery_partner_id)?.name, o.delivery_partner_ref_no].some((v) => String(v || "").toLowerCase().includes(q));
   });
 
   // load a running order into the cart to change it (Modify Order)
@@ -874,11 +914,12 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
         };
       }));
       setOrderType(TYPE_KEY[o.order_type] || "take");
-      setTable(o.tables?.[0] ? { id: o.tables[0].table_id, name: o.tables.map((t) => t.name).join(", "), persons: o.tables[0].persons } : null);
+      setTable(o.tables?.length ? o.tables.map((t) => ({ id: t.table_id, name: t.name, persons: Number(t.persons) || 1 })) : null);
       setWaiter(o.waiter?.id || firstWaiter());
       if (o.customer && !customers.some((c) => c.id === o.customer.id)) setCustomers((cs) => [...cs, { id: o.customer.id, name: o.customer.name, phone: o.customer.phone || "" }]);
       setCustomerId(o.customer?.id || DEFAULT_CUSTOMER_ID);
       setPartner(o.delivery_partner?.id ? String(o.delivery_partner.id) : "");
+      setPartnerRef(o.delivery_partner?.ref_no || "");
       setDiscount(parseAmount(o.totals?.discount));
       setCharge(parseAmount(o.totals?.charge)); setChargeTouched(true);
       setTips(Number(o.totals?.tips) || 0);
@@ -907,8 +948,8 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
   const printBill = async (id) => {
     try {
       const r = await post(`/v1/orders/${id}/bill`);
-      print(invoiceHtml({ ...r.order, print: { outlet: r.outlet, invoice: r.invoice, currency: OUTLET.currency, tax_title: SETTINGS.tax_title } }, { bill: true }), "Bill");
       refreshRunning();
+      await printJob(r.print_job);
     } catch (e) { onError(e); }
   };
 
@@ -941,10 +982,11 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
       });
       setCart(lines);
       setOrderType(TYPE_KEY[o.order_type] || "take");
-      setTable(o.tables?.[0] ? { id: o.tables[0].table_id, name: `#${o.tables[0].table_id}`, persons: o.tables[0].persons } : null);
+      setTable(o.tables?.length ? o.tables.map((t) => ({ id: t.table_id, name: t.name || `#${t.table_id}`, persons: Number(t.persons) || 1 })) : null);
       setWaiter(o.waiter_id || firstWaiter());
       setCustomerId(o.customer_id || DEFAULT_CUSTOMER_ID);
       setPartner(o.delivery_partner_id ? String(o.delivery_partner_id) : "");
+      setPartnerRef(o.delivery_partner_ref_no || "");
       setDiscount(parseAmount(o.discount)); setTips(Number(o.tips) || 0);
       if (o.charge) { setCharge(parseAmount(o.charge)); setChargeTouched(true); }
       await del(`/v1/drafts/${d.id}`);
@@ -966,7 +1008,7 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
     try {
       const list = sales.length ? sales : await get("/v1/invoices?limit=1");
       if (!list[0]) return notify("No invoice to print");
-      printInvoice(await get(`/v1/invoices/${list[0].id}`));
+      await reprintInvoice(list[0].id);
     } catch (e) { onError(e); }
   };
   const HEADER = [
@@ -1032,18 +1074,25 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
               <button className="icon-btn only-drawer" onClick={() => setDrawer(false)} aria-label="Close"><X size={18} /></button>
             </div>
           </div>
+          <div className="ro-filter" role="group" aria-label="Filter running orders by type">
+            {[["all", "All", ListOrdered, running.length], ...Object.entries(ORDER_TYPES).map(([k, v]) => [k, v.label, v.icon, typeCount(k)])].map(([k, label, Icon, n]) => (
+              <button key={k} aria-pressed={roType === k} onClick={() => setRoType(k)} title={label} aria-label={`${label} (${n})`}>
+                {k === "all" ? <span className="lbl">All</span> : <Icon size={15} />}<span className="n">{n}</span>
+              </button>
+            ))}
+          </div>
           <div style={{ padding: "0 10px" }}>
             <input className="input" placeholder="Table, order number, waiter" value={roQuery} onChange={(e) => setRoQuery(e.target.value)} />
           </div>
           <div className="ro-list">
-            {filteredRunning.length === 0 && <div className="ro-empty">{running.length ? "No orders match your search." : "No running orders. Placed orders will appear here."}</div>}
+            {filteredRunning.length === 0 && <div className="ro-empty">{running.length ? (roType !== "all" && !typeCount(roType) ? `No ${ORDER_TYPES[roType].label} orders running.` : "No orders match your search.") : "No running orders. Placed orders will appear here."}</div>}
             {filteredRunning.map((o) => {
               const TI = ORDER_TYPES[TYPE_KEY[o.order_type]]?.icon || ShoppingBag;
               const [tagCls, tagTxt] = kitchenTag(o);
               return (
                 <button key={o.id} className="ro-card" aria-pressed={selectedRunning === o.id} onClick={() => setSelectedRunning(o.id === selectedRunning ? null : o.id)} onDoubleClick={() => setModal({ name: "details", id: o.id })}>
                   <div className="row"><b className="num">#{o.order_number || o.sale_no}</b><span className={`tag ${tagCls}`}>{tagTxt}</span></div>
-                  <div className="row muted"><span style={{ display: "flex", alignItems: "center", gap: 4 }}><TI size={13} />{o.order_type === 1 && o.tables_text ? `Table ${o.tables_text}` : o.order_type_name}</span></div>
+                  <div className="row muted"><span style={{ display: "flex", alignItems: "center", gap: 4 }}><TI size={13} />{o.order_type === 1 && o.tables_text ? `Table ${o.tables_text}` : o.order_type_name}{o.order_type === 3 && partnerById(o.delivery_partner_id) ? ` · ${partnerById(o.delivery_partner_id).name}` : ""}</span></div>
                   <div className="row muted"><span>{o.customer?.name}</span><span>{o.waiter?.name}</span></div>
                   <div className="row"><span className="muted" style={{ display: "flex", alignItems: "center", gap: 4 }}><Clock size={12} />{timeAgo(o.minutes_open ?? o.date_time)}</span><b className="num" style={{ fontSize: 13 }}>{money(o.total_payable)}</b></div>
                   {editingId === o.id && <span className="tag" style={{ background: "#FFF1D6", color: "#7A4F00", justifySelf: "start" }}>Editing</span>}
@@ -1055,8 +1104,8 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
             <button className="op-btn" disabled={!sel || !!busy} onClick={modifyOrder}><Edit3 size={14} />Modify Order</button>
             <button className="op-btn" disabled={!sel} onClick={() => setModal({ name: "details", id: sel.id })}><Info size={14} />Order Details</button>
             <button className="op-btn" disabled={!sel} onClick={() => reprintKot(sel.id)}><Printer size={14} />Re-print KOT</button>
-            <button className="op-btn half" disabled={!sel || !canPay || !!busy} onClick={() => openOrderPayment(sel.id)}><Receipt size={14} />Invoice</button>
-            <button className="op-btn half" onClick={saveDraft} title="Save the current order as a draft"><FileText size={14} />Draft</button>
+            {canPay && <button className="op-btn half" disabled={!sel || !!busy} onClick={() => openOrderPayment(sel.id)}><Receipt size={14} />Invoice</button>}
+            <button className={`op-btn ${canPay ? "half" : ""}`} onClick={saveDraft} title="Save the current order as a draft"><FileText size={14} />Draft</button>
             <button className="op-btn" disabled={!sel} onClick={cancelRunning}><Ban size={14} />Cancel Order</button>
           </div>
         </aside>
@@ -1065,12 +1114,12 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
         <section className="panel cart" aria-label="Current order">
           <div className="type-row">
             {Object.entries(ORDER_TYPES).map(([k, v]) => (
-              <button key={k} className="type-btn" aria-pressed={orderType === k} onClick={() => { setOrderType(k); if (k !== "dine") setTable(null); else if (!table) setModal({ name: "table" }); }}>
+              <button key={k} className="type-btn" aria-pressed={orderType === k} onClick={() => onOrderTypePicked(k)}>
                 <v.icon size={16} /><span className="lbl-long">{v.label}</span>
               </button>
             ))}
-            <button className="type-btn" aria-pressed={orderType === "dine" && !!table} onClick={() => setModal({ name: "table" })}>
-              <LayoutGrid size={16} />{table ? table.name : "Table"}
+            <button className="type-btn" aria-pressed={orderType === "dine" && hasTables(table)} onClick={() => setModal({ name: "table" })} title={hasTables(table) ? tblText(table) : "Select tables"}>
+              <LayoutGrid size={16} /><span className="lbl-long" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{hasTables(table) ? tblText(table) : "Table"}</span>
             </button>
           </div>
 
@@ -1082,10 +1131,9 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
             <select className="select" value={customerId} onChange={(e) => setCustomerId(Number(e.target.value))} aria-label="Customer">
               {customers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` (${c.phone})` : ""}</option>)}
             </select>
-            <select className="select sel-partner" value={partner} onChange={(e) => setPartner(e.target.value)} disabled={orderType !== "delivery"} aria-label="Delivery partner" title={orderType !== "delivery" ? "Select Delivery to choose a partner" : ""}>
-              <option value="">Delivery Partner</option>
-              {PARTNERS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <button type="button" className="select sel-partner partner-pick" disabled={orderType !== "delivery"} onClick={() => setModal({ name: "partner" })} aria-label="Delivery partner" title={orderType !== "delivery" ? "Select Delivery to choose a partner" : "Choose delivery partner"}>
+              {partner ? <>{partnerById(partner)?.logo && <img src={partnerById(partner).logo} alt="" />}<span>{partnerById(partner)?.name}{partnerRef ? ` · ${partnerRef}` : ""}</span></> : <span className="muted">Delivery Partner</span>}
+            </button>
             <div className="sel-actions">
               <button className="sq-btn" title="Edit customer" aria-label="Edit customer" disabled={customer.id === DEFAULT_CUSTOMER_ID} style={customer.id === DEFAULT_CUSTOMER_ID ? { opacity: .45 } : {}} onClick={() => setModal({ name: "customer", edit: customer })}><Pencil size={16} /></button>
               <button className="sq-btn" title="Add customer" aria-label="Add customer" onClick={() => setModal({ name: "customer" })}><UserPlus size={16} /></button>
@@ -1101,8 +1149,8 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
           {(orderType || cart.length > 0) && (
             <div className="context-line">
               {orderType && <span>Type: <b>{ORDER_TYPES[orderType].label}</b></span>}
-              {table && <span>Table: <b>{table.name}</b> · {table.persons} guests</span>}
-              {orderType === "delivery" && partner && <span>Partner: <b>{PARTNERS.find((p) => String(p.id) === String(partner))?.name}</b></span>}
+              {hasTables(table) && <span>Table: <b>{tblText(table)}</b> · {tblPersons(table)} guests</span>}
+              {orderType === "delivery" && partner && <span>Partner: <b>{partnerById(partner)?.name}</b>{partnerRef ? ` · Ref ${partnerRef}` : ""}</span>}
               <span>Items: <b className="num">{itemCount}</b></span>
             </div>
           )}
@@ -1119,9 +1167,9 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
                   <button className={`cart-name ${showImages ? "with-thumb" : ""}`} onClick={() => setModal({ name: "item", line: l })} title="Edit item">
                     {showImages && (() => { const it = ITEM_BY_ID[l.itemId]; return it ? <ItemThumb item={it} size="sm" tint={catById[it.cat]?.tint} /> : null; })()}
                     <span className="txt">{l.name}
-                      {(l.mods.length > 0 || l.note || l.disc > 0 || l.discRaw || l.cooking) && (
-                        <small>{[...l.mods.map((m) => m.name), l.disc > 0 ? `${l.disc}% off` : "", l.discRaw ? `${l.discRaw} off` : "", l.note ? `“${l.note}”` : "", l.cooking && l.cooking !== "New" ? l.cooking : ""].filter(Boolean).join(", ")}</small>
-                      )}</span>
+                    {(l.mods.length > 0 || l.note || l.disc > 0 || l.discRaw || l.cooking) && (
+                      <small>{[...l.mods.map((m) => m.name), l.disc > 0 ? `${l.disc}% off` : "", l.discRaw ? `${l.discRaw} off` : "", l.note ? `“${l.note}”` : "", l.cooking && l.cooking !== "New" ? l.cooking : ""].filter(Boolean).join(", ")}</small>
+                    )}</span>
                   </button>
                   <span className="r num col-price">{money(lineUnit(l))}</span>
                   <Qty value={l.qty} onChange={(q) => setLineQty(l.key, q)} />
@@ -1149,7 +1197,7 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
 
           <div className="act-row">
             <button className="act cancel" onClick={() => { if (!cart.length && !editingId) return resetOrder(); if (window.confirm(editingId ? "Discard changes to this order?" : "Clear the current order?")) { resetOrder(); notify("Order cleared"); } }}><X size={17} />Cancel</button>
-            <button className="act quick" disabled={!canPay || !!busy || !!editingId} style={busyCls("calc")} onClick={() => proceed("invoice")} title={!canPay ? "Waiters can't take payment" : editingId ? "Update the order first" : ""}><Receipt size={17} />Quick Invoice</button>
+            {canPay && <button className="act quick" disabled={!!busy || !!editingId} style={busyCls("calc")} onClick={() => proceed("invoice")} title={!canPay ? "Waiters can't take payment" : editingId ? "Update the order first" : ""}><Receipt size={17} />Quick Invoice</button>}
             <button className="act place" disabled={!!busy} style={busyCls("place")} onClick={() => proceed("place")}>{busy === "place" ? <Loader2 size={17} className="spin" /> : <ChefHat size={17} />}{editingId ? "Update Order" : "Place Order"}</button>
           </div>
         </section>
@@ -1251,12 +1299,17 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
 
       {modal?.name === "table" && <TableModal editingId={editingId} current={table} onClose={() => setModal(null)} onPick={onTablePicked} onError={onError} />}
 
+      {modal?.name === "partner" && (
+        <PartnerModal current={partner} currentRef={partnerRef} onClose={() => setModal(null)}
+          onSubmit={(id, ref) => { setPartner(id ? String(id) : ""); setPartnerRef(id ? ref : ""); if (orderType !== "delivery") setOrderType("delivery"); setModal(null); }} />
+      )}
+
       {modal?.name === "variations" && (
         <Modal title={modal.item.name} onClose={() => setModal(null)} size="sm">
           <div className="var-list">
             {modal.item.variations.map((v) => (
               <button key={v.id} className="var-row" disabled={v.unavailable} style={v.unavailable ? { opacity: 0.5 } : {}} onClick={() => {
-                if (v.openPrice || v.comboGroups) return setModal({ name: "item", item: v });
+                if (needsOptions(v)) return setModal({ name: "item", item: v });
                 addToCart(v); setModal(null);
               }}>
                 <span>{v.shortName}</span><span className="num">{v.openPrice ? "Open price" : money(priceFor(v, orderType, partner))}</span>
@@ -1325,7 +1378,10 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
         const z = inv.zatca || {};
         return (
           <Modal title="Payment received" onClose={() => setModal(null)} size="sm"
-            footer={<><button className="btn" onClick={() => printInvoice(inv)}><Printer size={16} />Print invoice</button><button className="btn primary" onClick={() => setModal(null)}>New order</button></>}>
+            footer={<><button className="btn" onClick={async () => {
+              if (!modal.printed && inv.print_job?.print_bytes) { if (await printJob(inv.print_job)) setModal((md) => ({ ...md, printed: true })); }
+              else reprintInvoice(inv.id);
+            }}><Printer size={16} />{modal.printed ? "Print copy" : "Print invoice"}</button><button className="btn primary" onClick={() => setModal(null)}>New order</button></>}>
             <div className="done-box">
               <div className="muted">Invoice</div>
               <div className="big num">{inv.sale_no}</div>
@@ -1335,6 +1391,7 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
               {z.phase === "2" && (z.synced || z.reported
                 ? <div className="zatca ok"><ShieldCheck size={18} />Reported to ZATCA</div>
                 : <div className="zatca warn"><ShieldAlert size={18} />Not reported to ZATCA yet. {z.message || "Use “Sync ZATCA” in the web POS."}</div>)}
+              {!inv.print_job?.print_bytes && inv.print_job?.error && <div className="zatca warn"><Printer size={18} />{inv.print_job.error}</div>}
             </div>
           </Modal>
         );
@@ -1383,7 +1440,7 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
                 <div key={s.id} className="list-row">
                   <span><b className="num">{s.sale_no}</b> · {s.order_type_name} · {s.customer?.name}<div className="muted" style={{ fontSize: 12 }}>{s.cashier ? `${s.cashier} · ` : ""}{s.date_time}</div></span>
                   <span style={{ display: "flex", gap: 8, alignItems: "center" }}><b className="num">{OUTLET.currency} {money(s.total_payable ?? s.totals?.total_payable)}</b>
-                    <button className="btn" onClick={async () => { try { printInvoice(await get(`/v1/invoices/${s.id}`)); } catch (e) { onError(e); } }}><Printer size={16} />Print</button></span>
+                    <button className="btn" onClick={() => reprintInvoice(s.id)}><Printer size={16} />Print</button></span>
                 </div>
               ))}
             </div>
@@ -1427,61 +1484,159 @@ export default function PosMainScreen({ user, onLogout = () => { } }) {
    MODAL COMPONENTS
    ========================================================================== */
 
+// one row per order (an order can have several booking rows on the same table)
+function groupBookings(list) {
+  const m = new Map();
+  (list || []).forEach((b) => {
+    const k = b.order_id || b.sale_no || b.booking_id;
+    const g = m.get(k) || { key: k, no: b.order_number || b.sale_no || "-", minutes: null, persons: 0 };
+    g.persons += Number(b.persons) || 0;
+    if (b.booked_minutes != null) g.minutes = Math.max(g.minutes ?? 0, Number(b.booked_minutes) || 0);
+    m.set(k, g);
+  });
+  return [...m.values()];
+}
+const fmtMinutes = (m) => {
+  if (m == null) return "-";
+  if (m < 60) return `${m} min`;
+  if (m < 1440) return `${Math.floor(m / 60)} h ${m % 60} min`;
+  return `${Math.floor(m / 1440)} d ${Math.floor((m % 1440) / 60)} h`;
+};
+
 // Tables come live from the server (seats taken by running orders on any till / the web POS).
+// An order can sit on several tables, like the web POS: set the guests on a table and press Add, repeat, then Done.
 function TableModal({ editingId, current, onClose, onPick, onError }) {
   const [data, setData] = useState(null);
-  const [area, setArea] = useState(null);
-  const [picked, setPicked] = useState(current ? { id: current.id, name: current.name } : null);
-  const [persons, setPersons] = useState(current?.persons || 2);
+  const [area, setArea] = useState("all");
+  const [q, setQ] = useState("");
+  const [picked, setPicked] = useState(() => (current || []).map((t) => ({ id: t.id, name: t.name, persons: Number(t.persons) || 1 })));
+  const [guests, setGuests] = useState({});   // table id -> guests in the stepper
+  const [info, setInfo] = useState(null);     // table whose orders are shown in the small popup
 
   useEffect(() => {
     let alive = true;
     get("/v1/tables").then((r) => {
       if (!alive) return;
-      // seats of the order being edited are free for that order
+      const areaName = Object.fromEntries((r.areas || []).map((a) => [a.id, a.name]));
       const tables = (r.tables || []).map((t) => {
-        const mine = (t.orders || []).filter((o) => o.order_id === editingId).reduce((s, o) => s + (Number(o.persons) || 0), 0);
-        const used = Math.max(0, (Number(t.persons) || 0) - mine);
-        return { ...t, used, free: t.capacity > 0 ? Math.max(0, t.capacity - used) : null };
+        // bookings of the order being edited don't count: those seats belong to this order
+        const others = (t.orders || []).filter((o) => o.order_id !== editingId);
+        const used = others.reduce((s, o) => s + (Number(o.persons) || 0), 0);
+        const free = t.capacity > 0 ? Math.max(0, t.capacity - used) : null;
+        return { ...t, others, used, free, area: areaName[t.area_id] || "" };
       });
       const areas = (r.areas || []).filter((a) => tables.some((t) => t.area_id === a.id));
-      if (tables.some((t) => !areas.some((a) => a.id === t.area_id))) areas.push({ id: "other", name: areas.length ? "Other" : "All tables" });
       setData({ areas, tables });
-      const cur = current && tables.find((t) => t.id === current.id);
-      setArea(cur ? (areas.some((a) => a.id === cur.area_id) ? cur.area_id : "other") : areas[0]?.id ?? null);
+      setGuests(Object.fromEntries(tables.map((t) => [t.id, Math.max(1, t.free ?? 2)])));
     }).catch((e) => { onError(e); onClose(); });
     return () => { alive = false; };
   }, []); // eslint-disable-line
 
-  const inArea = (t) => (area === "other" ? !data.areas.some((a) => a.id === t.area_id && a.id !== "other") : t.area_id === area);
-  const pickedRow = data?.tables.find((t) => t.id === picked?.id);
-  const tooMany = pickedRow && pickedRow.free !== null && persons > pickedRow.free;
+  const mine = (id) => picked.find((p) => p.id === id);
+  const add = (t) => {
+    const n = Math.max(1, Number(guests[t.id]) || 1);
+    setPicked((ps) => (ps.some((p) => p.id === t.id) ? ps.map((p) => (p.id === t.id ? { ...p, persons: n } : p)) : [...ps, { id: t.id, name: t.name, persons: n }]));
+  };
+  const remove = (id) => setPicked((ps) => ps.filter((p) => p.id !== id));
+  const shown = (data?.tables || []).filter((t) => (area === "all" || t.area_id === area)
+    && (!q.trim() || `${t.name} ${t.area}`.toLowerCase().includes(q.trim().toLowerCase())));
 
-  return (
-    <Modal title="Select a table" size="lg" onClose={onClose}
+  return (<>
+    <Modal title="Select tables" size="lg" onClose={onClose}
       footer={<>
-        <span style={{ marginRight: "auto", display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}><Users size={18} />Guests <Qty value={persons} onChange={(v) => setPersons(Math.max(1, v))} /></span>
+        <div className="tchips">
+          <Users size={18} />
+          {picked.length === 0 ? <span className="muted">No table added yet</span> : picked.map((p) => (
+            <span key={p.id} className="tchip">{p.name} · {p.persons}<button onClick={() => remove(p.id)} aria-label={`Remove ${p.name}`}><X size={14} /></button></span>
+          ))}
+        </div>
         <button className="btn" onClick={onClose}>Cancel</button>
-        <button className="btn primary" disabled={!pickedRow || tooMany} onClick={() => onPick({ id: pickedRow.id, name: pickedRow.name, persons })}>Select table</button>
+        <button className="btn primary" disabled={!picked.length} onClick={() => onPick(picked)}>Done{picked.length > 1 ? ` (${picked.length} tables)` : ""}</button>
       </>}>
       {!data ? <p className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} className="spin" />Loading tables…</p> : <>
+        <input className="input tsearch" placeholder="Search by floor/area or table name" value={q} onChange={(e) => setQ(e.target.value)} />
         {data.areas.length > 1 && (
           <div className="seg" role="tablist">
+            <button aria-pressed={area === "all"} onClick={() => setArea("all")}>All</button>
             {data.areas.map((a) => <button key={a.id} aria-pressed={area === a.id} onClick={() => setArea(a.id)}>{a.name}</button>)}
           </div>
         )}
         {data.tables.length === 0 && <p className="muted">No tables are set up for this outlet.</p>}
-        <div className="tables">
-          {data.tables.filter(inArea).map((t) => (
-            <button key={t.id} className={`tbl ${t.used ? "busy" : ""}`} aria-pressed={picked?.id === t.id} onClick={() => setPicked(t)}>
-              <b>{t.name}</b>
-              <span className="muted" style={{ fontSize: 12 }}>{t.capacity} seats</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: t.used ? "#9A6400" : "var(--ok)" }}>{t.used ? `${t.free ?? 0} free` : "Available"}</span>
-            </button>
-          ))}
+        <div className="tgrid">
+          {shown.map((t) => {
+            const sel = mine(t.id);
+            const state = t.free === 0 ? "full" : t.used ? "part" : "";
+            const max = t.free ?? 99;
+            return (
+              <div key={t.id} className={`tcard ${state} ${sel ? "sel" : ""}`}>
+                <div className="th">
+                  <span><b>{t.name}</b>{t.area && <small>{t.area}</small>}</span>
+                  <span className="th-r">
+                    {t.others.length > 0 && (
+                      <button className="bk-btn" onClick={() => setInfo(t)} title="Orders on this table" aria-label={`Orders on ${t.name}`}>
+                        <ListOrdered size={13} />{groupBookings(t.others).length}
+                      </button>
+                    )}
+                    <span className="seats" title="Free seats / seats"><Users size={12} style={{ verticalAlign: -2 }} /> {t.free ?? "–"}/{t.capacity || "–"}</span>
+                  </span>
+                </div>
+                {sel && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--brand)" }}>Added · {sel.persons} guests</div>}
+                <div className="add">
+                  <Qty value={guests[t.id] || 1} onChange={(v) => setGuests((g) => ({ ...g, [t.id]: Math.min(Math.max(1, v), Math.max(1, max)) }))} />
+                  {sel
+                    ? <><button className="btn primary" onClick={() => add(t)} disabled={max < 1}>Update</button><button className="btn" onClick={() => remove(t.id)} aria-label="Remove table"><Trash2 size={15} /></button></>
+                    : <button className="btn primary" onClick={() => add(t)} disabled={max < 1} title={max < 1 ? "No free seats" : ""}>Add</button>}
+                </div>
+              </div>
+            );
+          })}
         </div>
-        {tooMany && <div style={{ color: "var(--danger)", fontSize: 13, fontWeight: 600, marginTop: 8 }}>Only {pickedRow.free} seats are free at {pickedRow.name}.</div>}
       </>}
+    </Modal>
+    {info && (
+      <Modal title={`${info.name} · orders`} size="sm" onClose={() => setInfo(null)} footer={<button className="btn primary" onClick={() => setInfo(null)}>Close</button>}>
+        <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>{info.free ?? "–"} of {info.capacity || "–"} seats free</div>
+        <table className="bk">
+          <thead><tr><th>Order No</th><th>Time</th><th style={{ textAlign: "right" }}>Persons</th></tr></thead>
+          <tbody>{groupBookings(info.others).map((o) => (
+            <tr key={o.key}><td>{o.no}</td><td>{fmtMinutes(o.minutes)}</td><td style={{ textAlign: "right" }}>{o.persons}</td></tr>
+          ))}</tbody>
+        </table>
+      </Modal>
+    )}
+  </>);
+}
+
+// Delivery partner with logo + the partner's reference number (same as the web POS "Delivery Partners" popup).
+function PartnerModal({ current, currentRef, onClose, onSubmit }) {
+  const [sel, setSel] = useState(current ? String(current) : "");
+  const [ref, setRef] = useState(currentRef || "");
+  const [broken, setBroken] = useState({});
+  return (
+    <Modal title="Delivery Partners" onClose={onClose}
+      footer={<>
+        <button className="btn" style={{ marginRight: "auto" }} onClick={() => onSubmit("", "")}>Click Here to Uncheck</button>
+        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn primary" onClick={() => onSubmit(sel, ref.trim())}>Submit</button>
+      </>}>
+      {PARTNERS.length === 0 ? <p className="muted">No delivery partners are set up. Add them in the web app first.</p> : (
+        <div className="partners">
+          {PARTNERS.map((p) => {
+            const on = sel === String(p.id);
+            return (
+              <button key={p.id} className="partner" aria-pressed={on} onClick={() => setSel(on ? "" : String(p.id))}>
+                {on && <span className="tick"><Check size={14} /></span>}
+                <span className="logo">{p.logo && !broken[p.id] ? <img src={p.logo} alt="" onError={() => setBroken((b) => ({ ...b, [p.id]: true }))} /> : (p.name || "?").slice(0, 2).toUpperCase()}</span>
+                {p.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <label className="field">Reference Number
+        <input className="input" placeholder="Partner's order / reference number" value={ref} onChange={(e) => setRef(e.target.value)} disabled={!sel}
+          onKeyDown={(e) => e.key === "Enter" && onSubmit(sel, ref.trim())} />
+      </label>
     </Modal>
   );
 }
@@ -1552,11 +1707,10 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
           ))}
         </div>
       </>}
-      <div className="grid2">
+      {ITEM_DISCOUNT_ENABLED && (
         <label className="field">Item discount (%)<input className="input num" type="number" min="0" max="100" value={disc} onChange={(e) => setDisc(e.target.value)} /></label>
-        <label className="field">Unit price with modifiers<input className="input num" readOnly value={money(unit)} /></label>
-      </div>
-      {line?.discRaw && !(Number(disc) > 0) && <div className="muted" style={{ fontSize: 12.5, marginTop: -6, marginBottom: 8 }}>Current discount: {line.discRaw} {OUTLET.currency}</div>}
+      )}
+      <label className="field">Unit price with modifiers<input className="input num" readOnly value={money(unit)} /></label>
       <label className="field"><span style={{ display: "flex", gap: 6, alignItems: "center" }}><StickyNote size={14} />Kitchen note</span>
         <textarea className="input" placeholder="e.g. less spicy, sauce on the side" value={note} onChange={(e) => setNote(e.target.value)} />
       </label>

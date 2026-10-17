@@ -45,5 +45,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   print: {
     html: (html, opts) => call("print:html", html, opts),
+    raw: (job) => call("print:raw", job),
   },
 });

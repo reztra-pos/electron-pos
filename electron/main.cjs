@@ -5,6 +5,7 @@ const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const path = require("path");
 const device = require("./device.cjs");
 const api = require("./api.cjs");
+const { printRaw } = require("./printer.cjs");
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;       // set by `npm run dev`
 const KIOSK = process.env.POS_KIOSK === "1";            // POS_KIOSK=1 -> fullscreen kiosk mode
@@ -98,7 +99,12 @@ handle("api:call", (method, apiPath, body, opts = {}) => {
 });
 handle("api:newKey", () => api.newKey());
 
-/* ---------- printing (receipt HTML built by the screen) ---------- */
+/* ---------- printing ---------- */
+// KOT, draft and invoice: raw ESC/POS bytes from the server (Escposbuilder), sent straight to the printer.
+// job = { title, printer: { type, printer_ip_address, printer_port, path }, print_bytes }
+handle("print:raw", (job) => printRaw(job && job.printer, job && job.print_bytes));
+
+// register report (HTML) on the default Windows printer
 handle("print:html", (html, { silent = true } = {}) => new Promise((resolve, reject) => {
   const pw = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } });
   pw.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`).then(() => {
