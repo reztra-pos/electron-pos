@@ -1,12 +1,14 @@
 // Safe bridge between Electron and React — available as window.electronAPI
 const { contextBridge, ipcRenderer } = require("electron");
 
-// unwrap { ok, data, error, code } from main.cjs into a normal promise; errors keep the server's code
+// unwrap { ok, data, error, code } from main.cjs into a normal promise.
+// Errors are rejected as PLAIN objects { message, code, status, errors, network }: Electron's contextBridge copies
+// only .message of an Error object, so the server's code / field errors / "offline" flag would be lost.
 const call = (channel, ...args) => ipcRenderer.invoke(channel, ...args).then((r) => {
   if (r && r.ok === false) {
-    const err = new Error(r.error);
-    Object.assign(err, { code: r.code, status: r.status, errors: r.errors, network: r.network });
-    throw err;
+    // eslint-disable-next-line no-throw-literal
+    throw { name: "ApiError", message: r.error, code: r.code || "", status: r.status || 0, errors: r.errors || null, network: !!r.network,
+      toString() { return this.message; } };
   }
   return r && "data" in r ? r.data : r;
 });

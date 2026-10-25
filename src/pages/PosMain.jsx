@@ -24,9 +24,10 @@ import {
   Check, CreditCard, Banknote, Smartphone, Clock, ChefHat, StickyNote, FileText, ListOrdered,
   ShoppingCart, Users, Edit3, Sandwich, CupSoda, IceCreamCone, Beef, Drumstick, Citrus, Grape, Milk,
   GlassWater, Cookie, Martini, Flame, Soup, Image as ImageIcon, List, ShoppingBag, WifiOff, Loader2,
-  ShieldCheck, ShieldAlert, Settings2,
+  ShieldCheck, ShieldAlert, Settings2, ChevronDown, Eraser, Languages,
 } from "lucide-react";
 import { get, post, put, del, newKey, printHtml, printRaw } from "../api/pos.js";
+import { tr, tn, getLang, setLang, isRtl, LANGS } from "../i18n.js";
 
 /* ============================================================================
    DATA FROM THE SERVER (filled by applyCatalog() before this screen is shown)
@@ -54,19 +55,49 @@ const ART_RULES = [
 ];
 const artFor = (name) => (ART_RULES.find(([re]) => re.test(name || "")) || [null, UtensilsCrossed])[1];
 
+// In-app confirm box. Native window.confirm()/alert() are not used: in Electron they leave the window's
+// text fields unable to take typing until the window is re-focused.
+let _ask = null;
+const ask = (message, opts = {}) => (_ask ? _ask({ message, ...opts }) : Promise.resolve(false));
+function ConfirmHost() {
+  const [box, setBox] = useState(null);
+  useEffect(() => { _ask = (o) => new Promise((res) => setBox({ ...o, res })); return () => { _ask = null; }; }, []);
+  if (!box) return null;
+  const done = (v) => { box.res(v); setBox(null); };
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 400 }}>
+      <Modal title={box.title || tr("Please confirm")} onClose={() => done(false)} size="sm"
+        footer={<><button className="btn" onClick={() => done(false)}>{box.cancelLabel || tr("Cancel")}</button>
+          <button className="btn primary" autoFocus style={box.danger ? { background: "var(--danger)", borderColor: "var(--danger)" } : null} onClick={() => done(true)}>{box.confirmLabel || tr("OK")}</button></>}>
+        <p style={{ margin: 0 }}>{box.message}</p>
+      </Modal>
+    </div>
+  );
+}
+
+// names in the screen's language: Arabic uses the items' / categories' Arabic (secondary) names when set
+const itemName = (it) => (getLang() === "ar" && it?.name2 ? it.name2 : it?.name || "");
+const catName = (c) => (getLang() === "ar" && c?.name2 ? c.name2 : c?.name || "");
+// order type of an order / invoice in the screen's language
+const typeName = (o) => { const k = TYPE_KEY[Number(o?.order_type)]; return k ? tr(ORDER_TYPES[k].label) : (o?.order_type_name || ""); };
+
+// loyalty points are not used in this app (payments, register)
+const isLoyalty = (m) => !!m?.is_loyalty || /loyal/i.test(m?.name || "");
 const PAY_ICON = (name) => (/card|visa|master|mada/i.test(name) ? CreditCard : /cash/i.test(name) ? Banknote : Smartphone);
 
 /** Turn GET /v1/pos/bootstrap (+ GET /v1/customers) into what the screen uses. */
 export function applyCatalog(boot, customers = []) {
   SETTINGS = boot.settings || {};
   OUTLET = { name: SETTINGS.outlet?.name || "", currency: SETTINGS.currency || "", precision: Number(SETTINGS.precision ?? 2) };
-  CATEGORIES = (boot.categories || []).map((c, i) => ({ id: c.id, name: c.name, tint: TINTS[i % TINTS.length], art: artFor(c.name) }));
+  CATEGORIES = (boot.categories || []).map((c, i) => ({ id: c.id, name: c.name, name2: c.secondary_name || "", tint: TINTS[i % TINTS.length], art: artFor(c.name) }));
   const catArt = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.art]));
   const mapItem = (it, parent = null) => ({
     id: it.id,
     code: it.code || String(it.id),
     name: parent ? `${parent.name} ${it.name}` : it.name,
     shortName: it.name,
+    // Arabic name (secondary name in the web app), shown when the POS is in Arabic
+    name2: parent ? [parent.name2, it.secondary_name].filter(Boolean).join(" ") : (it.secondary_name || ""),
     cat: it.category_id,
     prices: it.prices || { dine_in: 0, take_away: 0, delivery: 0, partners: {} },
     openPrice: !!it.open_price,
@@ -96,7 +127,7 @@ export function applyCatalog(boot, customers = []) {
   INITIAL_CUSTOMERS = list.sort((a, b) => (a.id === DEFAULT_CUSTOMER_ID ? -1 : b.id === DEFAULT_CUSTOMER_ID ? 1 : 0));
   PARTNERS = (boot.delivery_partners || []).map((p) => ({ id: p.id, name: p.name, logo: p.logo_url || null }));
   // loyalty points need a points field on the payment screen: use the web POS for those payments
-  PAYMENT_METHODS = (boot.payment_methods || []).filter((m) => !m.is_loyalty)
+  PAYMENT_METHODS = (boot.payment_methods || []).filter((m) => !isLoyalty(m))
     .map((m) => ({ id: m.id, name: m.name, icon: PAY_ICON(m.name), cash: m.id === 1 || /cash/i.test(m.name) }));
   REGISTER_OPEN = boot.register ? !!boot.register.open : null;
 }
@@ -151,7 +182,7 @@ const firstError = (e) => (e?.errors && Object.values(e.errors)[0]) || e?.messag
 const timeAgo = (when) => {
   const t = typeof when === "number" ? Date.now() - when * 60000 : new Date(String(when).replace(" ", "T"));
   const m = Math.max(0, Math.round((Date.now() - t) / 60000));
-  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.floor(m / 60)} h ${m % 60} min ago`;
+  return m < 1 ? tr("just now") : m < 60 ? tr("{m} min ago", { m }) : tr("{h} h {m} min ago", { h: Math.floor(m / 60), m: m % 60 });
 };
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } };
@@ -169,10 +200,10 @@ const lineAmount = (it) => (Number(it.price_with_discount) || 0) + (it.modifiers
 
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Arabic:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&display=swap');
 .pos{--bg:#EDF0F4;--panel:#FFFFFF;--ink:#1D2433;--ink2:#5A6478;--line:#DCE1E8;--brand:#5B3FD1;--brand-2:#EEE9FF;
  --ok:#1E9E6A;--danger:#DC3F35;--info:#1E7FD8;--amber:#E8A317;--veg:#1E8E3E;--radius:10px;
- font-family:Manrope,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg);
+ font-family:Manrope,"Noto Sans Arabic","Noto Sans Devanagari",Tahoma,"Nirmala UI",system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg);
  height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;font-size:14px;-webkit-font-smoothing:antialiased}
 .pos *{box-sizing:border-box}
 .pos button{font-family:inherit;cursor:pointer;color:inherit}
@@ -185,15 +216,15 @@ const CSS = `
 .icon-btn{position:relative;display:inline-grid;place-items:center;width:38px;height:38px;border:0;background:transparent;border-radius:8px;color:var(--brand)}
 .icon-btn:hover{background:var(--brand-2)}
 .icon-btn.danger{color:var(--danger)}
-.badge{position:absolute;top:3px;right:3px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center}
-.sync-pill{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:16px;border:1px solid var(--line);background:#fff;font-size:12px;font-weight:700;color:var(--ink2);white-space:nowrap;margin-left:auto}
+.badge{position:absolute;top:3px;inset-inline-end:3px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center}
+.sync-pill{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:16px;border:1px solid var(--line);background:#fff;font-size:12px;font-weight:700;color:var(--ink2);white-space:nowrap;margin-inline-start:auto}
 .sync-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
 .sync-pill.off .dot{background:var(--danger)}.sync-pill.off{color:var(--danger)}
 .sync-pill.busy .dot{background:var(--amber);animation:pulse 1s infinite}
 @keyframes pulse{50%{opacity:.3}}
 .sync-pill .q{background:#FFF1D6;color:#7A4F00;border-radius:10px;padding:1px 7px}
-.sync-pill + .brand{margin-left:8px}
-.brand{font-weight:800;font-size:18px;letter-spacing:.02em;color:var(--brand);padding:0 14px;border-left:2px solid var(--line);border-right:2px solid var(--line);white-space:nowrap;margin-left:auto}
+.sync-pill + .brand{margin-inline-start:8px}
+.brand{font-weight:800;font-size:18px;letter-spacing:.02em;color:var(--brand);padding:0 14px;border-inline-start:2px solid var(--line);border-inline-end:2px solid var(--line);white-space:nowrap;margin-inline-start:auto}
 .chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
 .chip{border:0;border-radius:8px;padding:8px 12px;font-weight:700;font-size:13px;white-space:nowrap;display:flex;align-items:center;gap:6px;color:#fff;opacity:.92}
 .chip[aria-pressed=true]{opacity:1;box-shadow:inset 0 0 0 2px rgba(0,0,0,.25)}
@@ -210,7 +241,7 @@ const CSS = `
 .ro-head h2{margin:0;font-size:17px;font-weight:800}
 .input{width:100%;height:38px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit;font-size:13px;background:#fff;color:var(--ink)}
 .ro-list{flex:1;overflow-y:auto;padding:6px 10px;display:flex;flex-direction:column;gap:6px}
-.ro-card{text-align:left;border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 10px;display:grid;gap:3px;font-size:12px}
+.ro-card{text-align:start;border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 10px;display:grid;gap:3px;font-size:12px}
 .ro-card[aria-pressed=true]{border-color:var(--brand);background:var(--brand-2);box-shadow:inset 3px 0 0 var(--brand)}
 .ro-card .row{display:flex;justify-content:space-between;align-items:center;gap:6px}
 .ro-card b{font-size:14px}
@@ -242,11 +273,11 @@ const CSS = `
 .cart-table{flex:1;min-height:0;display:flex;flex-direction:column;margin:0 10px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .cart-grid{display:grid;grid-template-columns:minmax(0,1fr) 70px 108px 76px 30px;align-items:center;gap:6px;padding:0 10px}
 .cart-head{height:36px;background:#F6F7F9;border-bottom:1px solid var(--line);font-size:12px;font-weight:800;color:var(--ink2)}
-.cart-head .r,.cart-row .r{text-align:right}
+.cart-head .r,.cart-row .r{text-align:end}
 .cart-body{flex:1;overflow-y:auto}
 .cart-row{user-select:none;min-height:50px;border-bottom:1px solid #EEF1F5;padding-top:6px;padding-bottom:6px}
 .cart-row:hover{background:#FAFAFD}
-.cart-name{border:0;background:transparent;text-align:left;padding:0;font-weight:700;font-size:13.5px;min-width:0}
+.cart-name{border:0;background:transparent;text-align:start;padding:0;font-weight:700;font-size:13.5px;min-width:0}
 .cart-name small{display:block;font-weight:500;font-size:11.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .qty{display:flex;align-items:center;border:1px solid var(--line);border-radius:8px;overflow:hidden;height:34px;width:max-content;justify-self:center}
 .qty button{width:32px;height:100%;border:0;background:#F6F7F9;display:grid;place-items:center}
@@ -261,8 +292,8 @@ const CSS = `
 @container (max-width:470px){.type-btn svg{display:none}.type-btn{font-size:12px;gap:0}}
 .total-bar{margin:8px 10px 0;height:48px;border-radius:8px;background:#F1F2F6;display:flex;align-items:center;justify-content:center;gap:6px;position:relative}
 .total-bar .amount{font-size:24px;font-weight:800;color:var(--ink)}
-.total-bar .lbl{font-size:15px;font-weight:600;color:var(--ink2);margin-right:4px}
-.date-pop{position:absolute;bottom:54px;left:0;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;box-shadow:0 10px 30px rgba(20,24,40,.18);z-index:5;display:grid;gap:6px;font-size:12px;font-weight:700}
+.total-bar .lbl{font-size:15px;font-weight:600;color:var(--ink2);margin-inline-end:4px}
+.date-pop{position:absolute;bottom:54px;inset-inline-start:0;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;box-shadow:0 10px 30px rgba(20,24,40,.18);z-index:5;display:grid;gap:6px;font-size:12px;font-weight:700}
 .act-row{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;padding:8px 10px 10px}
 .act{height:46px;border:0;border-radius:8px;color:#fff !important;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
 .act.cancel{background:var(--danger)}.act.quick{background:#7C4DEB}.act.place{background:var(--info)}
@@ -271,11 +302,11 @@ const CSS = `
 /* menu */
 .menu-top{padding:10px 10px 8px}
 .search{position:relative}
-.search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#9AA3B2}
-.search .input{padding-left:36px;height:42px;font-size:14px}
-.search kbd{position:absolute;right:10px;top:50%;transform:translateY(-50%);font:600 11px Manrope,sans-serif;color:#9AA3B2;border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+.search svg{position:absolute;inset-inline-start:11px;top:50%;transform:translateY(-50%);color:#9AA3B2}
+.search .input{padding-inline-start:36px;height:42px;font-size:14px}
+.search kbd{position:absolute;inset-inline-end:10px;top:50%;transform:translateY(-50%);font:600 11px Manrope,sans-serif;color:#9AA3B2;border:1px solid var(--line);border-radius:5px;padding:1px 6px}
 .menu-body{flex:1;min-height:0;display:grid;grid-template-columns:136px 1fr;gap:10px;padding:0 10px 10px}
-.cats{overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px}
+.cats{overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-inline-end:2px}
 .cat{flex:none;min-height:42px;border:1px solid rgba(0,0,0,.05);border-radius:8px;font-weight:800;font-size:13px;padding:6px 8px;color:#2A3242}
 .cat[aria-pressed=true]{box-shadow:inset 0 0 0 2px var(--ink);}
 .cat.all{background:#FFF3BF}
@@ -286,8 +317,8 @@ const CSS = `
 .item .nm{font-weight:700;font-size:15px;line-height:1.25}
 .item .pr{font-weight:800;font-size:14px}
 .item .pr span{font-weight:600;color:var(--ink2);font-size:12px}
-.item .inq{position:absolute;top:-7px;right:-7px;min-width:26px;height:26px;padding:0 6px;border-radius:13px;background:var(--brand);color:#fff;font-weight:800;font-size:13px;display:grid;place-items:center;box-shadow:0 0 0 3px var(--panel)}
-.item .marks{position:absolute;top:7px;left:7px;display:flex;gap:4px}
+.item .inq{position:absolute;top:-7px;inset-inline-end:-7px;min-width:26px;height:26px;padding:0 6px;border-radius:13px;background:var(--brand);color:#fff;font-weight:800;font-size:13px;display:grid;place-items:center;box-shadow:0 0 0 3px var(--panel)}
+.item .marks{position:absolute;top:7px;inset-inline-start:7px;display:flex;gap:4px}
 .vegmark{width:13px;height:13px;border:1.5px solid var(--veg);border-radius:2px;display:grid;place-items:center}
 .vegmark::after{content:"";width:5px;height:5px;border-radius:50%;background:var(--veg)}
 .mini{font-size:9.5px;font-weight:800;padding:1px 5px;border-radius:4px;color:#fff}
@@ -296,7 +327,7 @@ const CSS = `
 .item.has-img .body{display:flex;flex-direction:column;justify-content:space-between;gap:4px;padding:8px 8px 10px;flex:1}
 .item.has-img .nm{font-size:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.5em}
 .item.has-img .inq{z-index:3}
-.item.has-img .marks{z-index:3;top:6px;left:6px;background:rgba(255,255,255,.92);padding:3px;border-radius:6px}
+.item.has-img .marks{z-index:3;top:6px;inset-inline-start:6px;background:rgba(255,255,255,.92);padding:3px;border-radius:6px}
 .item.has-img .marks:empty{display:none}
 .thumb{position:relative;width:100%;height:var(--thumb-h,92px);border-radius:9px 9px 0 0;overflow:hidden;display:grid;place-items:center;flex:none}
 .thumb img{width:100%;height:100%;object-fit:cover;display:block}
@@ -321,7 +352,7 @@ const CSS = `
 @media (max-width:1500px){.tb-icons .opt-lg{display:none}}
 @media (max-width:1279px){
  .main{grid-template-columns:minmax(360px,42fr) 58fr}
- .running{position:fixed;top:0;bottom:0;left:0;width:280px;z-index:50;border-radius:0;transform:translateX(-102%);transition:transform .22s ease}
+ .running{position:fixed;top:0;bottom:0;inset-inline-start:0;width:280px;z-index:50;border-radius:0;transform:translateX(-102%);transition:transform .22s ease}
  .running.open{transform:none}
  .only-drawer,.show-lt-xl{display:inline-grid}
  .tb-icons .opt-lg,.tb-icons .opt-md{display:none}
@@ -385,7 +416,7 @@ const CSS = `
 .field textarea{min-height:64px;padding:8px 10px;height:auto}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .mod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:12px}
-.mod{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:600;font-size:13px}
+.mod{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff;text-align:start;display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:600;font-size:13px}
 .mod[aria-pressed=true]{border-color:var(--brand);background:var(--brand-2);color:var(--brand)}
 .qty.big{height:44px}.qty.big button{width:44px}.qty.big span{min-width:50px;font-size:18px}
 .sum-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px dashed var(--line);font-weight:600}
@@ -408,8 +439,8 @@ const CSS = `
 .quick-amts{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
 .quick-amts button{border:1px solid var(--line);background:#F6F7F9;border-radius:8px;padding:8px 12px;font-weight:700}
 .pay-due{display:flex;justify-content:space-between;background:#F1F2F6;border-radius:10px;padding:14px;font-size:18px;font-weight:800;margin-bottom:14px}
-.menu-sheet{position:fixed;top:0;right:0;bottom:0;width:300px;max-width:88vw;background:#fff;z-index:60;box-shadow:-10px 0 40px rgba(10,14,30,.2);display:flex;flex-direction:column}
-.menu-sheet .item-link{display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;padding:12px 18px;font-weight:600;text-align:left;font-size:14px}
+.menu-sheet{position:fixed;top:0;inset-inline-end:0;bottom:0;width:300px;max-width:88vw;background:#fff;z-index:60;box-shadow:-10px 0 40px rgba(10,14,30,.2);display:flex;flex-direction:column}
+.menu-sheet .item-link{display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;padding:12px 18px;font-weight:600;text-align:start;font-size:14px}
 .menu-sheet .item-link:hover{background:var(--brand-2);color:var(--brand)}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1D2433;color:#fff;padding:11px 18px;border-radius:10px;font-weight:600;font-size:13.5px;z-index:200;display:flex;gap:8px;align-items:center;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:92vw}
 @media (prefers-reduced-motion:reduce){.pos *{transition:none !important}}
@@ -417,27 +448,59 @@ const CSS = `
 
 /* extra styles for the online screen (connection banner, server totals, invoice result) */
 const CSS_ONLINE = `
+/* ---- right-to-left (Arabic): logical properties above mirror the layout; these are the extras ---- */
+@media (max-width:1279px){.pos[dir=rtl] .running:not(.open){transform:translateX(102%)}}   /* drawer slides in from the right */
+.pos[dir=rtl] .num,.pos[dir=rtl] input[type=number],.pos[dir=rtl] input[type=date]{direction:ltr;unicode-bidi:isolate}
+.pos[dir=rtl] .menu-sheet{box-shadow:10px 0 40px rgba(10,14,30,.2)}
+.lang-pick{display:flex;gap:6px;padding:10px 18px;border-top:1px solid var(--line)}
+.lang-pick button{flex:1;height:36px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:700;font-size:13px}
+.lang-pick button[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:#fff}
+.lang-btn{display:inline-flex;align-items:center;gap:4px;height:34px;padding:0 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:800;font-size:12px;color:var(--ink2)}
+.lang-menu{position:absolute;top:calc(100% + 4px);inset-inline-start:0;z-index:70;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(30,36,60,.16);padding:4px;min-width:150px}
+.lang-menu button{display:flex;justify-content:space-between;width:100%;border:0;background:transparent;padding:8px 10px;border-radius:7px;font-weight:700;font-size:14px}
+.lang-menu button:hover,.lang-menu button[aria-pressed=true]{background:var(--brand-2);color:var(--brand)}
+.ss{position:relative;min-width:0}
+.ss-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:6px;text-align:start;cursor:pointer;background:#fff}
+.ss-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;unicode-bidi:plaintext}
+.ss-pop{position:absolute;z-index:60;top:calc(100% + 4px);inset-inline-start:0;min-width:100%;width:max-content;max-width:min(360px,90vw);background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(30,36,60,.16);overflow:hidden}
+.ss-search{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);color:var(--ink2)}
+.ss-search input{border:0;outline:0;flex:1;font:inherit;font-size:14px;min-width:160px;color:var(--ink)}
+.ss-list{max-height:280px;overflow:auto;padding:4px}
+.ss-opt{display:flex;flex-direction:column;align-items:flex-start;width:100%;text-align:start;border:0;background:transparent;padding:8px 10px;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer}
+.ss-opt small{color:var(--ink2);font-weight:500;font-size:12px}
+.ss-opt.hi{background:var(--brand-2)}.ss-opt[aria-selected=true]{color:var(--brand)}
+.ss-empty{padding:10px;color:var(--ink2);font-size:13px}
+.ss-foot{display:flex;align-items:center;gap:6px;width:100%;border:0;border-top:1px solid var(--line);background:#FAFAFD;padding:9px 12px;font-weight:700;color:var(--brand);cursor:pointer}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 10px}
+@media (max-width:700px){.grid3{grid-template-columns:1fr 1fr}}
+.ferr{display:block;color:var(--danger);font-weight:600;margin-top:3px}
+.addr-pick{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;font-size:14px}
+.addr-pick label{display:flex;gap:8px;align-items:center;cursor:pointer}
+.na-head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-weight:800;font-size:15px;margin:4px 0 10px;padding-top:12px;border-top:1px solid var(--line)}
+.na-warn{color:#9A6400;font-size:12.5px;font-weight:600}.na-ok{color:var(--ok);font-size:12.5px;font-weight:700;display:inline-flex;gap:4px;align-items:center}
+.link-reset{border:0;background:transparent;color:var(--brand);font-weight:700;cursor:pointer;padding:0;font-size:12px}
+.quick-amts button[aria-pressed=true]{border-color:var(--brand);background:var(--brand-2);color:var(--brand)}
 .ro-filter{display:grid;grid-template-columns:auto repeat(3,1fr);gap:4px;padding:0 10px 8px}
 .ro-filter button{border:1px solid var(--line);background:#fff;border-radius:8px;height:32px;display:flex;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:700;color:var(--ink2);padding:0 4px;min-width:0}
 .ro-filter button .lbl{white-space:nowrap}
 .ro-filter button .n{background:#EEF0F5;border-radius:999px;padding:0 6px;font-size:11px;line-height:17px}
 .ro-filter button[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:#fff}
 .ro-filter button[aria-pressed=true] .n{background:rgba(255,255,255,.25)}
-.partner-pick{display:flex;align-items:center;gap:6px;text-align:left;overflow:hidden;white-space:nowrap;cursor:pointer}
+.partner-pick{display:flex;align-items:center;gap:6px;text-align:start;overflow:hidden;white-space:nowrap;cursor:pointer}
 .partner-pick img{width:22px;height:22px;object-fit:contain;border-radius:4px;flex:none}
-.partner-pick span{overflow:hidden;text-overflow:ellipsis}
+.partner-pick span{overflow:hidden;text-overflow:ellipsis;unicode-bidi:plaintext}
 .partner-pick:disabled{opacity:.55;cursor:not-allowed}
 .partners{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-bottom:16px}
 .partner{position:relative;border:2px solid var(--line);border-radius:12px;background:#fff;padding:12px 8px;display:grid;justify-items:center;gap:8px;font-weight:800;font-size:14px}
 .partner .logo{width:84px;height:84px;border-radius:14px;display:grid;place-items:center;overflow:hidden;background:#F4F5F9;font-size:26px;color:var(--brand)}
 .partner .logo img{width:100%;height:100%;object-fit:contain}
 .partner[aria-pressed=true]{border-color:var(--brand);background:var(--brand-2);box-shadow:0 6px 18px rgba(91,63,209,.15)}
-.partner .tick{position:absolute;top:-9px;left:-9px;width:24px;height:24px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center}
+.partner .tick{position:absolute;top:-9px;inset-inline-start:-9px;width:24px;height:24px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center}
 .tsearch{margin-bottom:10px}
 .tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:10px;margin-top:10px;align-items:start}
-.tcard{border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:10px;background:#fff;padding:10px;display:grid;gap:8px}
-.tcard.part{border-left-color:#E5A11A}.tcard.full{border-left-color:var(--danger)}
-.tcard.sel{border-color:var(--brand);border-left-color:var(--brand);background:var(--brand-2)}
+.tcard{border:1px solid var(--line);border-inline-start:4px solid var(--ok);border-radius:10px;background:#fff;padding:10px;display:grid;gap:8px}
+.tcard.part{border-inline-start-color:#E5A11A}.tcard.full{border-inline-start-color:var(--danger)}
+.tcard.sel{border-color:var(--brand);border-inline-start-color:var(--brand);background:var(--brand-2)}
 .tcard .th{display:flex;justify-content:space-between;align-items:flex-start;gap:6px}
 .tcard .th b{font-size:15px;display:block}
 .tcard .th-r{display:flex;gap:6px;align-items:center}
@@ -446,16 +509,16 @@ const CSS_ONLINE = `
 .tcard .seats{border-radius:999px;padding:2px 8px;font-size:12px;font-weight:800;white-space:nowrap;background:#E3F6EC;color:var(--ok)}
 .tcard.part .seats{background:#FFF1D6;color:#9A6400}.tcard.full .seats{background:#FDECEA;color:var(--danger)}
 .bk{width:100%;font-size:13.5px;border-collapse:collapse;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.bk th{background:#EEE9FF;color:#3F2A9E;text-align:left;padding:8px 10px;font-weight:700;font-size:12.5px}
+.bk th{background:#EEE9FF;color:#3F2A9E;text-align:start;padding:8px 10px;font-weight:700;font-size:12.5px}
 .bk td{padding:8px 10px;border-top:1px solid #EEF1F5}.bk td:first-child{font-weight:700}
 .tcard .add{display:flex;gap:6px;align-items:center}
 .tcard .add .qty{flex:none}.tcard .add .btn.primary{flex:1;justify-content:center}
 .tcard .add .btn{height:34px;padding:0 12px}
-.tchips{display:flex;flex-wrap:wrap;gap:6px;margin-right:auto;align-items:center;font-weight:700;font-size:13px}
+.tchips{display:flex;flex-wrap:wrap;gap:6px;margin-inline-end:auto;align-items:center;font-weight:700;font-size:13px}
 .tchip{display:inline-flex;align-items:center;gap:6px;background:var(--brand-2);color:var(--brand-d,#3F2A9E);border-radius:999px;padding:4px 6px 4px 10px;font-size:12.5px;font-weight:700}
 .tchip button{border:0;background:transparent;color:inherit;display:grid;place-items:center;padding:0;cursor:pointer}
 .conn{display:flex;align-items:center;gap:8px;justify-content:center;background:#FDECEA;color:#A4262C;font-weight:700;font-size:13px;padding:6px 10px;border-bottom:1px solid #F5C2C0}
-.who{font-size:12px;color:var(--ink2);white-space:nowrap;padding:0 6px;display:flex;flex-direction:column;line-height:1.2;text-align:right}
+.who{font-size:12px;color:var(--ink2);white-space:nowrap;padding:0 6px;display:flex;flex-direction:column;line-height:1.2;text-align:end}
 .who b{color:var(--ink);font-size:13px}
 .calc-msg{margin:6px 10px 0;padding:6px 10px;border-radius:8px;background:#FFF1D6;color:#7A4F00;font-size:12.5px;font-weight:600}
 .total-bar .spin{animation:spin .8s linear infinite;color:var(--ink2)}@keyframes spin{to{transform:rotate(360deg)}}
@@ -475,13 +538,13 @@ const CSS_ONLINE = `
 /* ============================================================================
    SMALL COMPONENTS
    ========================================================================== */
-function Modal({ title, onClose, children, footer, size = "" }) {
+function Modal({ title, onClose, children, footer, size = "", closable = true }) {
   return (
-    <div className="modal-wrap" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="modal-wrap" onMouseDown={(e) => closable && e.target === e.currentTarget && onClose()}>
       <div className={`modal ${size}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-h">
           <h3>{title}</h3>
-          <button className="icon-btn" onClick={onClose} aria-label="Close"><X size={20} /></button>
+          {closable && <button className="icon-btn" onClick={onClose} aria-label={tr("Close")}><X size={20} /></button>}
         </div>
         <div className="modal-b">{children}</div>
         {footer && <div className="modal-f">{footer}</div>}
@@ -493,9 +556,9 @@ function Modal({ title, onClose, children, footer, size = "" }) {
 function Qty({ value, onChange, big }) {
   return (
     <div className={`qty ${big ? "big" : ""}`}>
-      <button onClick={() => onChange(value - 1)} aria-label="Decrease"><Minus size={15} /></button>
+      <button onClick={() => onChange(value - 1)} aria-label={tr("Decrease")}><Minus size={15} /></button>
       <span className="num">{value}</span>
-      <button onClick={() => onChange(value + 1)} aria-label="Increase"><Plus size={15} /></button>
+      <button onClick={() => onChange(value + 1)} aria-label={tr("Increase")}><Plus size={15} /></button>
     </div>
   );
 }
@@ -511,7 +574,7 @@ function ItemThumb({ item, size = "", tint }) {
 }
 
 const TYPE_ILL = { dine: ["#E3EEFD", "#1E7FD8"], take: ["#FDEBD8", "#D9711C"], delivery: ["#FFE3E0", "#DC3F35"] };
-const KITCHEN_TAG = { new: ["new", "New"], cooking: ["cooking", "Cooking"], ready: ["ready", "Ready"] };
+const KITCHEN_TAG = { new: ["new", "New"], cooking: ["cooking", "Cooking"], ready: ["ready", "Ready"] };   // labels go through tr()
 
 /* ============================================================================
    MAIN
@@ -520,6 +583,11 @@ const RUNNING_POLL_MS = 10000;     // running orders + kitchen status (live sync
 const NOTIF_POLL_MS = 15000;
 
 export default function PosMainScreen({ user, onLogout = () => {} }) {
+  // language: English / Arabic (right-to-left) / Hindi - remembered on this PC
+  const [lang, setLangState] = useState(getLang());
+  const [langOpen, setLangOpen] = useState(false);
+  const changeLang = (l) => { setLang(l); setLangState(l); setLangOpen(false); };
+  const dir = isRtl(lang) ? "rtl" : "ltr";
   const isWaiter = !!user?.permissions?.is_waiter;
   const canPay = !isWaiter || !!user?.permissions?.pos?.pos_1;
 
@@ -591,12 +659,23 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
   };
   // every failed call goes through here: network -> banner, register closed -> open register, else the server's message
   const onError = useCallback((e, fallback) => {
-    if (e?.network) { setOnline(false); notify("No connection to the server. Try again when it is back."); return; }
-    if (e?.code === "REGISTER_CLOSED") { setRegisterOpen(false); setModal({ name: "openRegister" }); return; }
+    if (e?.network) { setOnline(false); notify(tr("No connection to the server. Try again when it is back.")); return; }
+    if (e?.code === "REGISTER_CLOSED") { setRegisterOpen(false); setModal(null); return; }   // -> open register screen
     notify(firstError(e) || fallback);
   }, []);
   const ok = useCallback(() => setOnline(true), []);
   const savePrefs = (p) => { setPrefs(p); lsSet("pos.prefs", p); };
+  // customers not in the loaded list (more than 200): ask the server and add the matches
+  const searchCustomers = useCallback(async (q) => {
+    try {
+      const found = await get(`/v1/customers?search=${encodeURIComponent(q)}&limit=30`);
+      setCustomers((cs) => {
+        const have = new Set(cs.map((c) => c.id));
+        const add = (found || []).filter((c) => !have.has(c.id)).map((c) => ({ id: c.id, name: c.name, phone: c.phone || "", email: c.email || "", address: c.address || "" }));
+        return add.length ? [...cs, ...add] : cs;
+      });
+    } catch { /* keep the local matches */ }
+  }, []);
 
   // keyboard: "/" focuses search, Esc closes overlays
   useEffect(() => {
@@ -633,7 +712,6 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
   }, [refreshRunning, refreshNotifications, refreshDrafts]);
 
   // cashiers must open the register before taking orders (same rule as the web POS)
-  useEffect(() => { if (registerOpen === false && !isWaiter) setModal({ name: "openRegister" }); }, []); // eslint-disable-line
 
   // the selected running order disappeared (paid / cancelled on another till)
   useEffect(() => { if (selectedRunning && !running.some((o) => o.id === selectedRunning)) setSelectedRunning(null); }, [running, selectedRunning]);
@@ -661,6 +739,7 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
         };
         if (l.lineId) it.line_id = l.lineId;
         if (l.openPrice) it.unit_price = l.price;
+        if (l.priceEdited || l.openPrice) it.custom_price = l.price;     // price changed at the till (any item)
         if (l.comboSelections?.length) it.combo_selections = l.comboSelections;
         return it;
       }),
@@ -691,7 +770,7 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
 
   // list prices follow the order type / delivery partner (lines already in the kitchen keep their price)
   useEffect(() => {
-    setCart((c) => c.map((l) => (l.lineId || l.openPrice ? l : { ...l, price: priceFor(ITEM_BY_ID[l.itemId], orderType, partner) + comboExtra(ITEM_BY_ID[l.itemId], l.comboSelections, orderType) })));
+    setCart((c) => c.map((l) => (l.lineId || l.openPrice || l.priceEdited ? l : { ...l, price: priceFor(ITEM_BY_ID[l.itemId], orderType, partner) + comboExtra(ITEM_BY_ID[l.itemId], l.comboSelections, orderType) })));
   }, [orderType, partner]);
 
   /* ---------- catalogue ---------- */
@@ -717,19 +796,19 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
 
   /* ---------- cart ops ---------- */
   const addToCart = (item, opts = {}) => {
-    const { qty = 1, mods = [], note = "", disc = 0, price, comboSelections = [] } = opts;
+    const { qty = 1, mods = [], note = "", disc = 0, price, comboSelections = [], priceEdited = false } = opts;
     const unit = price != null ? Number(price) : priceFor(item, orderType, partner) + comboExtra(item, comboSelections, orderType);
     setCart((c) => {
-      const plain = !mods.length && !note && !disc && !item.openPrice && !comboSelections.length;
+      const plain = !mods.length && !note && !disc && !item.openPrice && !comboSelections.length && !priceEdited;
       if (plain) {
         const i = c.findIndex((l) => l.itemId === item.id && !l.lineId && !l.note && !l.disc && !l.mods.length && !l.openPrice && !l.comboSelections?.length);
-        if (i > -1) return c.map((l, j) => (j === i ? { ...l, qty: l.qty + qty } : l));
+        if (i > -1 && !c[i].priceEdited) return c.map((l, j) => (j === i ? { ...l, qty: l.qty + qty } : l));
       }
-      return [...c, { key: `${item.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, itemId: item.id, name: item.name, price: unit, qty, mods, note, disc, openPrice: !!item.openPrice, comboSelections, lineId: null }];
+      return [...c, { key: `${item.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, itemId: item.id, name: item.name, price: unit, qty, mods, note, disc, openPrice: !!item.openPrice, comboSelections, lineId: null, priceEdited }];
     });
   };
   const onItemClick = (item) => {
-    if (item.unavailable) return notify(`${item.name} is not available right now`);
+    if (item.unavailable) return notify(tr("{name} is not available right now", { name: itemName(item) }));
     if (!orderType) return setModal({ name: "orderType", then: { kind: "add", item } });
     if (item.variations.length) return setModal({ name: "variations", item });
     if (needsOptions(item)) return setModal({ name: "item", item });
@@ -748,20 +827,20 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
      KOT / draft / invoice are raw ESC/POS bytes made on the server (Escposbuilder) and sent by the
      desktop app straight to the printer set in the web app (network ip:port or Windows shared printer). */
   const print = async (html, what) => {          // register report only (HTML, default Windows printer)
-    try { await printHtml(html); notify(`${what} sent to the printer`); }
-    catch (e) { notify(`${what} not printed: ${e.message}`); }
+    try { await printHtml(html); notify(tr("{what} sent to the printer", { what })); }
+    catch (e) { notify(tr("{what} not printed: {error}", { what, error: e.message })); }
   };
   // one job -> { ok, title, error }
   const runJob = async (job) => {
-    if (!job) return { ok: false, title: "Receipt", error: "Nothing to print." };
-    if (!job.print_bytes) return { ok: false, title: job.title, error: job.error || "Nothing to print." };
+    if (!job) return { ok: false, title: tr("Receipt"), error: tr("Nothing to print.") };
+    if (!job.print_bytes) return { ok: false, title: job.title, error: job.error || tr("Nothing to print.") };
     try { await printRaw(job); return { ok: true, title: job.title }; }
     catch (e) { return { ok: false, title: job.title, error: e.message }; }
   };
   const printJob = async (job) => {
     const r = await runJob(job);
-    if (r.ok) notify(`${r.title} sent to the printer`);
-    else notify(`${r.title || "Receipt"} not printed: ${r.error}`, 8000);
+    if (r.ok) notify(tr("{what} sent to the printer", { what: r.title }));
+    else notify(tr("{what} not printed: {error}", { what: r.title || tr("Receipt"), error: r.error }), 8000);
     return r.ok;
   };
   // KOT: one ticket per kitchen, each on its own kitchen printer
@@ -772,8 +851,8 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
     for (const j of jobs) res.push(await runJob(j));      // one after the other: a busy printer is not hit twice at once
     const okNames = res.filter((r) => r.ok).map((r) => r.title.replace(/^KOT /, ""));
     const bad = res.filter((r) => !r.ok);
-    if (!bad.length) notify(`KOT sent to ${okNames.join(", ")}`);
-    else notify(`${okNames.length ? `KOT sent to ${okNames.join(", ")}. ` : ""}Not printed: ${bad.map((r) => `${r.title.replace(/^KOT /, "")} (${r.error})`).join("; ")}`, 8000);
+    if (!bad.length) notify(tr("KOT sent to {kitchens}", { kitchens: okNames.join(", ") }));
+    else notify(`${okNames.length ? tr("KOT sent to {kitchens}", { kitchens: okNames.join(", ") }) + ". " : ""}${tr("Not printed: {list}", { list: bad.map((r) => `${r.title.replace(/^KOT /, "")} (${r.error})`).join("; ") })}`, 8000);
   };
   // reprint of a saved invoice (same receipt; ZATCA data untouched)
   const reprintInvoice = async (saleId) => {
@@ -783,12 +862,12 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
   /* ---------- order flow ---------- */
   // action: "place" | "invoice"
   const proceed = (action, type = orderType, tbl = table) => {
-    if (!cart.length) return notify("Add at least one item to the order");
+    if (!cart.length) return notify(tr("Add at least one item to the order"));
     if (!type) return setModal({ name: "orderType", then: { kind: action } });
     if (type === "dine" && !hasTables(tbl)) return setModal({ name: "table", then: { kind: action, type } });
     if (action === "place") return commitOrder(type, tbl);
-    if (!canPay) return notify("Waiters can't take payment. Place the order and send it to the cashier.");
-    if (editingId) return notify("Update the order first, then use Invoice in Running Orders.");
+    if (!canPay) return notify(tr("Waiters can't take payment. Place the order and send it to the cashier."));
+    if (editingId) return notify(tr("Update the order first, then use Invoice in Running Orders."));
     openQuickPayment(type, tbl);
   };
 
@@ -801,14 +880,14 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
         ? await put(`/v1/orders/${editingId}`, body)
         : await post("/v1/orders", body, { idempotencyKey: await newKey() });
       ok();
-      notify(`Order ${r.order.order_number || r.order.sale_no} ${editingId ? "updated" : "placed"} — sent to the kitchen`);
+      notify(tr(editingId ? "Order {n} updated — sent to the kitchen" : "Order {n} placed — sent to the kitchen", { n: r.order.order_number || r.order.sale_no }));
       if (prefs.printKot && r.kot?.prints?.length) printKot(r.kot);
       resetOrder();
       setModal(null);
       setTab("menu");
       await refreshRunning();                 // select it once it is in the list (otherwise the selection is dropped)
       setSelectedRunning(r.order.id);
-    } catch (e) { onError(e, "The order was not saved."); }
+    } catch (e) { onError(e, tr("The order was not saved.")); }
     finally { setBusy(null); }
   };
 
@@ -818,7 +897,7 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
     try {
       const r = await post("/v1/orders/calculate", orderBody(type, tbl));
       setCalc(r);
-      setModal({ name: "payment", source: "cart", type, tbl, due: r.totals.total_payable, label: `${ORDER_TYPES[type].label}${hasTables(tbl) ? ` · Table ${tblText(tbl)}` : ""}${type === "delivery" && partner ? ` · ${partnerById(partner)?.name || ""}` : ""} · ${customer.name}` });
+      setModal({ name: "payment", source: "cart", type, tbl, due: r.totals.total_payable, label: `${tr(ORDER_TYPES[type].label)}${hasTables(tbl) ? ` · ${tr("Table {name}", { name: tblText(tbl) })}` : ""}${type === "delivery" && partner ? ` · ${partnerById(partner)?.name || ""}` : ""} · ${customer.name}` });
     } catch (e) { onError(e); }
     finally { setBusy(null); }
   };
@@ -827,7 +906,7 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
     setBusy("calc");
     try {
       const o = await get(`/v1/orders/${orderId}`);
-      setModal({ name: "payment", source: "running", orderId, due: o.totals.total_payable, label: `${o.order_type_name}${o.tables_text ? ` · Table ${o.tables_text}` : ""} · ${o.customer?.name || ""}` });
+      setModal({ name: "payment", source: "running", orderId, due: o.totals.total_payable, label: `${typeName(o)}${o.tables_text ? ` · ${tr("Table {name}", { name: o.tables_text })}` : ""} · ${o.customer?.name || ""}` });
     } catch (e) { onError(e); }
     finally { setBusy(null); }
   };
@@ -860,7 +939,7 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
       if (prefs.printInvoice && invoice.print_job) {
         printJob(invoice.print_job).then((ok) => ok && setModal((md) => (md?.name === "done" && md.invoice.id === invoice.id ? { ...md, printed: true } : md)));
       }
-    } catch (e) { onError(e, "Payment was not saved."); }
+    } catch (e) { onError(e, tr("Payment was not saved.")); }
     finally { setBusy(null); }
   };
 
@@ -900,7 +979,7 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
   // load a running order into the cart to change it (Modify Order)
   const modifyOrder = async () => {
     if (!sel) return;
-    if (cart.length && !editingId && !window.confirm("Replace the items in the current order with this running order?")) return;
+    if (cart.length && !editingId && !(await ask(tr("Replace the items in the current order with this running order?"), { confirmLabel: tr("Replace") }))) return;
     setBusy("load");
     try {
       const o = await get(`/v1/orders/${sel.id}`);
@@ -925,20 +1004,29 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
       setTips(Number(o.totals?.tips) || 0);
       setOrderDate(o.sale_date || new Date().toISOString().slice(0, 10));
       setEditingId(o.id); setDrawer(false); setTab("order");
-      notify(`Editing order ${o.order_number || o.sale_no}`);
+      notify(tr("Editing order {n}", { n: o.order_number || o.sale_no }));
     } catch (e) { onError(e); }
     finally { setBusy(null); }
   };
-  const cancelRunning = async () => {
-    if (!sel) return;
-    const reason = window.prompt(`Cancel order ${sel.order_number || sel.sale_no}? Enter the reason:`);
-    if (reason === null) return;
-    if (!reason.trim()) return notify("A reason is required to cancel an order");
+  const cancelRunning = () => { if (sel) setModal({ name: "cancelOrder", order: sel }); };
+  const doCancel = async (o, reason) => {
     try {
-      await post(`/v1/orders/${sel.id}/cancel`, { reason: reason.trim() });
-      if (editingId === sel.id) resetOrder();
+      await post(`/v1/orders/${o.id}/cancel`, { reason });
+      if (editingId === o.id) resetOrder();
       setSelectedRunning(null);
-      notify(`Order ${sel.order_number || sel.sale_no} cancelled`);
+      setModal(null);
+      notify(tr("Order {n} cancelled", { n: o.order_number || o.sale_no }));
+      refreshRunning();
+    } catch (e) { onError(e); }
+  };
+  // "Clear running orders" (same as the web POS): your open orders; Admin: all open orders of the outlet
+  const doClearRunning = async () => {
+    try {
+      const r = await post("/v1/orders/clear-mine");
+      if (editingId) resetOrder();
+      setSelectedRunning(null);
+      setModal(null);
+      notify(r.cleared ? tn(r.cleared, "{n} running order cleared", "{n} running orders cleared") : tr("No running orders to clear"));
       refreshRunning();
     } catch (e) { onError(e); }
   };
@@ -955,16 +1043,16 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
 
   /* ---------- drafts ---------- */
   const saveDraft = async () => {
-    if (!cart.length) return notify("Nothing to save — the order is empty");
-    if (editingId) return notify("This is a running order. Use Update Order to save changes.");
+    if (!cart.length) return notify(tr("Nothing to save — the order is empty"));
+    if (editingId) return notify(tr("This is a running order. Use Update Order to save changes."));
     try {
       await post("/v1/drafts", orderBody(), { idempotencyKey: await newKey() });
       resetOrder(); refreshDrafts();
-      notify("Order saved as draft");
+      notify(tr("Order saved as draft"));
     } catch (e) { onError(e); }
   };
   const restoreDraft = async (d) => {
-    if (cart.length && !window.confirm("Replace the current order with this draft?")) return;
+    if (cart.length && !(await ask(tr("Replace the current order with this draft?"), { confirmLabel: tr("Replace") }))) return;
     try {
       const r = await get(`/v1/drafts/${d.id}`);
       const o = r.order;
@@ -991,13 +1079,13 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
       if (o.charge) { setCharge(parseAmount(o.charge)); setChargeTouched(true); }
       await del(`/v1/drafts/${d.id}`);
       refreshDrafts();
-      setModal(null); setTab("order"); notify("Draft restored");
+      setModal(null); setTab("order"); notify(tr("Draft restored"));
     } catch (e) { onError(e); }
   };
 
   const toggleFull = () => {
     if (document.fullscreenElement) document.exitFullscreen?.();
-    else document.documentElement.requestFullscreen?.().catch(() => notify("Full screen isn't available here"));
+    else document.documentElement.requestFullscreen?.().catch(() => notify(tr("Full screen isn't available here")));
   };
 
   /* ---------- header actions ---------- */
@@ -1007,55 +1095,81 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
   const printLast = async () => {
     try {
       const list = sales.length ? sales : await get("/v1/invoices?limit=1");
-      if (!list[0]) return notify("No invoice to print");
+      if (!list[0]) return notify(tr("No invoice to print"));
       await reprintInvoice(list[0].id);
     } catch (e) { onError(e); }
   };
   const HEADER = [
-    { id: "logout", label: "Log out", icon: LogOut, cls: "", on: () => window.confirm("Log out of the POS?") && onLogout() },
-    { id: "drafts", label: "Open drafts", icon: FolderOpen, cls: "", badge: drafts.length, on: () => { setModal({ name: "drafts" }); refreshDrafts(); } },
-    ...(canPay ? [{ id: "print", label: "Print last invoice", icon: Printer, cls: "opt-sm", on: printLast }] : []),
-    ...(canPay ? [{ id: "recent", label: "Recent sales", icon: History, cls: "", on: openRecent }] : []),
-    { id: "notif", label: "Kitchen notifications", icon: Bell, cls: "", badge: unread, on: () => { setModal({ name: "notifications" }); markSeen(); refreshNotifications(); } },
-    ...(!isWaiter ? [{ id: "register", label: "Register details", icon: Wallet, cls: "opt-sm", on: () => setModal({ name: registerOpen === false ? "openRegister" : "register" }) }] : []),
-    { id: "refresh", label: "Refresh menu and orders", icon: RefreshCw, cls: "opt-md", on: () => { refreshRunning(); notify("Running orders refreshed"); } },
+    { id: "logout", label: tr("Log out"), icon: LogOut, cls: "", on: async () => { if (await ask(tr("Log out of the POS?"), { title: tr("Log out"), confirmLabel: tr("Log out") })) onLogout(); } },
+    { id: "drafts", label: tr("Open drafts"), icon: FolderOpen, cls: "", badge: drafts.length, on: () => { setModal({ name: "drafts" }); refreshDrafts(); } },
+    ...(canPay ? [{ id: "print", label: tr("Print last invoice"), icon: Printer, cls: "opt-sm", on: printLast }] : []),
+    ...(canPay ? [{ id: "recent", label: tr("Recent sales"), icon: History, cls: "", on: openRecent }] : []),
+    { id: "notif", label: tr("Kitchen notifications"), icon: Bell, cls: "", badge: unread, on: () => { setModal({ name: "notifications" }); markSeen(); refreshNotifications(); } },
+    ...(!isWaiter ? [{ id: "register", label: tr("Register details"), icon: Wallet, cls: "opt-sm", on: () => setModal({ name: "register" }) }] : []),
+    { id: "clear", label: tr("Clear running orders"), icon: Eraser, cls: "opt-md", danger: true, on: () => setModal({ name: "clearRunning" }) },
+    { id: "refresh", label: tr("Refresh menu and orders"), icon: RefreshCw, cls: "opt-md", on: () => { refreshRunning(); notify(tr("Running orders refreshed")); } },
   ];
 
-  const kitchenTag = (o) => (o.bill_printed ? ["bill", "Bill printed"] : KITCHEN_TAG[o.kitchen?.status] || ["", o.status]);
+  const kitchenTag = (o) => (o.bill_printed ? ["bill", tr("Bill printed")] : KITCHEN_TAG[o.kitchen?.status] ? [KITCHEN_TAG[o.kitchen.status][0], tr(KITCHEN_TAG[o.kitchen.status][1])] : ["", tr(o.status)]);
   const busyCls = (name) => (busy === name ? { opacity: 0.6, pointerEvents: "none" } : {});
 
   /* ============================================================================
      RENDER
      ========================================================================== */
+  // cashier / admin: the register must be open before the POS can be used (same rule as the web POS)
+  if (!isWaiter && registerOpen === false) {
+    return (
+      <div className="pos" dir={dir} lang={lang} style={{ background: "#EEF0F5" }}>
+        <style>{CSS}</style>
+        <style>{CSS_ONLINE}</style>
+        <OpenRegisterModal gate user={user} onError={onError} onLogout={onLogout}
+          onOpened={() => { setRegisterOpen(true); notify(tr("Register opened")); }} />
+        <ConfirmHost />
+        {toast && <div className="toast" role="status"><Check size={16} />{toast}</div>}
+      </div>
+    );
+  }
+
   return (
-    <div className="pos">
+    <div className="pos" dir={dir} lang={lang}>
       <style>{CSS}</style>
       <style>{CSS_ONLINE}</style>
 
-      {!online && <div className="conn" role="alert"><WifiOff size={16} />No connection to the server. Orders and payments will work again as soon as it is back.</div>}
+      {!online && <div className="conn" role="alert"><WifiOff size={16} />{tr("No connection to the server. Orders and payments will work again as soon as it is back.")}</div>}
 
       {/* ---------------- TOP BAR ---------------- */}
       <header className="topbar">
-        <button className="icon-btn show-lt-xl" onClick={() => setDrawer(true)} aria-label="Running orders" title="Running orders">
+        <button className="icon-btn show-lt-xl" onClick={() => setDrawer(true)} aria-label={tr("Running orders")} title={tr("Running orders")}>
           <ListOrdered size={20} />{running.length > 0 && <span className="badge">{running.length}</span>}
         </button>
-        <nav className="tb-icons" aria-label="POS actions">
+        <nav className="tb-icons" aria-label={tr("POS actions")}>
           {HEADER.map((h) => (
             <button key={h.id} className={`icon-btn ${h.cls} ${h.danger ? "danger" : ""}`} onClick={h.on} title={h.label} aria-label={h.label}>
               <h.icon size={20} />{h.badge > 0 && <span className="badge">{h.badge}</span>}
             </button>
           ))}
         </nav>
-        <button className="icon-btn opt-sm" onClick={toggleFull} title={isFull ? "Exit full screen" : "Full screen"} aria-label="Toggle full screen">
+        <button className="icon-btn opt-sm" onClick={toggleFull} title={isFull ? tr("Exit full screen") : tr("Full screen")} aria-label={tr("Toggle full screen")}>
           {isFull ? <Minimize size={20} /> : <Maximize size={20} />}
         </button>
-        <button className="icon-btn" onClick={() => setSheet(true)} title="Main menu" aria-label="Main menu"><Menu size={22} /></button>
-        <div className="who" style={{ marginLeft: "auto" }}><b>{user?.name || ""}</b><span>{user?.device || ""}</span></div>
-        <div className="brand" style={{ marginLeft: 0 }}>{OUTLET.name}</div>
-        <div className="chips" role="group" aria-label="Item filters">
-          {[["veg", "Vegetarian"], ["bev", "Beverage"], ["combo", "Combo"], ["promo", "Promo"]].map(([k, l]) => (
+        <div style={{ position: "relative" }}>
+          <button className="lang-btn" onClick={() => setLangOpen((v) => !v)} title={tr("Language")} aria-label={tr("Language")} aria-expanded={langOpen}>
+            <Languages size={16} />{LANGS.find((x) => x.code === lang)?.short}
+          </button>
+          {langOpen && <>
+            <div style={{ position: "fixed", inset: 0, zIndex: 65 }} onClick={() => setLangOpen(false)} />
+            <div className="lang-menu" role="menu">
+              {LANGS.map((x) => <button key={x.code} role="menuitemradio" aria-pressed={lang === x.code} onClick={() => changeLang(x.code)} lang={x.code}><span>{x.name}</span><span className="muted">{x.short}</span></button>)}
+            </div>
+          </>}
+        </div>
+        <button className="icon-btn" onClick={() => setSheet(true)} title={tr("Main menu")} aria-label={tr("Main menu")}><Menu size={22} /></button>
+        <div className="who" style={{ marginInlineStart: "auto" }}><b>{user?.name || ""}</b><span>{user?.device || ""}</span></div>
+        <div className="brand" style={{ marginInlineStart: 0 }}>{OUTLET.name}</div>
+        <div className="chips" role="group" aria-label={tr("Item filters")}>
+          {[["veg", tr("Vegetarian")], ["bev", tr("Beverage")], ["combo", tr("Combo")], ["promo", tr("Promo")]].map(([k, l]) => (
             <button key={k} className={`chip ${k}`} aria-pressed={filters[k]} onClick={() => setFilters((f) => ({ ...f, [k]: !f[k] }))} title={l}>
-              <span className="chip-txt">{l}</span><span className="chip-abbr">{{ veg: "Veg", bev: "Bev", combo: "Combo", promo: "Promo" }[k]}</span>
+              <span className="chip-txt">{l}</span><span className="chip-abbr">{{ veg: tr("Veg"), bev: tr("Bev"), combo: tr("Combo"), promo: tr("Promo") }[k]}</span>
             </button>
           ))}
         </div>
@@ -1066,115 +1180,114 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
         {drawer && <div className="scrim" onClick={() => setDrawer(false)} />}
 
         {/* Running orders */}
-        <aside className={`panel running ${drawer ? "open" : ""}`} aria-label="Running orders">
+        <aside className={`panel running ${drawer ? "open" : ""}`} aria-label={tr("Running orders")}>
           <div className="ro-head">
-            <h2>Running Orders</h2>
+            <h2>{tr("Running Orders")}</h2>
             <div style={{ display: "flex" }}>
-              <button className="icon-btn" onClick={() => { refreshRunning(); notify("Running orders refreshed"); }} aria-label="Refresh" title="Refresh"><RefreshCw size={17} /></button>
-              <button className="icon-btn only-drawer" onClick={() => setDrawer(false)} aria-label="Close"><X size={18} /></button>
+              <button className="icon-btn" onClick={() => { refreshRunning(); notify(tr("Running orders refreshed")); }} aria-label={tr("Refresh")} title={tr("Refresh")}><RefreshCw size={17} /></button>
+              <button className="icon-btn only-drawer" onClick={() => setDrawer(false)} aria-label={tr("Close")}><X size={18} /></button>
             </div>
           </div>
-          <div className="ro-filter" role="group" aria-label="Filter running orders by type">
-            {[["all", "All", ListOrdered, running.length], ...Object.entries(ORDER_TYPES).map(([k, v]) => [k, v.label, v.icon, typeCount(k)])].map(([k, label, Icon, n]) => (
+          <div className="ro-filter" role="group" aria-label={tr("Filter running orders by type")}>
+            {[["all", tr("All"), ListOrdered, running.length], ...Object.entries(ORDER_TYPES).map(([k, v]) => [k, tr(v.label), v.icon, typeCount(k)])].map(([k, label, Icon, n]) => (
               <button key={k} aria-pressed={roType === k} onClick={() => setRoType(k)} title={label} aria-label={`${label} (${n})`}>
-                {k === "all" ? <span className="lbl">All</span> : <Icon size={15} />}<span className="n">{n}</span>
+                {k === "all" ? <span className="lbl">{tr("All")}</span> : <Icon size={15} />}<span className="n">{n}</span>
               </button>
             ))}
           </div>
           <div style={{ padding: "0 10px" }}>
-            <input className="input" placeholder="Table, order number, waiter" value={roQuery} onChange={(e) => setRoQuery(e.target.value)} />
+            <input className="input" placeholder={tr("Table, order number, waiter")} value={roQuery} onChange={(e) => setRoQuery(e.target.value)} />
           </div>
           <div className="ro-list">
-            {filteredRunning.length === 0 && <div className="ro-empty">{running.length ? (roType !== "all" && !typeCount(roType) ? `No ${ORDER_TYPES[roType].label} orders running.` : "No orders match your search.") : "No running orders. Placed orders will appear here."}</div>}
+            {filteredRunning.length === 0 && <div className="ro-empty">{running.length ? (roType !== "all" && !typeCount(roType) ? tr("No {type} orders running.", { type: tr(ORDER_TYPES[roType].label) }) : tr("No orders match your search.")) : tr("No running orders. Placed orders will appear here.")}</div>}
             {filteredRunning.map((o) => {
               const TI = ORDER_TYPES[TYPE_KEY[o.order_type]]?.icon || ShoppingBag;
               const [tagCls, tagTxt] = kitchenTag(o);
               return (
                 <button key={o.id} className="ro-card" aria-pressed={selectedRunning === o.id} onClick={() => setSelectedRunning(o.id === selectedRunning ? null : o.id)} onDoubleClick={() => setModal({ name: "details", id: o.id })}>
                   <div className="row"><b className="num">#{o.order_number || o.sale_no}</b><span className={`tag ${tagCls}`}>{tagTxt}</span></div>
-                  <div className="row muted"><span style={{ display: "flex", alignItems: "center", gap: 4 }}><TI size={13} />{o.order_type === 1 && o.tables_text ? `Table ${o.tables_text}` : o.order_type_name}{o.order_type === 3 && partnerById(o.delivery_partner_id) ? ` · ${partnerById(o.delivery_partner_id).name}` : ""}</span></div>
+                  <div className="row muted"><span style={{ display: "flex", alignItems: "center", gap: 4 }}><TI size={13} />{o.order_type === 1 && o.tables_text ? tr("Table {name}", { name: o.tables_text }) : typeName(o)}{o.order_type === 3 && partnerById(o.delivery_partner_id) ? ` · ${partnerById(o.delivery_partner_id).name}` : ""}</span></div>
                   <div className="row muted"><span>{o.customer?.name}</span><span>{o.waiter?.name}</span></div>
                   <div className="row"><span className="muted" style={{ display: "flex", alignItems: "center", gap: 4 }}><Clock size={12} />{timeAgo(o.minutes_open ?? o.date_time)}</span><b className="num" style={{ fontSize: 13 }}>{money(o.total_payable)}</b></div>
-                  {editingId === o.id && <span className="tag" style={{ background: "#FFF1D6", color: "#7A4F00", justifySelf: "start" }}>Editing</span>}
+                  {editingId === o.id && <span className="tag" style={{ background: "#FFF1D6", color: "#7A4F00", justifySelf: "start" }}>{tr("Editing")}</span>}
                 </button>
               );
             })}
           </div>
           <div className="ro-actions">
-            <button className="op-btn" disabled={!sel || !!busy} onClick={modifyOrder}><Edit3 size={14} />Modify Order</button>
-            <button className="op-btn" disabled={!sel} onClick={() => setModal({ name: "details", id: sel.id })}><Info size={14} />Order Details</button>
-            <button className="op-btn" disabled={!sel} onClick={() => reprintKot(sel.id)}><Printer size={14} />Re-print KOT</button>
-            {canPay && <button className="op-btn half" disabled={!sel || !!busy} onClick={() => openOrderPayment(sel.id)}><Receipt size={14} />Invoice</button>}
-            <button className={`op-btn ${canPay ? "half" : ""}`} onClick={saveDraft} title="Save the current order as a draft"><FileText size={14} />Draft</button>
-            <button className="op-btn" disabled={!sel} onClick={cancelRunning}><Ban size={14} />Cancel Order</button>
+            <button className="op-btn" disabled={!sel || !!busy} onClick={modifyOrder}><Edit3 size={14} />{tr("Modify Order")}</button>
+            <button className="op-btn" disabled={!sel} onClick={() => setModal({ name: "details", id: sel.id })}><Info size={14} />{tr("Order Details")}</button>
+            <button className="op-btn" disabled={!sel} onClick={() => reprintKot(sel.id)}><Printer size={14} />{tr("Re-print KOT")}</button>
+            {canPay && <button className="op-btn half" disabled={!sel || !!busy} onClick={() => openOrderPayment(sel.id)}><Receipt size={14} />{tr("Invoice")}</button>}
+            <button className={`op-btn ${canPay ? "half" : ""}`} onClick={saveDraft} title={tr("Save the current order as a draft")}><FileText size={14} />{tr("Draft")}</button>
+            <button className="op-btn" disabled={!sel} onClick={cancelRunning}><Ban size={14} />{tr("Cancel Order")}</button>
           </div>
         </aside>
 
         {/* Cart */}
-        <section className="panel cart" aria-label="Current order">
+        <section className="panel cart" aria-label={tr("Current order")}>
           <div className="type-row">
             {Object.entries(ORDER_TYPES).map(([k, v]) => (
               <button key={k} className="type-btn" aria-pressed={orderType === k} onClick={() => onOrderTypePicked(k)}>
-                <v.icon size={16} /><span className="lbl-long">{v.label}</span>
+                <v.icon size={16} /><span className="lbl-long">{tr(v.label)}</span>
               </button>
             ))}
-            <button className="type-btn" aria-pressed={orderType === "dine" && hasTables(table)} onClick={() => setModal({ name: "table" })} title={hasTables(table) ? tblText(table) : "Select tables"}>
-              <LayoutGrid size={16} /><span className="lbl-long" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{hasTables(table) ? tblText(table) : "Table"}</span>
+            <button className="type-btn" aria-pressed={orderType === "dine" && hasTables(table)} onClick={() => setModal({ name: "table" })} title={hasTables(table) ? tblText(table) : tr("Select tables")}>
+              <LayoutGrid size={16} /><span className="lbl-long" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{hasTables(table) ? tblText(table) : tr("Table")}</span>
             </button>
           </div>
 
           <div className="sel-row">
-            <select className="select" value={waiter} onChange={(e) => setWaiter(Number(e.target.value) || "")} aria-label="Waiter">
-              {!WAITERS.length && <option value="">No waiters</option>}
-              {WAITERS.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
-            <select className="select" value={customerId} onChange={(e) => setCustomerId(Number(e.target.value))} aria-label="Customer">
-              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` (${c.phone})` : ""}</option>)}
-            </select>
-            <button type="button" className="select sel-partner partner-pick" disabled={orderType !== "delivery"} onClick={() => setModal({ name: "partner" })} aria-label="Delivery partner" title={orderType !== "delivery" ? "Select Delivery to choose a partner" : "Choose delivery partner"}>
-              {partner ? <>{partnerById(partner)?.logo && <img src={partnerById(partner).logo} alt="" />}<span>{partnerById(partner)?.name}{partnerRef ? ` · ${partnerRef}` : ""}</span></> : <span className="muted">Delivery Partner</span>}
+            <SearchSelect label={tr("Waiter")} value={waiter} placeholder={WAITERS.length ? tr("Waiter") : tr("No waiters")}
+              options={WAITERS.map((w) => ({ value: w.id, label: w.name }))} onChange={(v) => setWaiter(Number(v) || "")} />
+            <SearchSelect label={tr("Customer")} value={customerId} placeholder={tr("Customer")}
+              options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.phone }))}
+              onChange={(v) => setCustomerId(Number(v))} onSearch={searchCustomers}
+              footer={{ label: tr("Add new customer"), onClick: () => setModal({ name: "customer" }) }} />
+            <button type="button" className="select sel-partner partner-pick" disabled={orderType !== "delivery"} onClick={() => setModal({ name: "partner" })} aria-label={tr("Delivery partner")} title={orderType !== "delivery" ? tr("Select Delivery to choose a partner") : tr("Choose delivery partner")}>
+              {partner ? <>{partnerById(partner)?.logo && <img src={partnerById(partner).logo} alt="" />}<span>{partnerById(partner)?.name}{partnerRef ? ` · ${partnerRef}` : ""}</span></> : <span className="muted">{tr("Delivery Partner")}</span>}
             </button>
             <div className="sel-actions">
-              <button className="sq-btn" title="Edit customer" aria-label="Edit customer" disabled={customer.id === DEFAULT_CUSTOMER_ID} style={customer.id === DEFAULT_CUSTOMER_ID ? { opacity: .45 } : {}} onClick={() => setModal({ name: "customer", edit: customer })}><Pencil size={16} /></button>
-              <button className="sq-btn" title="Add customer" aria-label="Add customer" onClick={() => setModal({ name: "customer" })}><UserPlus size={16} /></button>
+              <button className="sq-btn" title={tr("Edit customer")} aria-label={tr("Edit customer")} disabled={customer.id === DEFAULT_CUSTOMER_ID} style={customer.id === DEFAULT_CUSTOMER_ID ? { opacity: .45 } : {}} onClick={() => setModal({ name: "customer", edit: customer })}><Pencil size={16} /></button>
+              <button className="sq-btn" title={tr("Add customer")} aria-label={tr("Add customer")} onClick={() => setModal({ name: "customer" })}><UserPlus size={16} /></button>
             </div>
           </div>
 
           {editingId && (
             <div className="edit-banner">
-              <span>Editing order #{running.find((o) => o.id === editingId)?.order_number || editingId}. Press Update Order to save and send changes to the kitchen.</span>
-              <button onClick={() => { resetOrder(); notify("Changes discarded"); }}>Discard</button>
+              <span>{tr("Editing order #{n}. Press Update Order to save and send changes to the kitchen.", { n: running.find((o) => o.id === editingId)?.order_number || editingId })}</span>
+              <button onClick={() => { resetOrder(); notify(tr("Changes discarded")); }}>{tr("Discard")}</button>
             </div>
           )}
           {(orderType || cart.length > 0) && (
             <div className="context-line">
-              {orderType && <span>Type: <b>{ORDER_TYPES[orderType].label}</b></span>}
-              {hasTables(table) && <span>Table: <b>{tblText(table)}</b> · {tblPersons(table)} guests</span>}
-              {orderType === "delivery" && partner && <span>Partner: <b>{partnerById(partner)?.name}</b>{partnerRef ? ` · Ref ${partnerRef}` : ""}</span>}
-              <span>Items: <b className="num">{itemCount}</b></span>
+              {orderType && <span>{tr("Type:")} <b>{tr(ORDER_TYPES[orderType].label)}</b></span>}
+              {hasTables(table) && <span>{tr("Table:")} <b>{tblText(table)}</b> · {tr("{n} guests", { n: tblPersons(table) })}</span>}
+              {orderType === "delivery" && partner && <span>{tr("Partner:")} <b>{partnerById(partner)?.name}</b>{partnerRef ? ` · ${tr("Ref {ref}", { ref: partnerRef })}` : ""}</span>}
+              <span>{tr("Items:")} <b className="num">{itemCount}</b></span>
             </div>
           )}
 
           <div className="cart-table">
             <div className="cart-grid cart-head">
-              <span>Item</span><span className="r col-price">Price</span><span style={{ textAlign: "center" }}>Qty</span><span className="r">Total</span><span />
+              <span>{tr("Item")}</span><span className="r col-price">{tr("Price")}</span><span style={{ textAlign: "center" }}>{tr("Qty")}</span><span className="r">{tr("Total")}</span><span />
             </div>
             <div className="cart-body">
               {cart.length === 0 ? (
-                <div className="cart-empty"><div><ShoppingCart size={40} /><div>Tap an item on the menu to start an order.</div></div></div>
+                <div className="cart-empty"><div><ShoppingCart size={40} /><div>{tr("Tap an item on the menu to start an order.")}</div></div></div>
               ) : cart.map((l) => (
                 <div key={l.key} className="cart-grid cart-row">
-                  <button className={`cart-name ${showImages ? "with-thumb" : ""}`} onClick={() => setModal({ name: "item", line: l })} title="Edit item">
+                  <button className={`cart-name ${showImages ? "with-thumb" : ""}`} onClick={() => setModal({ name: "item", line: l })} title={tr("Edit item")}>
                     {showImages && (() => { const it = ITEM_BY_ID[l.itemId]; return it ? <ItemThumb item={it} size="sm" tint={catById[it.cat]?.tint} /> : null; })()}
-                    <span className="txt">{l.name}
+                    <span className="txt">{ITEM_BY_ID[l.itemId] ? itemName(ITEM_BY_ID[l.itemId]) : l.name}
                     {(l.mods.length > 0 || l.note || l.disc > 0 || l.discRaw || l.cooking) && (
-                      <small>{[...l.mods.map((m) => m.name), l.disc > 0 ? `${l.disc}% off` : "", l.discRaw ? `${l.discRaw} off` : "", l.note ? `“${l.note}”` : "", l.cooking && l.cooking !== "New" ? l.cooking : ""].filter(Boolean).join(", ")}</small>
+                      <small>{[...l.mods.map((m) => m.name), l.disc > 0 ? tr("{v}% off", { v: l.disc }) : "", l.discRaw ? tr("{v} off", { v: l.discRaw }) : "", l.note ? `“${l.note}”` : "", l.cooking && l.cooking !== "New" ? tr(l.cooking) : ""].filter(Boolean).join(", ")}</small>
                     )}</span>
                   </button>
-                  <span className="r num col-price">{money(lineUnit(l))}</span>
+                  <span className="r num col-price" title={l.priceEdited ? tr("Price changed for this customer") : ""} style={l.priceEdited ? { color: "#9A6400", fontWeight: 800 } : null}>{money(lineUnit(l))}{l.priceEdited ? "*" : ""}</span>
                   <Qty value={l.qty} onChange={(q) => setLineQty(l.key, q)} />
                   <span className="r num" style={{ fontWeight: 800 }}>{money(lineTotal(l))}</span>
-                  <button className="del" onClick={() => removeLine(l.key)} aria-label={`Remove ${l.name}`}><Trash2 size={16} /></button>
+                  <button className="del" onClick={() => removeLine(l.key)} aria-label={tr("Remove {name}", { name: l.name })}><Trash2 size={16} /></button>
                 </div>
               ))}
             </div>
@@ -1182,11 +1295,11 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
 
           {calcErr && cart.length > 0 && <div className="calc-msg" role="alert">{calcErr}</div>}
           <div className="total-bar">
-            <button className="icon-btn" style={{ color: "var(--ink2)" }} onClick={() => setDatePop((v) => !v)} title="Order date" aria-label="Order date"><CalendarDays size={19} /></button>
-            <button className="icon-btn" style={{ color: "var(--ink2)" }} onClick={() => setModal({ name: "summary" })} title="Discount, VAT, charges and tips" aria-label="Order summary"><Eye size={19} /></button>
-            <span className="lbl">Total Payable:</span>
+            <button className="icon-btn" style={{ color: "var(--ink2)" }} onClick={() => setDatePop((v) => !v)} title={tr("Order date")} aria-label={tr("Order date")}><CalendarDays size={19} /></button>
+            <button className="icon-btn" style={{ color: "var(--ink2)" }} onClick={() => setModal({ name: "summary" })} title={tr("Discount, VAT, charges and tips")} aria-label={tr("Order summary")}><Eye size={19} /></button>
+            <span className="lbl">{tr("Total Payable:")}</span>
             <span className="amount num">{cart.length ? (totals ? money(totals.total_payable) : "—") : money(0)}</span>
-            {calcBusy && <Loader2 size={16} className="spin" aria-label="Calculating" />}
+            {calcBusy && <Loader2 size={16} className="spin" aria-label={tr("Calculating")} />}
             {datePop && (
               <div className="date-pop">
                 Order date
@@ -1196,54 +1309,54 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
           </div>
 
           <div className="act-row">
-            <button className="act cancel" onClick={() => { if (!cart.length && !editingId) return resetOrder(); if (window.confirm(editingId ? "Discard changes to this order?" : "Clear the current order?")) { resetOrder(); notify("Order cleared"); } }}><X size={17} />Cancel</button>
-            {canPay && <button className="act quick" disabled={!!busy || !!editingId} style={busyCls("calc")} onClick={() => proceed("invoice")} title={!canPay ? "Waiters can't take payment" : editingId ? "Update the order first" : ""}><Receipt size={17} />Quick Invoice</button>}
-            <button className="act place" disabled={!!busy} style={busyCls("place")} onClick={() => proceed("place")}>{busy === "place" ? <Loader2 size={17} className="spin" /> : <ChefHat size={17} />}{editingId ? "Update Order" : "Place Order"}</button>
+            <button className="act cancel" onClick={async () => { if (!cart.length && !editingId) return resetOrder(); if (await ask(editingId ? tr("Discard changes to this order?") : tr("Clear the current order?"), { confirmLabel: editingId ? tr("Discard") : tr("Clear"), danger: true })) { resetOrder(); notify(editingId ? tr("Changes discarded") : tr("Order cleared")); } }}><X size={17} />{tr("Cancel")}</button>
+            {canPay && <button className="act quick" disabled={!!busy || !!editingId} style={busyCls("calc")} onClick={() => proceed("invoice")} title={!canPay ? tr("Waiters can't take payment") : editingId ? tr("Update the order first") : ""}><Receipt size={17} />{tr("Quick Invoice")}</button>}
+            <button className="act place" disabled={!!busy} style={busyCls("place")} onClick={() => proceed("place")}>{busy === "place" ? <Loader2 size={17} className="spin" /> : <ChefHat size={17} />}{editingId ? tr("Update Order") : tr("Place Order")}</button>
           </div>
         </section>
 
         {/* Menu */}
-        <section className="panel menu" aria-label="Menu">
+        <section className="panel menu" aria-label={tr("Menu")}>
           <div className="menu-top">
             <div className="search">
               <Search size={17} />
-              <input ref={searchRef} className="input" placeholder="Name or Code or Category or VEG or BEV or BAR" value={query} onChange={(e) => setQuery(e.target.value)} />
-              {query ? <button className="del" style={{ position: "absolute", right: 6, top: 6 }} onClick={() => setQuery("")} aria-label="Clear search"><X size={16} /></button> : <kbd>/</kbd>}
+              <input ref={searchRef} className="input" placeholder={tr("Name or Code or Category or VEG or BEV or BAR")} value={query} onChange={(e) => setQuery(e.target.value)} />
+              {query ? <button className="del" style={{ position: "absolute", insetInlineEnd: 6, top: 6 }} onClick={() => setQuery("")} aria-label={tr("Clear search")}><X size={16} /></button> : <kbd>/</kbd>}
             </div>
-            <div className="view-toggle" role="group" aria-label="Item view">
-              <button aria-pressed={showImages} onClick={() => setShowImages(true)} title="Show item images" aria-label="Show item images"><ImageIcon size={18} /></button>
-              <button aria-pressed={!showImages} onClick={() => setShowImages(false)} title="Text only (faster on slow terminals)" aria-label="Text only"><List size={18} /></button>
+            <div className="view-toggle" role="group" aria-label={tr("Item view")}>
+              <button aria-pressed={showImages} onClick={() => setShowImages(true)} title={tr("Show item images")} aria-label={tr("Show item images")}><ImageIcon size={18} /></button>
+              <button aria-pressed={!showImages} onClick={() => setShowImages(false)} title={tr("Text only (faster on slow terminals)")} aria-label={tr("Text only")}><List size={18} /></button>
             </div>
           </div>
           <div className="menu-body">
-            <div className="cats" role="tablist" aria-label="Categories">
-              <button className="cat all" aria-pressed={activeCat === "all"} onClick={() => setActiveCat("all")}>All</button>
+            <div className="cats" role="tablist" aria-label={tr("Categories")}>
+              <button className="cat all" aria-pressed={activeCat === "all"} onClick={() => setActiveCat("all")}>{tr("All")}</button>
               {CATEGORIES.map((c) => (
-                <button key={c.id} className="cat" style={{ background: c.tint }} aria-pressed={activeCat === c.id} onClick={() => setActiveCat(c.id)}>{c.name}</button>
+                <button key={c.id} className="cat" style={{ background: c.tint }} aria-pressed={activeCat === c.id} onClick={() => setActiveCat(c.id)}>{catName(c)}</button>
               ))}
             </div>
             <div className="items">
-              {visibleItems.length === 0 && <div className="no-items">{ITEMS.length ? "No items match. Clear the search or filters to see the full menu." : "No items on the menu for this outlet yet."}</div>}
+              {visibleItems.length === 0 && <div className="no-items">{ITEMS.length ? tr("No items match. Clear the search or filters to see the full menu.") : tr("No items on the menu for this outlet yet.")}</div>}
               {visibleItems.map((it) => {
                 const tint = catById[it.cat]?.tint;
-                const priceTxt = it.openPrice ? "Open price" : `${it.variations.length ? "From " : ""}${money(shownPrice(it))}`;
+                const priceTxt = it.openPrice ? tr("Open price") : it.variations.length ? tr("From {price}", { price: money(shownPrice(it)) }) : money(shownPrice(it));
                 return (
                   <button key={it.id} className={`item ${showImages ? "has-img" : ""}`} style={{ background: tint, opacity: it.unavailable ? 0.5 : 1 }} onClick={() => onItemClick(it)}
-                    onContextMenu={(e) => { e.preventDefault(); if (!orderType || it.variations.length) return onItemClick(it); setModal({ name: "item", item: it }); }} title={`${it.code} · right-click or long-press for options`}>
-                    <span className="marks">{it.veg && <span className="vegmark" title="Vegetarian" />}{it.combo && <span className="mini c">COMBO</span>}{it.promo && <span className="mini p">PROMO</span>}</span>
+                    onContextMenu={(e) => { e.preventDefault(); if (!orderType || it.variations.length) return onItemClick(it); setModal({ name: "item", item: it }); }} title={`${it.code} · ${tr("right-click or long-press for options")}`}>
+                    <span className="marks">{it.veg && <span className="vegmark" title={tr("Vegetarian")} />}{it.combo && <span className="mini c">{tr("COMBO")}</span>}{it.promo && <span className="mini p">{tr("PROMO")}</span>}</span>
                     {qtyById[it.id] > 0 && <span className="inq num">{qtyById[it.id]}</span>}
                     {showImages ? (
                       <>
                         <ItemThumb item={it} tint={tint} />
                         <span className="body">
-                          <span className="nm">{it.name}</span>
-                          <span className="pr num"><span>Price: </span>{priceTxt}</span>
+                          <span className="nm">{itemName(it)}</span>
+                          <span className="pr num"><span>{tr("Price:")} </span>{priceTxt}</span>
                         </span>
                       </>
                     ) : (
                       <>
-                        <span className="nm">{it.name}</span>
-                        <span className="pr num"><span>Price: </span>{priceTxt}</span>
+                        <span className="nm">{itemName(it)}</span>
+                        <span className="pr num"><span>{tr("Price:")} </span>{priceTxt}</span>
                       </>
                     )}
                   </button>
@@ -1255,28 +1368,31 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
       </main>
 
       {/* Mobile switcher */}
-      <nav className="mob-tabs" aria-label="Switch panel">
-        <button aria-pressed={tab === "menu"} onClick={() => setTab("menu")}><LayoutGrid size={18} />Menu</button>
-        <button aria-pressed={tab === "order"} onClick={() => setTab("order")}><ShoppingCart size={18} />Order ({itemCount}) · <span className="num">{totals ? money(totals.total_payable) : "—"}</span></button>
+      <nav className="mob-tabs" aria-label={tr("Switch panel")}>
+        <button aria-pressed={tab === "menu"} onClick={() => setTab("menu")}><LayoutGrid size={18} />{tr("Menu")}</button>
+        <button aria-pressed={tab === "order"} onClick={() => setTab("order")}><ShoppingCart size={18} />{tr("Order ({n})", { n: itemCount })} · <span className="num">{totals ? money(totals.total_payable) : "—"}</span></button>
       </nav>
 
       {/* Side menu sheet */}
       {sheet && (
         <>
           <div className="scrim" onClick={() => setSheet(false)} />
-          <div className="menu-sheet" role="dialog" aria-label="Main menu">
-            <div className="modal-h"><h3>Main menu</h3><button className="icon-btn" onClick={() => setSheet(false)} aria-label="Close"><X size={20} /></button></div>
+          <div className="menu-sheet" role="dialog" aria-label={tr("Main menu")}>
+            <div className="modal-h"><h3>{tr("Main menu")}</h3><button className="icon-btn" onClick={() => setSheet(false)} aria-label={tr("Close")}><X size={20} /></button></div>
             <div style={{ overflowY: "auto", padding: "6px 0" }}>
-              <button className="item-link" onClick={() => { setSheet(false); setDrawer(true); }}><ListOrdered size={18} />Running orders ({running.length})</button>
+              <button className="item-link" onClick={() => { setSheet(false); setDrawer(true); }}><ListOrdered size={18} />{tr("Running orders ({n})", { n: running.length })}</button>
               {HEADER.map((h) => (
                 <button key={h.id} className="item-link" onClick={() => { setSheet(false); h.on(); }} style={h.danger ? { color: "var(--danger)" } : {}}>
                   <h.icon size={18} />{h.label}{h.badge > 0 ? ` (${h.badge})` : ""}
                 </button>
               ))}
-              <button className="item-link" onClick={() => { setSheet(false); toggleFull(); }}>{isFull ? <Minimize size={18} /> : <Maximize size={18} />}{isFull ? "Exit full screen" : "Full screen"}</button>
-              <div className="setting-row"><span style={{ display: "flex", gap: 8, alignItems: "center" }}><Settings2 size={16} />Print KOT after placing an order</span>
+              <button className="item-link" onClick={() => { setSheet(false); toggleFull(); }}>{isFull ? <Minimize size={18} /> : <Maximize size={18} />}{isFull ? tr("Exit full screen") : tr("Full screen")}</button>
+              <div className="lang-pick" role="group" aria-label={tr("Language")}>
+                {LANGS.map((x) => <button key={x.code} aria-pressed={lang === x.code} onClick={() => changeLang(x.code)} lang={x.code}>{x.name}</button>)}
+              </div>
+              <div className="setting-row"><span style={{ display: "flex", gap: 8, alignItems: "center" }}><Settings2 size={16} />{tr("Print KOT after placing an order")}</span>
                 <input type="checkbox" checked={!!prefs.printKot} onChange={(e) => savePrefs({ ...prefs, printKot: e.target.checked })} /></div>
-              <div className="setting-row"><span style={{ display: "flex", gap: 8, alignItems: "center" }}><Settings2 size={16} />Print invoice after payment</span>
+              <div className="setting-row"><span style={{ display: "flex", gap: 8, alignItems: "center" }}><Settings2 size={16} />{tr("Print invoice after payment")}</span>
                 <input type="checkbox" checked={!!prefs.printInvoice} onChange={(e) => savePrefs({ ...prefs, printInvoice: e.target.checked })} /></div>
             </div>
           </div>
@@ -1285,12 +1401,12 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
 
       {/* ---------------- MODALS ---------------- */}
       {modal?.name === "orderType" && (
-        <Modal title="Please select an order type" onClose={() => setModal(null)} footer={<button className="btn" onClick={() => setModal(null)}>Cancel</button>}>
+        <Modal title={tr("Please select an order type")} onClose={() => setModal(null)} footer={<button className="btn" onClick={() => setModal(null)}>{tr("Cancel")}</button>}>
           <div className="types">
             {Object.entries(ORDER_TYPES).map(([k, v]) => (
               <button key={k} className="type-card" onClick={() => onOrderTypePicked(k)}>
                 <span className="ill" style={{ background: TYPE_ILL[k][0], color: TYPE_ILL[k][1] }}><v.icon size={40} strokeWidth={1.8} /></span>
-                {v.label}
+                {tr(v.label)}
               </button>
             ))}
           </div>
@@ -1305,14 +1421,14 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
       )}
 
       {modal?.name === "variations" && (
-        <Modal title={modal.item.name} onClose={() => setModal(null)} size="sm">
+        <Modal title={itemName(modal.item)} onClose={() => setModal(null)} size="sm">
           <div className="var-list">
             {modal.item.variations.map((v) => (
               <button key={v.id} className="var-row" disabled={v.unavailable} style={v.unavailable ? { opacity: 0.5 } : {}} onClick={() => {
                 if (needsOptions(v)) return setModal({ name: "item", item: v });
                 addToCart(v); setModal(null);
               }}>
-                <span>{v.shortName}</span><span className="num">{v.openPrice ? "Open price" : money(priceFor(v, orderType, partner))}</span>
+                <span>{getLang() === "ar" && v.name2 ? v.name2 : v.shortName}</span><span className="num">{v.openPrice ? tr("Open price") : money(priceFor(v, orderType, partner))}</span>
               </button>
             ))}
           </div>
@@ -1340,31 +1456,31 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
       })()}
 
       {modal?.name === "summary" && (
-        <Modal title="Order summary" onClose={() => setModal(null)} size="sm" footer={<button className="btn primary" onClick={() => setModal(null)}>Done</button>}>
-          <div className="sum-row"><span>Total items</span><span className="num">{itemCount}</span></div>
-          <div className="sum-row"><span>Subtotal</span><span className="num">{totals ? money(totals.sub_total) : "—"}</span></div>
-          <div className="sum-row"><span>Discount</span>
+        <Modal title={tr("Order summary")} onClose={() => setModal(null)} size="sm" footer={<button className="btn primary" onClick={() => setModal(null)}>{tr("Done")}</button>}>
+          <div className="sum-row"><span>{tr("Total items")}</span><span className="num">{itemCount}</span></div>
+          <div className="sum-row"><span>{tr("Subtotal")}</span><span className="num">{totals ? money(totals.sub_total) : "—"}</span></div>
+          <div className="sum-row"><span>{tr("Discount")}</span>
             <div className="inline-edit">
-              <input className="input num" type="number" min="0" value={discount.value} onChange={(e) => setDiscount((d) => ({ ...d, value: e.target.value }))} aria-label="Discount value" />
-              <select className="select" value={discount.mode} onChange={(e) => setDiscount((d) => ({ ...d, mode: e.target.value }))} aria-label="Discount type"><option value="fixed">{OUTLET.currency}</option><option value="percent">%</option></select>
-              <span className="num" style={{ minWidth: 60, textAlign: "right" }}>-{totals ? money(totals.total_discount_amount) : "—"}</span>
+              <input className="input num" type="number" min="0" value={discount.value} onChange={(e) => setDiscount((d) => ({ ...d, value: e.target.value }))} aria-label={tr("Discount value")} />
+              <select className="select" value={discount.mode} onChange={(e) => setDiscount((d) => ({ ...d, mode: e.target.value }))} aria-label={tr("Discount type")}><option value="fixed">{OUTLET.currency}</option><option value="percent">%</option></select>
+              <span className="num" style={{ minWidth: 60, textAlign: "end" }}>-{totals ? money(totals.total_discount_amount) : "—"}</span>
             </div>
           </div>
-          <div className="sum-row"><span>{orderType === "delivery" ? "Delivery charge" : "Service charge"}</span>
+          <div className="sum-row"><span>{orderType === "delivery" ? tr("Delivery charge") : tr("Service charge")}</span>
             <div className="inline-edit">
-              <input className="input num" type="number" min="0" value={charge.value} onChange={(e) => { setChargeTouched(true); setCharge((c) => ({ ...c, value: e.target.value })); }} aria-label="Charge value" />
-              <select className="select" value={charge.mode} onChange={(e) => { setChargeTouched(true); setCharge((c) => ({ ...c, mode: e.target.value })); }} aria-label="Charge type"><option value="fixed">{OUTLET.currency}</option><option value="percent">%</option></select>
-              <span className="num" style={{ minWidth: 60, textAlign: "right" }}>{totals ? money(totals.charge_amount) : "—"}</span>
+              <input className="input num" type="number" min="0" value={charge.value} onChange={(e) => { setChargeTouched(true); setCharge((c) => ({ ...c, value: e.target.value })); }} aria-label={tr("Charge value")} />
+              <select className="select" value={charge.mode} onChange={(e) => { setChargeTouched(true); setCharge((c) => ({ ...c, mode: e.target.value })); }} aria-label={tr("Charge type")}><option value="fixed">{OUTLET.currency}</option><option value="percent">%</option></select>
+              <span className="num" style={{ minWidth: 60, textAlign: "end" }}>{totals ? money(totals.charge_amount) : "—"}</span>
             </div>
           </div>
-          <div className="sum-row"><span>Tips</span>
-            <div className="inline-edit"><input className="input num" type="number" min="0" value={tips} onChange={(e) => setTips(e.target.value)} aria-label="Tips" /><span className="num" style={{ minWidth: 60, textAlign: "right" }}>{totals ? money(totals.tips_amount) : "—"}</span></div>
+          <div className="sum-row"><span>{tr("Tips")}</span>
+            <div className="inline-edit"><input className="input num" type="number" min="0" value={tips} onChange={(e) => setTips(e.target.value)} aria-label={tr("Tips")} /><span className="num" style={{ minWidth: 60, textAlign: "end" }}>{totals ? money(totals.tips_amount) : "—"}</span></div>
           </div>
           {(totals?.taxes || []).map((t, i) => (
             <div key={i} className="sum-row"><span>{t.tax_field_type}</span><span className="num">{money(t.tax_field_amount)}</span></div>
           ))}
-          {Number(totals?.rounding_amount) !== 0 && totals && <div className="sum-row"><span>Rounding</span><span className="num">{money(totals.rounding_amount)}</span></div>}
-          <div className="sum-row total"><span>Total payable</span><span className="num">{OUTLET.currency} {totals ? money(totals.total_payable) : "—"}</span></div>
+          {Number(totals?.rounding_amount) !== 0 && totals && <div className="sum-row"><span>{tr("Rounding")}</span><span className="num">{money(totals.rounding_amount)}</span></div>}
+          <div className="sum-row total"><span>{tr("Total payable")}</span><span className="num">{OUTLET.currency} {totals ? money(totals.total_payable) : "—"}</span></div>
           {calcErr && <div className="calc-msg" style={{ margin: "8px 0 0" }}>{calcErr}</div>}
         </Modal>
       )}
@@ -1377,20 +1493,20 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
         const inv = modal.invoice;
         const z = inv.zatca || {};
         return (
-          <Modal title="Payment received" onClose={() => setModal(null)} size="sm"
+          <Modal title={tr("Payment received")} onClose={() => setModal(null)} size="sm"
             footer={<><button className="btn" onClick={async () => {
               if (!modal.printed && inv.print_job?.print_bytes) { if (await printJob(inv.print_job)) setModal((md) => ({ ...md, printed: true })); }
               else reprintInvoice(inv.id);
-            }}><Printer size={16} />{modal.printed ? "Print copy" : "Print invoice"}</button><button className="btn primary" onClick={() => setModal(null)}>New order</button></>}>
+            }}><Printer size={16} />{modal.printed ? tr("Print copy") : tr("Print invoice")}</button><button className="btn primary" onClick={() => setModal(null)}>{tr("New order")}</button></>}>
             <div className="done-box">
-              <div className="muted">Invoice</div>
+              <div className="muted">{tr("Invoice")}</div>
               <div className="big num">{inv.sale_no}</div>
-              <div className="sum-row"><span>Total</span><span className="num">{OUTLET.currency} {money(inv.totals?.total_payable)}</span></div>
-              {Number(inv.totals?.change_amount) > 0 && <div className="sum-row"><span>Change to return</span><span className="num" style={{ fontSize: 18 }}>{money(inv.totals.change_amount)}</span></div>}
-              {Number(inv.totals?.due_amount) > 0 && <div className="sum-row"><span>Due</span><span className="num">{money(inv.totals.due_amount)}</span></div>}
+              <div className="sum-row"><span>{tr("Total")}</span><span className="num">{OUTLET.currency} {money(inv.totals?.total_payable)}</span></div>
+              {Number(inv.totals?.change_amount) > 0 && <div className="sum-row"><span>{tr("Change to return")}</span><span className="num" style={{ fontSize: 18 }}>{money(inv.totals.change_amount)}</span></div>}
+              {Number(inv.totals?.due_amount) > 0 && <div className="sum-row"><span>{tr("Due")}</span><span className="num">{money(inv.totals.due_amount)}</span></div>}
               {z.phase === "2" && (z.synced || z.reported
-                ? <div className="zatca ok"><ShieldCheck size={18} />Reported to ZATCA</div>
-                : <div className="zatca warn"><ShieldAlert size={18} />Not reported to ZATCA yet. {z.message || "Use “Sync ZATCA” in the web POS."}</div>)}
+                ? <div className="zatca ok"><ShieldCheck size={18} />{tr("Reported to ZATCA")}</div>
+                : <div className="zatca warn"><ShieldAlert size={18} />{tr("Not reported to ZATCA yet.")} {z.message || tr("Use “Sync ZATCA” in the web POS.")}</div>)}
               {!inv.print_job?.print_bytes && inv.print_job?.error && <div className="zatca warn"><Printer size={18} />{inv.print_job.error}</div>}
             </div>
           </Modal>
@@ -1398,16 +1514,13 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
       })()}
 
       {modal?.name === "customer" && (
-        <CustomerModal edit={modal.edit} onClose={() => setModal(null)} onSave={async (c) => {
-          try {
-            const body = { name: c.name, phone: c.phone || "", email: c.email || "", address: c.address || "" };
-            const saved = modal.edit ? await put(`/v1/customers/${c.id}`, body) : await post("/v1/customers", body);
-            const row = { id: saved.id, name: saved.name, phone: saved.phone || "", email: saved.email || "", address: saved.address || "" };
-            setCustomers((cs) => (modal.edit ? cs.map((x) => (x.id === row.id ? row : x)) : [...cs, row]));
-            setCustomerId(row.id);
-            notify(modal.edit ? "Customer updated" : `${row.name} added and selected`);
-            setModal(null);
-          } catch (e) { onError(e); }
+        <CustomerModal edit={modal.edit} onClose={() => setModal(null)} onError={onError} onSave={async (id, body) => {
+          const saved = id ? await put(`/v1/customers/${id}`, body) : await post("/v1/customers", body);   // field errors go back to the form
+          const row = { id: saved.id, name: saved.name, phone: saved.phone || "", email: saved.email || "", address: saved.address || "" };
+          setCustomers((cs) => (cs.some((x) => x.id === row.id) ? cs.map((x) => (x.id === row.id ? row : x)) : [...cs, row]));
+          setCustomerId(row.id);
+          notify(id ? tr("Customer updated") : tr("{name} added and selected", { name: row.name }));
+          setModal(null);
         }} />
       )}
 
@@ -1415,15 +1528,15 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
         onKot={() => reprintKot(modal.id)} onBill={() => printBill(modal.id)} onInvoice={() => openOrderPayment(modal.id)} />}
 
       {modal?.name === "drafts" && (
-        <Modal title="Drafts" onClose={() => setModal(null)}>
-          {drafts.length === 0 ? <p className="muted">No drafts yet. Use Draft in the running orders panel to park an order and come back to it.</p> : (
+        <Modal title={tr("Drafts")} onClose={() => setModal(null)}>
+          {drafts.length === 0 ? <p className="muted">{tr("No drafts yet. Use Draft in the running orders panel to park an order and come back to it.")}</p> : (
             <div className="list">
               {drafts.map((d) => (
                 <div key={d.id} className="list-row">
-                  <span><b>{d.customer?.name || "Customer"}</b><div className="muted" style={{ fontSize: 12 }}>{d.total_items} items · {d.name} · {d.saved_at}</div></span>
+                  <span><b>{d.customer?.name || tr("Customer")}</b><div className="muted" style={{ fontSize: 12 }}>{tn(d.total_items, "{n} item", "{n} items")} · {d.name} · {d.saved_at}</div></span>
                   <span style={{ display: "flex", gap: 6, alignItems: "center" }}><b className="num">{money(d.total_payable)}</b>
-                    <button className="btn primary" onClick={() => restoreDraft(d)}>Restore</button>
-                    <button className="btn" onClick={async () => { try { await del(`/v1/drafts/${d.id}`); refreshDrafts(); } catch (e) { onError(e); } }} aria-label="Delete draft"><Trash2 size={16} /></button>
+                    <button className="btn primary" onClick={() => restoreDraft(d)}>{tr("Restore")}</button>
+                    <button className="btn" onClick={async () => { try { await del(`/v1/drafts/${d.id}`); refreshDrafts(); } catch (e) { onError(e); } }} aria-label={tr("Delete draft")}><Trash2 size={16} /></button>
                   </span>
                 </div>
               ))}
@@ -1433,14 +1546,14 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
       )}
 
       {modal?.name === "recent" && (
-        <Modal title="Recent sales" onClose={() => setModal(null)} size="lg">
-          {sales.length === 0 ? <p className="muted">No sales yet today.</p> : (
+        <Modal title={tr("Recent sales")} onClose={() => setModal(null)} size="lg">
+          {sales.length === 0 ? <p className="muted">{tr("No sales yet today.")}</p> : (
             <div className="list">
               {sales.map((s) => (
                 <div key={s.id} className="list-row">
-                  <span><b className="num">{s.sale_no}</b> · {s.order_type_name} · {s.customer?.name}<div className="muted" style={{ fontSize: 12 }}>{s.cashier ? `${s.cashier} · ` : ""}{s.date_time}</div></span>
+                  <span><b className="num">{s.sale_no}</b> · {typeName(s)} · {s.customer?.name}<div className="muted" style={{ fontSize: 12 }}>{s.cashier ? `${s.cashier} · ` : ""}{s.date_time}</div></span>
                   <span style={{ display: "flex", gap: 8, alignItems: "center" }}><b className="num">{OUTLET.currency} {money(s.total_payable ?? s.totals?.total_payable)}</b>
-                    <button className="btn" onClick={() => reprintInvoice(s.id)}><Printer size={16} />Print</button></span>
+                    <button className="btn" onClick={() => reprintInvoice(s.id)}><Printer size={16} />{tr("Print")}</button></span>
                 </div>
               ))}
             </div>
@@ -1449,14 +1562,14 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
       )}
 
       {modal?.name === "notifications" && (
-        <Modal title="Kitchen notifications" onClose={() => setModal(null)}
-          footer={notifications.length > 0 && <button className="btn" onClick={async () => { try { await del("/v1/notifications", { ids: notifications.map((n) => n.id) }); setNotifications([]); } catch (e) { onError(e); } }}>Clear all</button>}>
-          {notifications.length === 0 ? <p className="muted">You're all caught up.</p> : (
+        <Modal title={tr("Kitchen notifications")} onClose={() => setModal(null)}
+          footer={notifications.length > 0 && <button className="btn" onClick={async () => { try { await del("/v1/notifications", { ids: notifications.map((n) => n.id) }); setNotifications([]); } catch (e) { onError(e); } }}>{tr("Clear all")}</button>}>
+          {notifications.length === 0 ? <p className="muted">{tr("You're all caught up.")}</p> : (
             <div className="list">
               {notifications.map((n) => (
                 <div key={n.id} className="list-row">
                   <span style={{ display: "flex", gap: 8, alignItems: "center" }}>{/ready/i.test(n.message) ? <Check size={18} color="var(--ok)" /> : <ChefHat size={18} color="var(--amber)" />}<span>{n.message}</span></span>
-                  <button className="btn" onClick={async () => { try { await del(`/v1/notifications/${n.id}`); setNotifications((x) => x.filter((y) => y.id !== n.id)); } catch (e) { onError(e); } }}>Dismiss</button>
+                  <button className="btn" onClick={async () => { try { await del(`/v1/notifications/${n.id}`); setNotifications((x) => x.filter((y) => y.id !== n.id)); } catch (e) { onError(e); } }}>{tr("Dismiss")}</button>
                 </div>
               ))}
             </div>
@@ -1464,16 +1577,27 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
         </Modal>
       )}
 
-      {modal?.name === "openRegister" && (
-        <OpenRegisterModal onClose={() => setModal(null)} onError={onError}
-          onOpened={() => { setRegisterOpen(true); setModal(null); notify("Register opened"); }} />
-      )}
+
 
       {modal?.name === "register" && (
         <RegisterModal onClose={() => setModal(null)} onError={onError} print={print}
-          onClosed={() => { setRegisterOpen(false); setModal(null); notify("Register closed"); }} />
+          onClosed={() => { setModal(null); onLogout(); }} />
       )}
 
+      {modal?.name === "cancelOrder" && (
+        <CancelOrderModal order={modal.order} onClose={() => setModal(null)} onConfirm={(reason) => doCancel(modal.order, reason)} />
+      )}
+
+      {modal?.name === "clearRunning" && (
+        <ConfirmModal title={tr("Clear running orders")} danger confirmLabel={tr("Clear running orders")} onClose={() => setModal(null)} onConfirm={doClearRunning}>
+          <p style={{ marginTop: 0 }}>{user?.role === "Admin"
+            ? tr("This removes all open orders of this outlet, from the web POS and the kitchen screen too.")
+            : tr("This removes your open orders (orders you placed or are the waiter of) from the web POS and the kitchen screen too. Other staff's orders stay.")}</p>
+          <p className="muted" style={{ marginBottom: 0 }}>{tr("Paid invoices are not affected. This cannot be undone.")}</p>
+        </ConfirmModal>
+      )}
+
+      <ConfirmHost />
       {toast && <div className="toast" role="status"><Check size={16} />{toast}</div>}
     </div>
   );
@@ -1498,9 +1622,9 @@ function groupBookings(list) {
 }
 const fmtMinutes = (m) => {
   if (m == null) return "-";
-  if (m < 60) return `${m} min`;
-  if (m < 1440) return `${Math.floor(m / 60)} h ${m % 60} min`;
-  return `${Math.floor(m / 1440)} d ${Math.floor((m % 1440) / 60)} h`;
+  if (m < 60) return tr("{m} min", { m });
+  if (m < 1440) return tr("{h} h {m} min", { h: Math.floor(m / 60), m: m % 60 });
+  return tr("{d} d {h} h", { d: Math.floor(m / 1440), h: Math.floor((m % 1440) / 60) });
 };
 
 // Tables come live from the server (seats taken by running orders on any till / the web POS).
@@ -1542,26 +1666,26 @@ function TableModal({ editingId, current, onClose, onPick, onError }) {
     && (!q.trim() || `${t.name} ${t.area}`.toLowerCase().includes(q.trim().toLowerCase())));
 
   return (<>
-    <Modal title="Select tables" size="lg" onClose={onClose}
+    <Modal title={tr("Select tables")} size="lg" onClose={onClose}
       footer={<>
         <div className="tchips">
           <Users size={18} />
-          {picked.length === 0 ? <span className="muted">No table added yet</span> : picked.map((p) => (
-            <span key={p.id} className="tchip">{p.name} · {p.persons}<button onClick={() => remove(p.id)} aria-label={`Remove ${p.name}`}><X size={14} /></button></span>
+          {picked.length === 0 ? <span className="muted">{tr("No table added yet")}</span> : picked.map((p) => (
+            <span key={p.id} className="tchip">{p.name} · {p.persons}<button onClick={() => remove(p.id)} aria-label={tr("Remove {name}", { name: p.name })}><X size={14} /></button></span>
           ))}
         </div>
-        <button className="btn" onClick={onClose}>Cancel</button>
-        <button className="btn primary" disabled={!picked.length} onClick={() => onPick(picked)}>Done{picked.length > 1 ? ` (${picked.length} tables)` : ""}</button>
+        <button className="btn" onClick={onClose}>{tr("Cancel")}</button>
+        <button className="btn primary" disabled={!picked.length} onClick={() => onPick(picked)}>{picked.length > 1 ? tr("Done ({n} tables)", { n: picked.length }) : tr("Done")}</button>
       </>}>
-      {!data ? <p className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} className="spin" />Loading tables…</p> : <>
-        <input className="input tsearch" placeholder="Search by floor/area or table name" value={q} onChange={(e) => setQ(e.target.value)} />
+      {!data ? <p className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} className="spin" />{tr("Loading tables…")}</p> : <>
+        <input className="input tsearch" placeholder={tr("Search by floor/area or table name")} value={q} onChange={(e) => setQ(e.target.value)} />
         {data.areas.length > 1 && (
           <div className="seg" role="tablist">
-            <button aria-pressed={area === "all"} onClick={() => setArea("all")}>All</button>
+            <button aria-pressed={area === "all"} onClick={() => setArea("all")}>{tr("All")}</button>
             {data.areas.map((a) => <button key={a.id} aria-pressed={area === a.id} onClick={() => setArea(a.id)}>{a.name}</button>)}
           </div>
         )}
-        {data.tables.length === 0 && <p className="muted">No tables are set up for this outlet.</p>}
+        {data.tables.length === 0 && <p className="muted">{tr("No tables are set up for this outlet.")}</p>}
         <div className="tgrid">
           {shown.map((t) => {
             const sel = mine(t.id);
@@ -1573,19 +1697,19 @@ function TableModal({ editingId, current, onClose, onPick, onError }) {
                   <span><b>{t.name}</b>{t.area && <small>{t.area}</small>}</span>
                   <span className="th-r">
                     {t.others.length > 0 && (
-                      <button className="bk-btn" onClick={() => setInfo(t)} title="Orders on this table" aria-label={`Orders on ${t.name}`}>
+                      <button className="bk-btn" onClick={() => setInfo(t)} title={tr("Orders on this table")} aria-label={`Orders on ${t.name}`}>
                         <ListOrdered size={13} />{groupBookings(t.others).length}
                       </button>
                     )}
-                    <span className="seats" title="Free seats / seats"><Users size={12} style={{ verticalAlign: -2 }} /> {t.free ?? "–"}/{t.capacity || "–"}</span>
+                    <span className="seats" title={tr("Free seats / seats")}><Users size={12} style={{ verticalAlign: -2 }} /> {t.free ?? "–"}/{t.capacity || "–"}</span>
                   </span>
                 </div>
-                {sel && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--brand)" }}>Added · {sel.persons} guests</div>}
+                {sel && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--brand)" }}>{tr("Added · {n} guests", { n: sel.persons })}</div>}
                 <div className="add">
                   <Qty value={guests[t.id] || 1} onChange={(v) => setGuests((g) => ({ ...g, [t.id]: Math.min(Math.max(1, v), Math.max(1, max)) }))} />
                   {sel
-                    ? <><button className="btn primary" onClick={() => add(t)} disabled={max < 1}>Update</button><button className="btn" onClick={() => remove(t.id)} aria-label="Remove table"><Trash2 size={15} /></button></>
-                    : <button className="btn primary" onClick={() => add(t)} disabled={max < 1} title={max < 1 ? "No free seats" : ""}>Add</button>}
+                    ? <><button className="btn primary" onClick={() => add(t)} disabled={max < 1}>{tr("Update")}</button><button className="btn" onClick={() => remove(t.id)} aria-label={tr("Remove table")}><Trash2 size={15} /></button></>
+                    : <button className="btn primary" onClick={() => add(t)} disabled={max < 1} title={max < 1 ? "No free seats" : ""}>{tr("Add")}</button>}
                 </div>
               </div>
             );
@@ -1594,12 +1718,12 @@ function TableModal({ editingId, current, onClose, onPick, onError }) {
       </>}
     </Modal>
     {info && (
-      <Modal title={`${info.name} · orders`} size="sm" onClose={() => setInfo(null)} footer={<button className="btn primary" onClick={() => setInfo(null)}>Close</button>}>
+      <Modal title={`${info.name} · orders`} size="sm" onClose={() => setInfo(null)} footer={<button className="btn primary" onClick={() => setInfo(null)}>{tr("Close")}</button>}>
         <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>{info.free ?? "–"} of {info.capacity || "–"} seats free</div>
         <table className="bk">
-          <thead><tr><th>Order No</th><th>Time</th><th style={{ textAlign: "right" }}>Persons</th></tr></thead>
+          <thead><tr><th>{tr("Order No")}</th><th>{tr("Time")}</th><th style={{ textAlign: "end" }}>{tr("Persons")}</th></tr></thead>
           <tbody>{groupBookings(info.others).map((o) => (
-            <tr key={o.key}><td>{o.no}</td><td>{fmtMinutes(o.minutes)}</td><td style={{ textAlign: "right" }}>{o.persons}</td></tr>
+            <tr key={o.key}><td>{o.no}</td><td>{fmtMinutes(o.minutes)}</td><td style={{ textAlign: "end" }}>{o.persons}</td></tr>
           ))}</tbody>
         </table>
       </Modal>
@@ -1613,13 +1737,13 @@ function PartnerModal({ current, currentRef, onClose, onSubmit }) {
   const [ref, setRef] = useState(currentRef || "");
   const [broken, setBroken] = useState({});
   return (
-    <Modal title="Delivery Partners" onClose={onClose}
+    <Modal title={tr("Delivery Partners")} onClose={onClose}
       footer={<>
-        <button className="btn" style={{ marginRight: "auto" }} onClick={() => onSubmit("", "")}>Click Here to Uncheck</button>
-        <button className="btn" onClick={onClose}>Cancel</button>
-        <button className="btn primary" onClick={() => onSubmit(sel, ref.trim())}>Submit</button>
+        <button className="btn" style={{ marginInlineEnd: "auto" }} onClick={() => onSubmit("", "")}>{tr("Click Here to Uncheck")}</button>
+        <button className="btn" onClick={onClose}>{tr("Cancel")}</button>
+        <button className="btn primary" onClick={() => onSubmit(sel, ref.trim())}>{tr("Submit")}</button>
       </>}>
-      {PARTNERS.length === 0 ? <p className="muted">No delivery partners are set up. Add them in the web app first.</p> : (
+      {PARTNERS.length === 0 ? <p className="muted">{tr("No delivery partners are set up. Add them in the web app first.")}</p> : (
         <div className="partners">
           {PARTNERS.map((p) => {
             const on = sel === String(p.id);
@@ -1633,8 +1757,8 @@ function PartnerModal({ current, currentRef, onClose, onSubmit }) {
           })}
         </div>
       )}
-      <label className="field">Reference Number
-        <input className="input" placeholder="Partner's order / reference number" value={ref} onChange={(e) => setRef(e.target.value)} disabled={!sel}
+      <label className="field">{tr("Reference Number")}
+        <input className="input" placeholder={tr("Partner's order / reference number")} value={ref} onChange={(e) => setRef(e.target.value)} disabled={!sel}
           onKeyDown={(e) => e.key === "Enter" && onSubmit(sel, ref.trim())} />
       </label>
     </Modal>
@@ -1648,11 +1772,15 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
   const [disc, setDisc] = useState(line?.disc || 0);
   const [note, setNote] = useState(line?.note || "");
   const [open, setOpen] = useState(line?.openPrice ? String(line.price) : "");
+  // price for this customer: any item can be changed at the till
+  const [edit, setEdit] = useState(line?.priceEdited ? String(line.price) : "");
   const [combo, setCombo] = useState(() => line?.comboSelections?.length ? line.comboSelections
     : (item.comboGroups || []).map((g) => g.options[0]?.food_menu_id).filter(Boolean));
 
   const kitchenLine = !!line?.lineId;   // already sent to the kitchen: price stays as ordered
-  const price = item.openPrice ? Number(open) || 0 : kitchenLine ? line.price : basePrice + comboExtra(item, combo, orderType);
+  const listPrice = kitchenLine && !line.priceEdited ? line.price : basePrice + comboExtra(item, combo, orderType);
+  const edited = !item.openPrice && edit !== "" && Number(edit) >= 0 && Number(edit) !== listPrice;
+  const price = item.openPrice ? Number(open) || 0 : edited ? Number(edit) : listPrice;
   const unit = price + mods.reduce((s, m) => s + m.price, 0);
   const toggle = (m) => setMods((ms) => (ms.some((x) => x.id === m.id) ? ms.filter((x) => x.id !== m.id) : [...ms, m]));
   const pickCombo = (g, id) => setCombo((c) => [...c.filter((x) => !g.options.some((o) => o.food_menu_id === x)), id]);
@@ -1661,24 +1789,31 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
   return (
     <Modal title={item.name} onClose={onClose}
       footer={<>
-        {onRemove && <button className="btn" style={{ marginRight: "auto", color: "var(--danger)" }} onClick={onRemove}><Trash2 size={16} />Remove</button>}
-        <button className="btn" onClick={onClose}>Cancel</button>
+        {onRemove && <button className="btn" style={{ marginInlineEnd: "auto", color: "var(--danger)" }} onClick={onRemove}><Trash2 size={16} />{tr("Remove")}</button>}
+        <button className="btn" onClick={onClose}>{tr("Cancel")}</button>
         <button className="btn primary" disabled={needPrice} onClick={() => onSave({
-          qty: Math.max(1, qty), mods, disc: Number(disc) || 0, note: note.trim(), price,
+          qty: Math.max(1, qty), mods, disc: Number(disc) || 0, note: note.trim(), price, priceEdited: edited,
           discRaw: Number(disc) > 0 ? null : (line?.discRaw ?? null),
           comboSelections: item.comboGroups ? combo : [],
         })}>
-          {line ? "Update item" : "Add to order"} · {money(unit * Math.max(1, qty) * (1 - (Number(disc) || 0) / 100))}
+          {line ? tr("Update item") : tr("Add to order")} · {money(unit * Math.max(1, qty) * (1 - (Number(disc) || 0) / 100))}
         </button>
       </>}>
       <ItemThumb item={item} size="lg" tint={(CATEGORIES.find((c) => c.id === item.cat) || {}).tint} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <span className="muted">{item.code}{item.openPrice ? "" : ` · ${money(price)} each`}</span>
+        <span className="muted">{item.code}{item.openPrice ? "" : ` · ${money(price)} each`}{edited && <b style={{ color: "var(--amber, #9A6400)" }}> {tr("· price changed")}</b>}</span>
         <Qty big value={qty} onChange={(v) => setQty(Math.max(1, v))} />
       </div>
-      {item.openPrice && (
-        <label className="field">Price ({OUTLET.currency})
-          <input className="input num" type="number" min="0" step="any" autoFocus value={open} onChange={(e) => setOpen(e.target.value)} placeholder="Enter the price" />
+      {item.openPrice ? (
+        <label className="field">{tr("Price ({currency})", { currency: OUTLET.currency })}
+          <input className="input num" type="number" min="0" step="any" autoFocus value={open} onChange={(e) => setOpen(e.target.value)} placeholder={tr("Enter the price")} />
+        </label>
+      ) : (
+        <label className="field">
+          <span style={{ display: "flex", justifyContent: "space-between" }}>{tr("Price for this customer ({currency})", { currency: OUTLET.currency })}
+            {edited && <button type="button" className="link-reset" onClick={() => setEdit("")}>{tr("Use list price {price}", { price: money(listPrice) })}</button>}</span>
+          <input className="input num" type="number" min="0" step="any" value={edit === "" ? money(listPrice) : edit}
+            onFocus={(e) => e.target.select()} onChange={(e) => setEdit(e.target.value)} />
         </label>
       )}
       {(item.comboGroups || []).map((g) => (
@@ -1690,7 +1825,7 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
               const extra = Number(o.prices?.[k]) || 0;
               return (
                 <button key={o.food_menu_id} className="mod" disabled={kitchenLine} aria-pressed={combo.includes(o.food_menu_id)} onClick={() => pickCombo(g, o.food_menu_id)}>
-                  <span>{o.qty > 1 ? `${o.qty} × ` : ""}{o.name}</span><span className="num">{extra ? `+${money(extra)}` : "Included"}</span>
+                  <span>{o.qty > 1 ? `${o.qty} × ` : ""}{o.name}</span><span className="num">{extra ? `+${money(extra)}` : tr("Included")}</span>
                 </button>
               );
             })}
@@ -1698,21 +1833,21 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
         </div>
       ))}
       {item.modifiers.length > 0 && <>
-        <div className="field" style={{ marginBottom: 6 }}>Modifiers</div>
+        <div className="field" style={{ marginBottom: 6 }}>{tr("Modifiers")}</div>
         <div className="mod-grid">
           {item.modifiers.map((m) => (
             <button key={m.id} className="mod" aria-pressed={mods.some((x) => x.id === m.id)} onClick={() => toggle(m)}>
-              <span>{m.name}</span><span className="num">{m.price ? `+${money(m.price)}` : "Free"}</span>
+              <span>{m.name}</span><span className="num">{m.price ? `+${money(m.price)}` : tr("Free")}</span>
             </button>
           ))}
         </div>
       </>}
       {ITEM_DISCOUNT_ENABLED && (
-        <label className="field">Item discount (%)<input className="input num" type="number" min="0" max="100" value={disc} onChange={(e) => setDisc(e.target.value)} /></label>
+        <label className="field">{tr("Item discount (%)")}<input className="input num" type="number" min="0" max="100" value={disc} onChange={(e) => setDisc(e.target.value)} /></label>
       )}
-      <label className="field">Unit price with modifiers<input className="input num" readOnly value={money(unit)} /></label>
-      <label className="field"><span style={{ display: "flex", gap: 6, alignItems: "center" }}><StickyNote size={14} />Kitchen note</span>
-        <textarea className="input" placeholder="e.g. less spicy, sauce on the side" value={note} onChange={(e) => setNote(e.target.value)} />
+      <label className="field">{tr("Unit price with modifiers")}<input className="input num" readOnly value={money(unit)} /></label>
+      <label className="field"><span style={{ display: "flex", gap: 6, alignItems: "center" }}><StickyNote size={14} />{tr("Kitchen note")}</span>
+        <textarea className="input" placeholder={tr("e.g. less spicy, sauce on the side")} value={note} onChange={(e) => setNote(e.target.value)} />
       </label>
     </Modal>
   );
@@ -1728,16 +1863,16 @@ function PaymentModal({ due: dueIn, label, busy, onClose, onPay }) {
   const short = m?.cash && given !== "" && Number(given) < due;
   const quick = [due, ...[10, 20, 50, 100, 200, 500].filter((v) => v > due).slice(0, 4)];
   return (
-    <Modal title="Payment" onClose={onClose}
+    <Modal title={tr("Payment")} onClose={onClose}
       footer={<>
-        <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+        <button className="btn" onClick={onClose} disabled={busy}>{tr("Cancel")}</button>
         <button className="btn ok" disabled={short || !m || busy} onClick={() => onPay({ methodId: method, given: m.cash ? given : "" })}>
-          {busy ? <Loader2 size={16} className="spin" /> : <Check size={16} />}{busy ? "Saving…" : "Complete sale"}
+          {busy ? <Loader2 size={16} className="spin" /> : <Check size={16} />}{busy ? tr("Saving…") : tr("Complete sale")}
         </button>
       </>}>
-      <div className="pay-due"><span>Amount due</span><span className="num">{OUTLET.currency} {money(due)}</span></div>
+      <div className="pay-due"><span>{tr("Amount due")}</span><span className="num">{OUTLET.currency} {money(due)}</span></div>
       <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>{label}</div>
-      {!PAYMENT_METHODS.length && <p className="muted">No payment methods are set up for this outlet.</p>}
+      {!PAYMENT_METHODS.length && <p className="muted">{tr("No payment methods are set up for this outlet.")}</p>}
       <div className="pay-methods">
         {PAYMENT_METHODS.map((x) => (
           <button key={x.id} className="pm" aria-pressed={method === x.id} onClick={() => setMethod(x.id)}><x.icon size={24} />{x.name}</button>
@@ -1745,32 +1880,125 @@ function PaymentModal({ due: dueIn, label, busy, onClose, onPay }) {
       </div>
       {m?.cash && <>
         <div className="quick-amts">
-          {quick.map((v, i) => <button key={i} className="num" onClick={() => setGiven(String(v))}>{i === 0 ? "Exact" : money(v)}</button>)}
+          {quick.map((v, i) => <button key={i} className="num" onClick={() => setGiven(String(v))}>{i === 0 ? tr("Exact") : money(v)}</button>)}
         </div>
         <div className="grid2">
-          <label className="field">Cash received<input className="input num" type="number" min="0" value={given} onChange={(e) => setGiven(e.target.value)} placeholder={money(due)} /></label>
-          <label className="field">Change to return<input className="input num" readOnly value={money(change)} style={{ fontWeight: 800 }} /></label>
+          <label className="field">{tr("Cash received")}<input className="input num" type="number" min="0" value={given} onChange={(e) => setGiven(e.target.value)} placeholder={money(due)} /></label>
+          <label className="field">{tr("Change to return")}<input className="input num" readOnly value={money(change)} style={{ fontWeight: 800 }} /></label>
         </div>
-        {short && <div style={{ color: "var(--danger)", fontSize: 13, fontWeight: 600 }}>Cash received is less than the amount due.</div>}
+        {short && <div style={{ color: "var(--danger)", fontSize: 13, fontWeight: 600 }}>{tr("Cash received is less than the amount due.")}</div>}
       </>}
     </Modal>
   );
 }
 
-function CustomerModal({ edit, onClose, onSave }) {
-  const [f, setF] = useState(edit || { name: "", phone: "", email: "", address: "" });
+// Same fields as the web POS customer form (Sale::add_customer_by_ajax), incl. the ZATCA national address.
+const NATIONAL = [
+  ["short_address_en", "Short Address - English"], ["short_address_ar", "Short Address - Arabic", true],
+  ["building_no", "Building No"], ["secondary_no", "Secondary No"],
+  ["street_en", "Street - English"], ["street_ar", "Street - Arabic", true],
+  ["district_en", "District - English"], ["district_ar", "District - Arabic", true],
+  ["city_en", "City - English"], ["city_ar", "City - Arabic", true],
+  ["postal_code", "Postal Code"], ["country_en", "Country - English"], ["country_ar", "Country - Arabic", true],
+];
+// what printSaleByAjax needs to send a standard (B2B) ZATCA invoice with the buyer's details
+const B2B_NEEDS = [["name", "Name"], ["trn_number", "TRN"], ["postal_code", "Postal code"], ["street", "Street"], ["building_no", "Building no"],
+  ["secondary_no", "Secondary no"], ["district", "District"], ["city", "City"]];
+
+function CustomerModal({ edit, onClose, onSave, onError }) {
+  const empty = { name: "", phone: "", email: "", trn_number: "", cr_number: "", default_discount: "", gst_number: "", same_or_diff_state: "", address: "", national_address: {} };
+  const [f, setF] = useState(edit ? { ...empty, ...edit } : empty);
+  const [addresses, setAddresses] = useState([]);
+  const [addrId, setAddrId] = useState("new");          // "new" or a saved address id
+  const [loading, setLoading] = useState(!!edit);
   const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
-  const save = async () => { setSaving(true); try { await onSave({ ...f, name: f.name.trim() }); } finally { setSaving(false); } };
+  const [errs, setErrs] = useState({});
+
+  useEffect(() => {
+    if (!edit) return;
+    get(`/v1/customers/${edit.id}`).then((c) => {
+      setF({ ...empty, ...c, same_or_diff_state: c.same_or_diff_state ? String(c.same_or_diff_state) : "", national_address: c.national_address || {} });
+      const list = c.addresses || [];
+      setAddresses(list);
+      const act = list.find((a) => a.is_active);
+      if (act) { setAddrId(String(act.id)); setF((x) => ({ ...x, address: act.address })); }
+    }).catch((e) => { onError(e); onClose(); }).finally(() => setLoading(false));
+  }, []); // eslint-disable-line
+
+  const set = (k) => (e) => { const v = e.target.value; setF((x) => ({ ...x, [k]: v })); setErrs((x) => ({ ...x, [k]: undefined })); };
+  const setNa = (k) => (e) => { const v = e.target.value; setF((x) => ({ ...x, national_address: { ...x.national_address, [k]: v } })); };
+  const pickAddr = (id) => {
+    setAddrId(id);
+    setF((x) => ({ ...x, address: id === "new" ? "" : (addresses.find((a) => String(a.id) === id)?.address || "") }));
+  };
+  const na = f.national_address || {};
+  const val = { name: f.name, trn_number: f.trn_number, postal_code: na.postal_code, street: na.street_en || na.street_ar, building_no: na.building_no,
+    secondary_no: na.secondary_no, district: na.district_en || na.district_ar, city: na.city_en || na.city_ar };
+  const missing = B2B_NEEDS.filter(([k]) => !String(val[k] || "").trim()).map(([, l]) => l);
+
+  const save = async () => {
+    setSaving(true); setErrs({});
+    const body = {
+      name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), trn_number: f.trn_number.trim(), cr_number: f.cr_number.trim(),
+      default_discount: String(f.default_discount || "").trim(), address: f.address.trim(), national_address: na,
+    };
+    if (addrId !== "new") body.address_id = Number(addrId);
+    if (SETTINGS.tax_is_gst) { body.gst_number = f.gst_number.trim(); if (f.same_or_diff_state) body.same_or_diff_state = Number(f.same_or_diff_state); }
+    try { await onSave(edit?.id, body); }
+    catch (e) { if (e?.errors) setErrs(e.errors); else onError(e); }
+    finally { setSaving(false); }
+  };
+  const err = (k) => errs[k] && <small className="ferr">{errs[k]}</small>;
+  const fld = (k, label, props = {}) => (
+    <label className="field">{label}<input className="input" value={f[k] || ""} onChange={set(k)} {...props} />{err(k)}</label>
+  );
+
   return (
-    <Modal title={edit ? "Edit customer" : "Add customer"} onClose={onClose}
-      footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!f.name.trim() || saving} onClick={save}>{edit ? "Save customer" : "Add customer"}</button></>}>
-      <label className="field">Name<input className="input" value={f.name} onChange={set("name")} autoFocus /></label>
-      <div className="grid2">
-        <label className="field">Phone<input className="input" value={f.phone || ""} onChange={set("phone")} /></label>
-        <label className="field">Email<input className="input" type="email" value={f.email || ""} onChange={set("email")} /></label>
-      </div>
-      <label className="field">Delivery address<textarea className="input" value={f.address || ""} onChange={set("address")} /></label>
+    <Modal title={edit ? tr("Edit customer") : tr("Add customer")} onClose={onClose} size="lg"
+      footer={<><button className="btn" onClick={onClose}>{tr("Cancel")}</button>
+        <button className="btn primary" disabled={!f.name.trim() || saving || loading} onClick={save}>{saving && <Loader2 size={16} className="spin" />}{edit ? tr("Save customer") : tr("Add customer")}</button></>}>
+      {loading ? <p className="muted">{tr("Loading…")}</p> : <>
+        <div className="grid3">
+          {fld("name", <>{tr("Name")} <span style={{ color: "var(--danger)" }}>*</span></>, { autoFocus: true })}
+          {fld("phone", tr("Phone"), { inputMode: "tel" })}
+          {fld("email", tr("Email"), { type: "email" })}
+          {fld("trn_number", tr("TRN"))}
+          {fld("cr_number", tr("CR Number"))}
+          {fld("default_discount", tr("Default Discount (Flat/Percentage)"), { placeholder: tr("10 or 10%") })}
+          {SETTINGS.tax_is_gst && fld("gst_number", tr("GST Number"))}
+          {SETTINGS.tax_is_gst && (
+            <label className="field">{tr("Same or different state")}
+              <select className="select" value={f.same_or_diff_state} onChange={set("same_or_diff_state")}>
+                <option value="">{tr("Select")}</option><option value="1">{tr("Same state")}</option><option value="2">{tr("Different state")}</option>
+              </select>{err("same_or_diff_state")}</label>
+          )}
+        </div>
+
+        <div className="field" style={{ marginBottom: 6 }}>{tr("Delivery Address")}</div>
+        <div className="addr-pick">
+          {addresses.map((a) => (
+            <label key={a.id}><input type="radio" name="addr" checked={addrId === String(a.id)} onChange={() => pickAddr(String(a.id))} />{a.address}</label>
+          ))}
+          <label><input type="radio" name="addr" checked={addrId === "new"} onChange={() => pickAddr("new")} />{tr("New")}</label>
+        </div>
+        <textarea className="input" placeholder={tr("Delivery Address")} value={f.address} onChange={set("address")} style={{ marginBottom: 14 }} />
+        {err("address")}
+
+        <div className="na-head">{tr("National Address")}
+          {f.trn_number.trim() ? (missing.length
+            ? <span className="na-warn">{tr("For a ZATCA standard (B2B) invoice also fill: {list}", { list: missing.map((x) => tr(x)).join(", ") })}</span>
+            : <span className="na-ok"><Check size={14} />{tr("Complete for a ZATCA standard (B2B) invoice")}</span>)
+            : <span className="muted" style={{ fontWeight: 500 }}>{tr("Needed with a TRN for ZATCA standard (B2B) invoices")}</span>}
+        </div>
+        <div className="grid2">
+          {NATIONAL.map(([k, label, ar]) => (
+            <label key={k} className="field">{tr(label)}
+              <input className="input" dir={ar ? "rtl" : undefined} value={na[k] || ""} onChange={setNa(k)} placeholder={tr(label)} />
+              {errs[`national_address.${k}`] && <small className="ferr">{errs[`national_address.${k}`]}</small>}
+            </label>
+          ))}
+        </div>
+      </>}
     </Modal>
   );
 }
@@ -1781,15 +2009,15 @@ function OrderDetails({ id, canPay, onClose, onError, onKot, onBill, onInvoice }
   useEffect(() => { get(`/v1/orders/${id}`).then(setO).catch((e) => { onError(e); onClose(); }); }, [id]); // eslint-disable-line
   const t = o?.totals || {};
   return (
-    <Modal title={o ? `Order ${o.order_number || o.sale_no}` : "Order details"} onClose={onClose} size="lg"
+    <Modal title={o ? tr("Order {n}", { n: o.order_number || o.sale_no }) : tr("Order details")} onClose={onClose} size="lg"
       footer={o && <>
-        <button className="btn" onClick={onKot}><Printer size={16} />Re-print KOT</button>
-        <button className="btn" onClick={onBill}><FileText size={16} />Print bill</button>
-        {canPay && <button className="btn primary" onClick={() => { onClose(); onInvoice(); }}><Receipt size={16} />Invoice</button>}
+        <button className="btn" onClick={onKot}><Printer size={16} />{tr("Re-print KOT")}</button>
+        <button className="btn" onClick={onBill}><FileText size={16} />{tr("Print bill")}</button>
+        {canPay && <button className="btn primary" onClick={() => { onClose(); onInvoice(); }}><Receipt size={16} />{tr("Invoice")}</button>}
       </>}>
-      {!o ? <p className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} className="spin" />Loading…</p> : <>
+      {!o ? <p className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} className="spin" />{tr("Loading…")}</p> : <>
         <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
-          {o.order_type_name}{o.tables_text ? ` · Table ${o.tables_text}` : ""} · {o.customer?.name}{o.waiter?.name ? ` · Waiter ${o.waiter.name}` : ""} · {o.date_time}
+          {typeName(o)}{o.tables_text ? ` · ${tr("Table {name}", { name: o.tables_text })}` : ""} · {o.customer?.name}{o.waiter?.name ? ` · ${tr("Waiter {name}", { name: o.waiter.name })}` : ""} · {o.date_time}
         </div>
         <div className="list">
           {(o.items || []).map((l, i) => (
@@ -1798,19 +2026,19 @@ function OrderDetails({ id, canPay, onClose, onError, onKot, onBill, onInvoice }
                 {((l.modifiers || []).length > 0 || l.note) && <div className="muted" style={{ fontSize: 12 }}>{[...(l.modifiers || []).map((m) => m.name), l.note ? `“${l.note}”` : ""].filter(Boolean).join(", ")}</div>}
               </span>
               <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                {l.cooking_status && <span className={`tag ${/done|ready/i.test(l.cooking_status) ? "ready" : /start|cook/i.test(l.cooking_status) ? "cooking" : "new"}`}>{l.cooking_status}</span>}
+                {l.cooking_status && <span className={`tag ${/done|ready/i.test(l.cooking_status) ? "ready" : /start|cook/i.test(l.cooking_status) ? "cooking" : "new"}`}>{tr(l.cooking_status)}</span>}
                 <b className="num">{money(lineAmount(l))}</b>
               </span>
             </div>
           ))}
         </div>
         <div style={{ marginTop: 10 }}>
-          <div className="sum-row"><span>Subtotal</span><span className="num">{money(t.sub_total)}</span></div>
-          {Number(t.total_discount_amount) > 0 && <div className="sum-row"><span>Discount</span><span className="num">-{money(t.total_discount_amount)}</span></div>}
-          {Number(t.charge_amount) > 0 && <div className="sum-row"><span>{t.charge_type === "delivery" ? "Delivery charge" : "Service charge"}</span><span className="num">{money(t.charge_amount)}</span></div>}
-          {Number(t.tips_amount) > 0 && <div className="sum-row"><span>Tips</span><span className="num">{money(t.tips_amount)}</span></div>}
+          <div className="sum-row"><span>{tr("Subtotal")}</span><span className="num">{money(t.sub_total)}</span></div>
+          {Number(t.total_discount_amount) > 0 && <div className="sum-row"><span>{tr("Discount")}</span><span className="num">-{money(t.total_discount_amount)}</span></div>}
+          {Number(t.charge_amount) > 0 && <div className="sum-row"><span>{t.charge_type === "delivery" ? tr("Delivery charge") : tr("Service charge")}</span><span className="num">{money(t.charge_amount)}</span></div>}
+          {Number(t.tips_amount) > 0 && <div className="sum-row"><span>{tr("Tips")}</span><span className="num">{money(t.tips_amount)}</span></div>}
           {(t.taxes || []).map((x, i) => <div key={i} className="sum-row"><span>{x.tax_field_type}</span><span className="num">{money(x.tax_field_amount)}</span></div>)}
-          <div className="sum-row total"><span>Total payable</span><span className="num">{OUTLET.currency} {money(t.total_payable)}</span></div>
+          <div className="sum-row total"><span>{tr("Total payable")}</span><span className="num">{OUTLET.currency} {money(t.total_payable)}</span></div>
         </div>
       </>}
     </Modal>
@@ -1818,34 +2046,132 @@ function OrderDetails({ id, canPay, onClose, onError, onKot, onBill, onInvoice }
 }
 
 // Same rule as the web POS: a cashier opens the register with the opening amount per payment method.
-function OpenRegisterModal({ onClose, onOpened, onError }) {
-  const [methods, setMethods] = useState(null);
+function OpenRegisterModal({ onClose, onOpened, onError, gate = false, onLogout, user }) {
+  const [methods, setMethods] = useState(null);       // all methods (loyalty is sent as 0, not shown)
   const [amounts, setAmounts] = useState({});
   const [saving, setSaving] = useState(false);
-  useEffect(() => {
+  const [err, setErr] = useState("");
+  const load = () => {
+    setErr("");
     get("/v1/register").then((r) => {
       if (r.open) return onOpened();
-      setMethods((r.payment_methods || []).filter((m) => !m.is_loyalty));
-    }).catch((e) => { onError(e); onClose(); });
-  }, []); // eslint-disable-line
+      setMethods(r.payment_methods || []);
+    }).catch((e) => { if (gate) setErr(firstError(e)); else { onError(e); onClose(); } });
+  };
+  useEffect(load, []); // eslint-disable-line
   const open = async () => {
     setSaving(true);
     try {
-      await post("/v1/register/open", { opening_details: methods.map((m) => ({ payment_method_id: m.id, amount: Number(amounts[m.id]) || 0 })) });
+      await post("/v1/register/open", { opening_details: methods.map((m) => ({ payment_method_id: m.id, amount: isLoyalty(m) ? 0 : Number(amounts[m.id]) || 0 })) });
       onOpened();
-    } catch (e) { onError(e); }
+    } catch (e) { if (gate) setErr(firstError(e)); else onError(e); }
     finally { setSaving(false); }
   };
   return (
-    <Modal title="Open register" onClose={onClose} size="sm"
-      footer={<><button className="btn" onClick={onClose}>Later</button><button className="btn primary" disabled={!methods || saving} onClick={open}>{saving ? <Loader2 size={16} className="spin" /> : <Wallet size={16} />}Open register</button></>}>
-      <p className="muted" style={{ marginTop: 0 }}>Your register is closed. Enter the opening balance to start taking payments.</p>
-      {!methods ? <p className="muted">Loading…</p> : methods.map((m) => (
+    <Modal title={tr("Open register")} onClose={onClose || (() => {})} size="sm" closable={!gate}
+      footer={<>
+        {gate ? <button className="btn" onClick={onLogout}><LogOut size={16} />{tr("Log out")}</button> : <button className="btn" onClick={onClose}>{tr("Later")}</button>}
+        <button className="btn primary" disabled={!methods || saving} onClick={open}>{saving ? <Loader2 size={16} className="spin" /> : <Wallet size={16} />}Open register</button>
+      </>}>
+      <p className="muted" style={{ marginTop: 0 }}>{gate ? tr("Hi {name}, your register is closed. Enter the opening balance to start.", { name: user?.name || "" }) : tr("Your register is closed. Enter the opening balance to start taking payments.")}</p>
+      {err && <div className="calc-msg" style={{ margin: "0 0 10px" }}>{err} {gate && <button className="link-reset" onClick={load}>{tr("Try again")}</button>}</div>}
+      {!methods ? (!err && <p className="muted">{tr("Loading…")}</p>) : methods.filter((m) => !isLoyalty(m)).map((m, k) => (
         <label key={m.id} className="field">{m.name}
-          <input className="input num" type="number" min="0" step="any" value={amounts[m.id] ?? ""} placeholder={money(0)} onChange={(e) => setAmounts((a) => ({ ...a, [m.id]: e.target.value }))} />
+          <input className="input num" type="number" min="0" step="any" autoFocus={k === 0} value={amounts[m.id] ?? ""} placeholder={money(0)}
+            onChange={(e) => setAmounts((a) => ({ ...a, [m.id]: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && open()} />
         </label>
       ))}
     </Modal>
+  );
+}
+
+function CancelOrderModal({ order, onClose, onConfirm }) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const quick = [tr("Customer cancelled"), tr("Wrong order"), tr("Customer left"), tr("Duplicate order")];
+  const go = async () => { if (!reason.trim()) return; setBusy(true); try { await onConfirm(reason.trim()); } finally { setBusy(false); } };
+  return (
+    <Modal title={tr("Cancel order {n}", { n: order.order_number || order.sale_no })} onClose={onClose} size="sm"
+      footer={<><button className="btn" onClick={onClose}>{tr("Keep order")}</button>
+        <button className="btn" style={{ background: "var(--danger)", borderColor: "var(--danger)", color: "#fff" }} disabled={!reason.trim() || busy} onClick={go}>
+          {busy ? <Loader2 size={16} className="spin" /> : <Ban size={16} />}Cancel order</button></>}>
+      <p className="muted" style={{ marginTop: 0 }}>{typeName(order)}{order.tables_text ? ` · ${tr("Table {name}", { name: order.tables_text })}` : ""} · {order.customer?.name} · {money(order.total_payable)}. {tr("The kitchen is told the order is cancelled.")}</p>
+      <div className="quick-amts" style={{ marginBottom: 8 }}>
+        {quick.map((q) => <button key={q} onClick={() => setReason(q)} aria-pressed={reason === q}>{q}</button>)}
+      </div>
+      <label className="field">{tr("Reason")}
+        <textarea className="input" autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder={tr("Why is this order cancelled?")} />
+      </label>
+    </Modal>
+  );
+}
+
+function ConfirmModal({ title, children, confirmLabel = "OK", danger = false, onClose, onConfirm }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Modal title={title} onClose={onClose} size="sm"
+      footer={<><button className="btn" onClick={onClose}>{tr("Cancel")}</button>
+        <button className="btn primary" style={danger ? { background: "var(--danger)", borderColor: "var(--danger)" } : null} disabled={busy}
+          onClick={async () => { setBusy(true); try { await onConfirm(); } finally { setBusy(false); } }}>
+          {busy && <Loader2 size={16} className="spin" />}{confirmLabel}</button></>}>
+      {children}
+    </Modal>
+  );
+}
+
+/** Select with a search box. options: [{ value, label, sub }]; onSearch(q) may load more (server search). */
+function SearchSelect({ value, options, onChange, placeholder, label, onSearch, footer }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [hi, setHi] = useState(0);
+  const box = useRef(null);
+  const input = useRef(null);
+  const current = options.find((o) => String(o.value) === String(value));
+  const t = q.trim().toLowerCase();
+  const list = (t ? options.filter((o) => `${o.label} ${o.sub || ""}`.toLowerCase().includes(t)) : options).slice(0, 100);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", off);
+    setTimeout(() => input.current?.focus(), 0);
+    return () => document.removeEventListener("mousedown", off);
+  }, [open]);
+  useEffect(() => {                                  // ask the server too, after a short pause
+    if (!onSearch || t.length < 2) return;
+    const h = setTimeout(() => onSearch(t), 300);
+    return () => clearTimeout(h);
+  }, [t]); // eslint-disable-line
+  useEffect(() => setHi(0), [t]);
+  const pick = (o) => { onChange(o.value); setOpen(false); setQ(""); };
+  const onKey = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(h + 1, list.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); if (list[hi]) pick(list[hi]); }
+    else if (e.key === "Escape") { e.stopPropagation(); setOpen(false); }
+  };
+  return (
+    <div className="ss" ref={box}>
+      <button type="button" className="select ss-btn" aria-label={label} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span className={current ? "" : "muted"}>{current ? current.label : placeholder}</span><ChevronDown size={16} />
+      </button>
+      {open && (
+        <div className="ss-pop" role="listbox" aria-label={label}>
+          <div className="ss-search"><Search size={15} />
+            <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder={tr("Search…")} aria-label={tr("Search {what}", { what: label })} />
+          </div>
+          <div className="ss-list">
+            {list.length === 0 && <div className="ss-empty">{tr("No match")}{onSearch && t.length >= 2 ? ` (${tr("searching…")})` : ""}</div>}
+            {list.map((o, k) => (
+              <button type="button" key={o.value} role="option" aria-selected={String(o.value) === String(value)}
+                className={`ss-opt ${k === hi ? "hi" : ""}`} onMouseEnter={() => setHi(k)} onClick={() => pick(o)}>
+                <span>{o.label}</span>{o.sub && <small>{o.sub}</small>}
+              </button>
+            ))}
+          </div>
+          {footer && <button type="button" className="ss-foot" onClick={() => { setOpen(false); footer.onClick(); }}><UserPlus size={15} />{footer.label}</button>}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1868,30 +2194,30 @@ function RegisterModal({ onClose, onClosed, onError, print }) {
   const [closing, setClosing] = useState(false);
   useEffect(() => { get("/v1/register/summary").then(setS).catch((e) => { onError(e); onClose(); }); }, []); // eslint-disable-line
   const close = async () => {
-    if (!window.confirm("Close the register? You will need to open it again to take payments.")) return;
+    if (!(await ask(tr("Close the register? The report is printed and you are logged out."), { title: tr("Close register"), confirmLabel: tr("Close register & log out"), danger: true }))) return;
     setClosing(true);
-    try { const r = await post("/v1/register/close"); print(registerHtml(r), "Register report"); onClosed(); }
+    try { const r = await post("/v1/register/close"); print(registerHtml(r), tr("Register report")); onClosed(); }
     catch (e) { onError(e); }
     finally { setClosing(false); }
   };
   const t = s?.totals || {};
   return (
-    <Modal title="Register details" onClose={onClose}
-      footer={s && <><button className="btn" onClick={() => print(registerHtml(s), "Register details")}><Printer size={16} />Print</button>
-        <button className="btn" style={{ color: "var(--danger)" }} disabled={closing} onClick={close}>{closing ? <Loader2 size={16} className="spin" /> : <Ban size={16} />}Close register</button></>}>
-      {!s ? <p className="muted">Loading…</p> : <>
+    <Modal title={tr("Register details")} onClose={onClose}
+      footer={s && <><button className="btn" onClick={() => print(registerHtml(s), tr("Register details"))}><Printer size={16} />{tr("Print")}</button>
+        <button className="btn" style={{ color: "var(--danger)" }} disabled={closing} onClick={close}>{closing ? <Loader2 size={16} className="spin" /> : <Ban size={16} />}Close register &amp; log out</button></>}>
+      {!s ? <p className="muted">{tr("Loading…")}</p> : <>
         <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>{s.user} · opened {s.opened_at}</div>
         <div className="list">
-          {(s.methods || []).map((m) => (
-            <div key={m.payment_method_id} className="list-row"><span><b>{m.name}</b><div className="muted" style={{ fontSize: 12 }}>Opening {money(m.opening)} · Sales {money(m.sale)}</div></span><b className="num">{money(m.closing)}</b></div>
+          {(s.methods || []).filter((m) => !isLoyalty(m)).map((m) => (
+            <div key={m.payment_method_id} className="list-row"><span><b>{m.name}</b><div className="muted" style={{ fontSize: 12 }}>{tr("Opening")} {money(m.opening)} · {tr("Sales")} {money(m.sale)}</div></span><b className="num">{money(m.closing)}</b></div>
           ))}
         </div>
         <div style={{ marginTop: 10 }}>
-          <div className="sum-row"><span>Opening</span><span className="num">{money(t.opening)}</span></div>
-          <div className="sum-row"><span>Sales</span><span className="num">{money(t.sale)}</span></div>
-          {Number(t.expense) > 0 && <div className="sum-row"><span>Expense</span><span className="num">-{money(t.expense)}</span></div>}
-          {Number(t.refund) > 0 && <div className="sum-row"><span>Refund (not deducted)</span><span className="num">{money(t.refund)}</span></div>}
-          <div className="sum-row total"><span>Closing balance</span><span className="num">{OUTLET.currency} {money(t.closing)}</span></div>
+          <div className="sum-row"><span>{tr("Opening")}</span><span className="num">{money(t.opening)}</span></div>
+          <div className="sum-row"><span>{tr("Sales")}</span><span className="num">{money(t.sale)}</span></div>
+          {Number(t.expense) > 0 && <div className="sum-row"><span>{tr("Expense")}</span><span className="num">-{money(t.expense)}</span></div>}
+          {Number(t.refund) > 0 && <div className="sum-row"><span>{tr("Refund (not deducted)")}</span><span className="num">{money(t.refund)}</span></div>}
+          <div className="sum-row total"><span>{tr("Closing balance")}</span><span className="num">{OUTLET.currency} {money(t.closing)}</span></div>
         </div>
       </>}
     </Modal>
