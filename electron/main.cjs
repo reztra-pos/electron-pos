@@ -6,6 +6,7 @@ const path = require("path");
 const device = require("./device.cjs");
 const api = require("./api.cjs");
 const { printRaw } = require("./printer.cjs");
+const trial = require("./trial.cjs");
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;       // set by `npm run dev`
 const KIOSK = process.env.POS_KIOSK === "1";            // POS_KIOSK=1 -> fullscreen kiosk mode
@@ -15,13 +16,20 @@ const DEVICE_CHECK_MS = 60_000;                         // how often to confirm 
 let win;
 let deviceTimer = null;
 
+function windowTitle() {
+  const t = trial.status();
+  if (!t.enabled) return "Reztra POS";
+  return t.expired ? "Reztra POS — TESTING PERIOD ENDED" : `Reztra POS — TESTING MODE (until ${new Date(t.until).toLocaleString()})`;
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1366, height: 768, minWidth: 800, minHeight: 600, show: false,
-    frame: !FRAMELESS, kiosk: KIOSK, autoHideMenuBar: true, backgroundColor: "#EDF0F4", title: "Reztra POS",
+    frame: !FRAMELESS, kiosk: KIOSK, autoHideMenuBar: true, backgroundColor: "#EDF0F4", title: windowTitle(),
     webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   win.once("ready-to-show", () => { win.maximize(); win.show(); });
+  win.on("page-title-updated", (e) => { e.preventDefault(); win.setTitle(windowTitle()); });   // keep the testing label in the title
   if (DEV_URL) { win.loadURL(DEV_URL); win.webContents.openDevTools({ mode: "detach" }); }
   else win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: "deny" }; });
@@ -29,8 +37,13 @@ function createWindow() {
 
 const send = (channel, payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); };
 // handlers answer { ok, data } or { ok:false, error, code, status, errors } so the screen gets the server's reason
+// testing build: these stop working when the testing period is over
+const TRIAL_GUARDED = new Set(["device:activate", "auth:pin", "auth:password", "api:call", "api:newKey", "print:raw", "print:html"]);
 const handle = (channel, fn) => ipcMain.handle(channel, async (_e, ...args) => {
-  try { return { ok: true, data: await fn(...args) }; }
+  try {
+    if (TRIAL_GUARDED.has(channel) && trial.isExpired()) { trialEnded(); trial.guard(); }
+    return { ok: true, data: await fn(...args) };
+  }
   catch (e) { return { ok: false, error: e.message || String(e), code: e.code || "", status: e.status || 0, errors: e.errors || null, network: !!e.network }; }
 });
 
@@ -49,6 +62,18 @@ function startDeviceCheck() {
   deviceTimer = setInterval(() => { if (device.load()) api.checkDevice().catch(() => {}); }, DEVICE_CHECK_MS);
 }
 function stopDeviceCheck() { if (deviceTimer) clearInterval(deviceTimer); deviceTimer = null; }
+
+/* ---------- testing build ---------- */
+let trialNotified = false;
+function trialEnded() {
+  if (trialNotified) return;
+  trialNotified = true;
+  api.logout().catch(() => {});
+  if (win && !win.isDestroyed()) win.setTitle(windowTitle());
+  send("trial:expired", trial.status());
+}
+handle("app:trial", () => trial.status());
+if (trial.enabled) setInterval(() => { if (trial.isExpired()) trialEnded(); }, 60_000);
 
 /* ---------- window + app ---------- */
 ipcMain.on("win:minimize", () => win?.minimize());

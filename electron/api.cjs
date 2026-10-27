@@ -7,6 +7,7 @@ const { net } = require("electron");
 const crypto = require("crypto");
 const device = require("./device.cjs");
 const { netReason } = require("./net-error.cjs");
+const trial = require("./trial.cjs");
 
 const TIMEOUT_MS = 20000;
 let userToken = null;
@@ -40,6 +41,7 @@ async function request(method, path, body, { useUser = true, deviceHeader = fals
   } catch (e) {
     throw new ApiError(`No connection to the server. ${netReason(e)}`, { network: true, code: "NETWORK" });
   }
+  trial.seeServerTime(res.headers.get("date"));     // server clock: turning the PC clock back doesn't extend a testing build
   const text = await res.text().catch(() => "");
   let json = null;
   try { json = JSON.parse(text); } catch { /* not JSON */ }

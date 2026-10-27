@@ -452,6 +452,7 @@ const CSS_ONLINE = `
 @media (max-width:1279px){.pos[dir=rtl] .running:not(.open){transform:translateX(102%)}}   /* drawer slides in from the right */
 .pos[dir=rtl] .num,.pos[dir=rtl] input[type=number],.pos[dir=rtl] input[type=date]{direction:ltr;unicode-bidi:isolate}
 .pos[dir=rtl] .menu-sheet{box-shadow:10px 0 40px rgba(10,14,30,.2)}
+.trial-badge{flex:none;background:#B45309;color:#fff;font-weight:800;font-size:11.5px;letter-spacing:.02em;border-radius:999px;padding:5px 10px;white-space:nowrap}
 .lang-pick{display:flex;gap:6px;padding:10px 18px;border-top:1px solid var(--line)}
 .lang-pick button{flex:1;height:36px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:700;font-size:13px}
 .lang-pick button[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:#fff}
@@ -582,7 +583,7 @@ const KITCHEN_TAG = { new: ["new", "New"], cooking: ["cooking", "Cooking"], read
 const RUNNING_POLL_MS = 10000;     // running orders + kitchen status (live sync with web POS / kitchen screen)
 const NOTIF_POLL_MS = 15000;
 
-export default function PosMainScreen({ user, onLogout = () => {} }) {
+export default function PosMainScreen({ user, onLogout = () => {}, trial = null }) {
   // language: English / Arabic (right-to-left) / Hindi - remembered on this PC
   const [lang, setLangState] = useState(getLang());
   const [langOpen, setLangOpen] = useState(false);
@@ -1164,7 +1165,12 @@ export default function PosMainScreen({ user, onLogout = () => {} }) {
           </>}
         </div>
         <button className="icon-btn" onClick={() => setSheet(true)} title={tr("Main menu")} aria-label={tr("Main menu")}><Menu size={22} /></button>
-        <div className="who" style={{ marginInlineStart: "auto" }}><b>{user?.name || ""}</b><span>{user?.device || ""}</span></div>
+        {trial?.enabled && (
+          <span className="trial-badge" style={{ marginInlineStart: "auto" }} title={tr("Testing version: works until {date}", { date: new Date(trial.until).toLocaleString() })}>
+            {tr("TESTING MODE")} · {trial.days_left > 1 ? tr("{n} days left", { n: trial.days_left }) : trial.hours_left >= 1 ? tr("{n} hours left", { n: trial.hours_left }) : tr("less than an hour left")}
+          </span>
+        )}
+        <div className="who" style={{ marginInlineStart: trial?.enabled ? 0 : "auto" }}><b>{user?.name || ""}</b><span>{user?.device || ""}</span></div>
         <div className="brand" style={{ marginInlineStart: 0 }}>{OUTLET.name}</div>
         <div className="chips" role="group" aria-label={tr("Item filters")}>
           {[["veg", tr("Vegetarian")], ["bev", tr("Beverage")], ["combo", tr("Combo")], ["promo", tr("Promo")]].map(([k, l]) => (

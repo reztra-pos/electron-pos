@@ -55,6 +55,7 @@ async function activate(apiKey) {
   } catch (e) {
     throw new Error(`Can't reach the server at ${k.url}. ${netReason(e)}`);
   }
+  try { require("./trial.cjs").seeServerTime(res.headers.get("date")); } catch { /* not a testing build */ }
   const text = await res.text().catch(() => "");
   let raw = {};
   try { raw = JSON.parse(text); } catch { /* not JSON: an HTML error page from the server */ }

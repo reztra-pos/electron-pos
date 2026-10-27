@@ -2,7 +2,7 @@
   "name": "reztra-pos",
   "private": true,
   "version": "1.1.0",
-  "description": "Reztra POS \u2014 Electron + React desktop app for Windows",
+  "description": "Reztra POS — Electron + React desktop app for Windows",
   "author": "Reztra",
   "type": "module",
   "main": "electron/main.cjs",
@@ -11,9 +11,12 @@
     "dev:web": "vite",
     "build": "vite build",
     "start": "electron . --ozone-platform=x11",
-    "dist": "vite build && electron-builder --win",
+    "dist": "node scripts/make-trial.mjs off && vite build && electron-builder --win",
     "mock-api": "node scripts/mock-api.mjs",
-    "make-key": "node scripts/make-key.mjs"
+    "make-key": "node scripts/make-key.mjs",
+    "dist:trial": "node scripts/make-trial.mjs 7 && vite build && electron-builder --win",
+    "trial:on": "node scripts/make-trial.mjs 7",
+    "trial:off": "node scripts/make-trial.mjs off"
   },
   "build": {
     "appId": "com.reztra.pos",

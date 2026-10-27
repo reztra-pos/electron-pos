@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   maximize: () => ipcRenderer.send("win:maximize"),
   close: () => ipcRenderer.send("win:close"),
   getAppInfo: () => ipcRenderer.invoke("app:info"),
+  trial: {
+    get: () => call("app:trial"),                 // { enabled, until, days_left, hours_left, expired }
+    onExpired: (cb) => on("trial:expired", cb),
+  },
 
   device: {
     get: () => call("device:get"),

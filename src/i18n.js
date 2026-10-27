@@ -3,6 +3,11 @@
 // To add or correct a word: change it here (same key in "ar" and "hi"), then npm run build.
 const DICT = {
   ar: {
+    "TESTING MODE": "وضع التجربة",
+    "{n} days left": "متبقٍ {n} أيام",
+    "{n} hours left": "متبقٍ {n} ساعات",
+    "less than an hour left": "أقل من ساعة متبقية",
+    "Testing version: works until {date}": "نسخة تجريبية: تعمل حتى {date}",
       "10 or 10%": "10 أو 10%",
       "Add": "إضافة",
       "Add at least one item to the order": "أضف صنفاً واحداً على الأقل إلى الطلب",
@@ -316,6 +321,11 @@ const DICT = {
       "· price changed": "· تم تغيير السعر"
   },
   hi: {
+    "TESTING MODE": "टेस्टिंग मोड",
+    "{n} days left": "{n} दिन बाकी",
+    "{n} hours left": "{n} घंटे बाकी",
+    "less than an hour left": "एक घंटे से कम बाकी",
+    "Testing version: works until {date}": "टेस्टिंग संस्करण: {date} तक चलेगा",
       "10 or 10%": "10 या 10%",
       "Add": "जोड़ें",
       "Add at least one item to the order": "ऑर्डर में कम से कम एक आइटम जोड़ें",
