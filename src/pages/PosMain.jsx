@@ -19,7 +19,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LogOut, FolderOpen, Printer, History, Bell, Wallet,
-  Trash2, Maximize, Minimize, Menu, Search, RefreshCw, Pencil, Plus, Minus,
+  Trash2, Menu, Search, RefreshCw, Pencil, Plus, Minus,
   X, UtensilsCrossed, Truck, LayoutGrid, CalendarDays, Eye, Info, Receipt, Ban, UserPlus,
   Check, CreditCard, Banknote, Smartphone, Clock, ChefHat, StickyNote, FileText, ListOrdered,
   ShoppingCart, Users, Edit3, Sandwich, CupSoda, IceCreamCone, Beef, Drumstick, Citrus, Grape, Milk,
@@ -45,6 +45,7 @@ let DEFAULT_CUSTOMER_ID = 1;
 let PARTNERS = [];         // [{ id, name, logo }]
 let PAYMENT_METHODS = [];  // [{ id, name, icon, cash }]
 let REGISTER_OPEN = null;  // true / false / null (waiters: no register)
+let DENOMINATIONS = [];    // [1, 2, 5, 10, ...] from tbl_denominations
 
 // category illustration by name (only used when an item has no photo)
 const ART_RULES = [
@@ -130,6 +131,8 @@ export function applyCatalog(boot, customers = []) {
   PAYMENT_METHODS = (boot.payment_methods || []).filter((m) => !isLoyalty(m))
     .map((m) => ({ id: m.id, name: m.name, icon: PAY_ICON(m.name), cash: m.id === 1 || /cash/i.test(m.name) }));
   REGISTER_OPEN = boot.register ? !!boot.register.open : null;
+  // quick cash buttons in the payment popup: the outlet's denominations from the web app (Denomination list)
+  DENOMINATIONS = (boot.denominations || []).map((d) => Number(d.amount)).filter((v) => v > 0);
 }
 
 /* ============================================================================
@@ -401,7 +404,7 @@ const CSS = `
 .modal-h{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line)}
 .modal-h h3{margin:0;font-size:19px;font-weight:800}
 .modal-b{padding:18px;overflow-y:auto}
-.modal-f{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line)}
+.modal-f{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line)}
 .btn{height:42px;padding:0 18px;border-radius:8px;border:1px solid var(--line);background:#F6F7F9;font-weight:700;display:inline-flex;align-items:center;gap:6px}
 .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff !important}
 .btn.ok{background:var(--ok);border-color:var(--ok);color:#fff !important}
@@ -437,7 +440,24 @@ const CSS = `
 .pm{border:2px solid var(--line);border-radius:10px;background:#fff;padding:12px 6px;display:grid;justify-items:center;gap:6px;font-weight:700;font-size:13px}
 .pm[aria-pressed=true]{border-color:var(--brand);background:var(--brand-2);color:var(--brand)}
 .quick-amts{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
-.quick-amts button{border:1px solid var(--line);background:#F6F7F9;border-radius:8px;padding:8px 12px;font-weight:700}
+.quick-amts button{border:1px solid var(--line);background:#F6F7F9;border-radius:8px;padding:8px 12px;font-weight:700;position:relative}
+.quick-amts button:disabled{opacity:.45;cursor:not-allowed}
+.dcount{position:absolute;top:-7px;inset-inline-end:-7px;background:var(--brand);color:#fff;border-radius:999px;font-size:11px;min-width:18px;height:18px;display:grid;place-items:center;padding:0 4px}
+.pay-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px}
+@media(max-width:700px){.pay-grid{grid-template-columns:1fr}}
+.pay-entry{display:flex;gap:8px;margin-bottom:10px}
+.pay-side{background:#F6F7F9;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:4px}
+.pay-lines{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;min-height:60px}
+.pay-line{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 6px 6px 10px;font-size:14px;font-weight:600}
+.reg-sales{margin-top:14px}
+.reg-sales-h{background:#EDEFF3;font-weight:700;padding:7px 10px;border-radius:6px;font-size:13.5px}
+.reg-sales table{width:100%;border-collapse:collapse;font-size:13px}
+.reg-sales th{text-align:start;font-weight:700;padding:7px 4px;border-bottom:1px solid var(--line)}
+.reg-sales td{padding:6px 4px;border-bottom:1px dashed var(--line)}
+.reg-sales .r{text-align:end}
+.reg-sales tfoot td{font-weight:800;border-bottom:none}
+.pay-change{display:flex;justify-content:space-between;color:var(--danger);font-weight:800;font-size:16px;margin-top:6px}
+.pm:disabled{opacity:.5;cursor:not-allowed}
 .pay-due{display:flex;justify-content:space-between;background:#F1F2F6;border-radius:10px;padding:14px;font-size:18px;font-weight:800;margin-bottom:14px}
 .menu-sheet{position:fixed;top:0;inset-inline-end:0;bottom:0;width:300px;max-width:88vw;background:#fff;z-index:60;box-shadow:-10px 0 40px rgba(10,14,30,.2);display:flex;flex-direction:column}
 .menu-sheet .item-link{display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;padding:12px 18px;font-weight:600;text-align:start;font-size:14px}
@@ -638,7 +658,6 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
   const [drawer, setDrawer] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [datePop, setDatePop] = useState(false);
-  const [isFull, setIsFull] = useState(false);
   const [prefs, setPrefs] = useState(() => lsGet("pos.prefs", { printKot: true, printInvoice: true }));
   const searchRef = useRef(null);
   const calcSeq = useRef(0);
@@ -678,6 +697,30 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     } catch { /* keep the local matches */ }
   }, []);
 
+  // closing the app while the register is open: ask first (close register & exit / exit / cancel)
+  useEffect(() => {
+    const guard = window.electronAPI?.closeGuard;
+    if (!guard || isWaiter || !registerOpen) return undefined;
+    return guard.onRequest(() => { setSheet(false); setDrawer(false); setModal({ name: "leave", exit: true }); });
+  }, [isWaiter, registerOpen]);
+
+  // log out / exit, optionally closing the register first (report is printed like "Close register" does)
+  const leave = async ({ closeRegister, exit }) => {
+    if (closeRegister) {
+      try {
+        const r = await post("/v1/register/close");
+        setRegisterOpen(null);
+        await print(registerHtml(r), tr("Register report"));
+      } catch (e) {
+        if (e?.code !== "REGISTER_CLOSED") { onError(e, tr("The register was not closed.")); return false; }
+      }
+    }
+    setModal(null);
+    if (exit) window.electronAPI?.closeGuard?.confirm();
+    else onLogout();
+    return true;
+  };
+
   // keyboard: "/" focuses search, Esc closes overlays
   useEffect(() => {
     const onKey = (e) => {
@@ -686,10 +729,8 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
         e.preventDefault(); setTab("menu"); searchRef.current?.focus();
       }
     };
-    const onFs = () => setIsFull(!!document.fullscreenElement);
     window.addEventListener("keydown", onKey);
-    document.addEventListener("fullscreenchange", onFs);
-    return () => { window.removeEventListener("keydown", onKey); document.removeEventListener("fullscreenchange", onFs); };
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
   useEffect(() => { lsSet("pos.showImages", showImages); }, [showImages]);
 
@@ -865,7 +906,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
   const proceed = (action, type = orderType, tbl = table) => {
     if (!cart.length) return notify(tr("Add at least one item to the order"));
     if (!type) return setModal({ name: "orderType", then: { kind: action } });
-    if (type === "dine" && !hasTables(tbl)) return setModal({ name: "table", then: { kind: action, type } });
+    // dine in without a table is allowed (the table popup is optional)
     if (action === "place") return commitOrder(type, tbl);
     if (!canPay) return notify(tr("Waiters can't take payment. Place the order and send it to the cashier."));
     if (editingId) return notify(tr("Update the order first, then use Invoice in Running Orders."));
@@ -898,7 +939,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     try {
       const r = await post("/v1/orders/calculate", orderBody(type, tbl));
       setCalc(r);
-      setModal({ name: "payment", source: "cart", type, tbl, due: r.totals.total_payable, label: `${tr(ORDER_TYPES[type].label)}${hasTables(tbl) ? ` · ${tr("Table {name}", { name: tblText(tbl) })}` : ""}${type === "delivery" && partner ? ` · ${partnerById(partner)?.name || ""}` : ""} · ${customer.name}` });
+      setModal({ name: "payment", source: "cart", type, tbl, due: r.totals.total_payable, allowDue: customer.id !== DEFAULT_CUSTOMER_ID, label: `${tr(ORDER_TYPES[type].label)}${hasTables(tbl) ? ` · ${tr("Table {name}", { name: tblText(tbl) })}` : ""}${type === "delivery" && partner ? ` · ${partnerById(partner)?.name || ""}` : ""} · ${customer.name}` });
     } catch (e) { onError(e); }
     finally { setBusy(null); }
   };
@@ -907,19 +948,16 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     setBusy("calc");
     try {
       const o = await get(`/v1/orders/${orderId}`);
-      setModal({ name: "payment", source: "running", orderId, due: o.totals.total_payable, label: `${typeName(o)}${o.tables_text ? ` · ${tr("Table {name}", { name: o.tables_text })}` : ""} · ${o.customer?.name || ""}` });
+      setModal({ name: "payment", source: "running", orderId, due: o.totals.total_payable, allowDue: !!o.customer?.id && o.customer.id !== DEFAULT_CUSTOMER_ID && o.customer.name !== "Walk-in Customer", label: `${typeName(o)}${o.tables_text ? ` · ${tr("Table {name}", { name: o.tables_text })}` : ""} · ${o.customer?.name || ""}` });
     } catch (e) { onError(e); }
     finally { setBusy(null); }
   };
 
-  const completePayment = async ({ methodId, given }) => {
+  const completePayment = async ({ payments, given, reference }) => {
     if (busy) return;
     const m = modal;
-    const method = PAYMENT_METHODS.find((x) => x.id === methodId);
-    const due = Number(m.due) || 0;
-    const paid = method.cash && Number(given) > due ? Number(given) : due;
-    const payBody = { payments: [{ payment_method_id: methodId, amount: Number(paid.toFixed(4)) }] };
-    if (method.cash && given !== "") payBody.given_amount = Number(given);
+    const payBody = { payments, reference };
+    if (given !== "" && given != null) payBody.given_amount = Number(given);
     setBusy("pay");
     try {
       const key = await newKey();
@@ -1084,15 +1122,10 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     } catch (e) { onError(e); }
   };
 
-  const toggleFull = () => {
-    if (document.fullscreenElement) document.exitFullscreen?.();
-    else document.documentElement.requestFullscreen?.().catch(() => notify(tr("Full screen isn't available here")));
-  };
-
   /* ---------- header actions ---------- */
   const unread = notifications.filter((n) => !seenNotif.has(n.id)).length;
   const markSeen = () => { const s = new Set([...seenNotif, ...notifications.map((n) => n.id)]); setSeenNotif(s); lsSet("pos.seenNotif", [...s].slice(-300)); };
-  const openRecent = async () => { setModal({ name: "recent" }); try { setSales(await get("/v1/invoices?limit=50")); } catch (e) { onError(e); } };
+  const openRecent = () => setModal({ name: "recent" });
   const printLast = async () => {
     try {
       const list = sales.length ? sales : await get("/v1/invoices?limit=1");
@@ -1101,7 +1134,11 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     } catch (e) { onError(e); }
   };
   const HEADER = [
-    { id: "logout", label: tr("Log out"), icon: LogOut, cls: "", on: async () => { if (await ask(tr("Log out of the POS?"), { title: tr("Log out"), confirmLabel: tr("Log out") })) onLogout(); } },
+    { id: "logout", label: tr("Log out"), icon: LogOut, cls: "", on: async () => {
+      // cashier / admin with an open register: offer to close it first
+      if (!isWaiter && registerOpen) return setModal({ name: "leave", exit: false });
+      if (await ask(tr("Log out of the POS?"), { title: tr("Log out"), confirmLabel: tr("Log out") })) onLogout();
+    } },
     { id: "drafts", label: tr("Open drafts"), icon: FolderOpen, cls: "", badge: drafts.length, on: () => { setModal({ name: "drafts" }); refreshDrafts(); } },
     ...(canPay ? [{ id: "print", label: tr("Print last invoice"), icon: Printer, cls: "opt-sm", on: printLast }] : []),
     ...(canPay ? [{ id: "recent", label: tr("Recent sales"), icon: History, cls: "", on: openRecent }] : []),
@@ -1111,7 +1148,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     { id: "refresh", label: tr("Refresh menu and orders"), icon: RefreshCw, cls: "opt-md", on: () => { refreshRunning(); notify(tr("Running orders refreshed")); } },
   ];
 
-  const kitchenTag = (o) => (o.bill_printed ? ["bill", tr("Bill printed")] : KITCHEN_TAG[o.kitchen?.status] ? [KITCHEN_TAG[o.kitchen.status][0], tr(KITCHEN_TAG[o.kitchen.status][1])] : ["", tr(o.status)]);
+  const kitchenTag = (o) => (o.bill_printed ? ["bill", tr("Draft printed")] : KITCHEN_TAG[o.kitchen?.status] ? [KITCHEN_TAG[o.kitchen.status][0], tr(KITCHEN_TAG[o.kitchen.status][1])] : ["", tr(o.status)]);
   const busyCls = (name) => (busy === name ? { opacity: 0.6, pointerEvents: "none" } : {});
 
   /* ============================================================================
@@ -1150,9 +1187,6 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
             </button>
           ))}
         </nav>
-        <button className="icon-btn opt-sm" onClick={toggleFull} title={isFull ? tr("Exit full screen") : tr("Full screen")} aria-label={tr("Toggle full screen")}>
-          {isFull ? <Minimize size={20} /> : <Maximize size={20} />}
-        </button>
         <div style={{ position: "relative" }}>
           <button className="lang-btn" onClick={() => setLangOpen((v) => !v)} title={tr("Language")} aria-label={tr("Language")} aria-expanded={langOpen}>
             <Languages size={16} />{LANGS.find((x) => x.code === lang)?.short}
@@ -1392,7 +1426,6 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
                   <h.icon size={18} />{h.label}{h.badge > 0 ? ` (${h.badge})` : ""}
                 </button>
               ))}
-              <button className="item-link" onClick={() => { setSheet(false); toggleFull(); }}>{isFull ? <Minimize size={18} /> : <Maximize size={18} />}{isFull ? tr("Exit full screen") : tr("Full screen")}</button>
               <div className="lang-pick" role="group" aria-label={tr("Language")}>
                 {LANGS.map((x) => <button key={x.code} aria-pressed={lang === x.code} onClick={() => changeLang(x.code)} lang={x.code}>{x.name}</button>)}
               </div>
@@ -1492,7 +1525,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
       )}
 
       {modal?.name === "payment" && (
-        <PaymentModal due={modal.due} label={modal.label} busy={busy === "pay"} onClose={() => !busy && setModal(null)} onPay={completePayment} />
+        <PaymentModal due={modal.due} label={modal.label} allowDue={modal.allowDue} busy={busy === "pay"} onClose={() => !busy && setModal(null)} onPay={completePayment} />
       )}
 
       {modal?.name === "done" && (() => {
@@ -1552,19 +1585,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
       )}
 
       {modal?.name === "recent" && (
-        <Modal title={tr("Recent sales")} onClose={() => setModal(null)} size="lg">
-          {sales.length === 0 ? <p className="muted">{tr("No sales yet today.")}</p> : (
-            <div className="list">
-              {sales.map((s) => (
-                <div key={s.id} className="list-row">
-                  <span><b className="num">{s.sale_no}</b> · {typeName(s)} · {s.customer?.name}<div className="muted" style={{ fontSize: 12 }}>{s.cashier ? `${s.cashier} · ` : ""}{s.date_time}</div></span>
-                  <span style={{ display: "flex", gap: 8, alignItems: "center" }}><b className="num">{OUTLET.currency} {money(s.total_payable ?? s.totals?.total_payable)}</b>
-                    <button className="btn" onClick={() => reprintInvoice(s.id)}><Printer size={16} />{tr("Print")}</button></span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Modal>
+        <RecentSalesModal initial={sales} onClose={() => setModal(null)} onError={onError} onReprint={reprintInvoice} />
       )}
 
       {modal?.name === "notifications" && (
@@ -1584,6 +1605,10 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
       )}
 
 
+
+      {modal?.name === "leave" && (
+        <LeaveModal exit={modal.exit} onClose={() => setModal(null)} onLeave={leave} />
+      )}
 
       {modal?.name === "register" && (
         <RegisterModal onClose={() => setModal(null)} onError={onError} print={print}
@@ -1681,7 +1706,7 @@ function TableModal({ editingId, current, onClose, onPick, onError }) {
           ))}
         </div>
         <button className="btn" onClick={onClose}>{tr("Cancel")}</button>
-        <button className="btn primary" disabled={!picked.length} onClick={() => onPick(picked)}>{picked.length > 1 ? tr("Done ({n} tables)", { n: picked.length }) : tr("Done")}</button>
+        <button className="btn primary" onClick={() => onPick(picked)}>{picked.length > 1 ? tr("Done ({n} tables)", { n: picked.length }) : picked.length ? tr("Done") : tr("Continue without table")}</button>
       </>}>
       {!data ? <p className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} className="spin" />{tr("Loading tables…")}</p> : <>
         <input className="input tsearch" placeholder={tr("Search by floor/area or table name")} value={q} onChange={(e) => setQ(e.target.value)} />
@@ -1852,48 +1877,135 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
         <label className="field">{tr("Item discount (%)")}<input className="input num" type="number" min="0" max="100" value={disc} onChange={(e) => setDisc(e.target.value)} /></label>
       )}
       <label className="field">{tr("Unit price with modifiers")}<input className="input num" readOnly value={money(unit)} /></label>
-      <label className="field"><span style={{ display: "flex", gap: 6, alignItems: "center" }}><StickyNote size={14} />{tr("Kitchen note")}</span>
+      <label className="field"><span style={{ display: "flex", gap: 6, alignItems: "center" }}><StickyNote size={14} />{tr("Preparation Note")}</span>
         <textarea className="input" placeholder={tr("e.g. less spicy, sauce on the side")} value={note} onChange={(e) => setNote(e.target.value)} />
       </label>
     </Modal>
   );
 }
 
-// "due" is the server's total for the order. Cash can be more than due (change is returned).
-function PaymentModal({ due: dueIn, label, busy, onClose, onPay }) {
+// Finalize sale, same rules as the web POS "Finalize Sale" popup:
+//  - several payment methods on one sale (mixed payment), each method once
+//  - quick cash buttons are the outlet's denominations (tbl_denominations); tapping one adds it up
+//  - cash can be more than what is left: the change is shown and saved (given / change amount)
+//  - card / online can't be more than what is left
+//  - Walk-in Customer must pay in full; a named customer can leave a due balance
+//  - reference is saved on the sale
+function PaymentModal({ due: dueIn, label, busy, allowDue, onClose, onPay }) {
+  const P = OUTLET.precision ?? 2;
+  const r2 = (n) => Number((Number(n) || 0).toFixed(P));
+  const due = r2(dueIn);
   const [method, setMethod] = useState(PAYMENT_METHODS[0]?.id);
-  const [given, setGiven] = useState("");
+  const [amount, setAmount] = useState("");
+  const [counts, setCounts] = useState({});       // denomination -> times tapped (badge)
+  const [lines, setLines] = useState([]);         // [{ id, name, cash, amount, given }]
+  const [reference, setReference] = useState("");
+  const [err, setErr] = useState("");
   const m = PAYMENT_METHODS.find((x) => x.id === method);
-  const due = Number(dueIn) || 0;
-  const change = Math.max(0, (Number(given) || 0) - due);
-  const short = m?.cash && given !== "" && Number(given) < due;
-  const quick = [due, ...[10, 20, 50, 100, 200, 500].filter((v) => v > due).slice(0, 4)];
+  const paid = r2(lines.reduce((s, l) => s + l.amount, 0));
+  const left = r2(Math.max(0, due - paid));
+  const cashLine = lines.find((l) => l.cash);
+  const change = cashLine ? r2(Math.max(0, cashLine.given - cashLine.amount)) : 0;
+
+  // the payment line the typed amount would make (null + message when it can't be added)
+  const lineFor = (mt, value, rest) => {
+    if (!mt) return [null, tr("Choose a payment method")];
+    if (lines.some((l) => l.id === mt.id)) return [null, tr("{name} is already added", { name: mt.name })];
+    const v = value === "" ? rest : r2(value);
+    if (!(v > 0)) return [null, rest > 0 ? tr("Enter an amount") : tr("Nothing left to pay")];
+    if (rest <= 0) return [null, tr("Nothing left to pay")];
+    if (!mt.cash && v > rest) return [null, tr("{name} can't be more than the amount left ({amount})", { name: mt.name, amount: money(rest) })];
+    return [{ id: mt.id, name: mt.name, cash: mt.cash, amount: Math.min(v, rest), given: mt.cash ? v : Math.min(v, rest) }, ""];
+  };
+  const clearInput = () => { setAmount(""); setCounts({}); };
+  const add = () => {
+    const [line, msg] = lineFor(m, amount, left);
+    if (!line) return setErr(msg);
+    setErr(""); setLines((ls) => [...ls, line]); clearInput();
+    const next = PAYMENT_METHODS.find((x) => x.id !== line.id && !lines.some((l) => l.id === x.id));
+    if (next) setMethod(next.id);
+  };
+  const tapDenom = (v) => {
+    setErr("");
+    setCounts((c) => ({ ...c, [v]: (c[v] || 0) + 1 }));
+    setAmount((a) => String(r2((Number(a) || 0) + v)));
+  };
+  const remove = (id) => { setLines((ls) => ls.filter((l) => l.id !== id)); setErr(""); };
+
+  // "Complete sale": what is typed (or, with nothing added yet, the full amount) goes in as the last payment
+  const finalLines = () => {
+    const typed = amount !== "" || !lines.length;
+    if (!typed || left <= 0) return [lines, ""];
+    const [line, msg] = lineFor(m, amount, left);
+    return line ? [[...lines, line], ""] : [lines, msg];
+  };
+  const [fl, flMsg] = finalLines();
+  const flPaid = r2(fl.reduce((s, l) => s + l.amount, 0));
+  const flDue = r2(Math.max(0, due - flPaid));
+  const blocked = flMsg || (flDue > 0 && !allowDue ? tr("Walk-in Customer must pay the full amount. Choose a customer to leave a due balance.") : "");
+  const submit = () => {
+    if (blocked) return setErr(blocked);
+    const cash = fl.find((l) => l.cash);
+    onPay({ payments: fl.map((l) => ({ payment_method_id: l.id, amount: l.amount })), given: cash ? cash.given : "", reference: reference.trim() });
+  };
+  const preview = amount !== "" && m?.cash ? r2(Math.max(0, Number(amount) - left)) : 0;
+
   return (
-    <Modal title={tr("Payment")} onClose={onClose}
+    <Modal title={tr("Finalize Sale")} onClose={onClose} size="lg"
       footer={<>
         <button className="btn" onClick={onClose} disabled={busy}>{tr("Cancel")}</button>
-        <button className="btn ok" disabled={short || !m || busy} onClick={() => onPay({ methodId: method, given: m.cash ? given : "" })}>
+        <button className="btn ok" disabled={!PAYMENT_METHODS.length || busy || !!blocked} onClick={submit} title={blocked || ""}>
           {busy ? <Loader2 size={16} className="spin" /> : <Check size={16} />}{busy ? tr("Saving…") : tr("Complete sale")}
         </button>
       </>}>
       <div className="pay-due"><span>{tr("Amount due")}</span><span className="num">{OUTLET.currency} {money(due)}</span></div>
       <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>{label}</div>
       {!PAYMENT_METHODS.length && <p className="muted">{tr("No payment methods are set up for this outlet.")}</p>}
-      <div className="pay-methods">
-        {PAYMENT_METHODS.map((x) => (
-          <button key={x.id} className="pm" aria-pressed={method === x.id} onClick={() => setMethod(x.id)}><x.icon size={24} />{x.name}</button>
-        ))}
+      <div className="pay-grid">
+        <div>
+          <div className="pay-methods">
+            {PAYMENT_METHODS.map((x) => {
+              const used = lines.some((l) => l.id === x.id);
+              return <button key={x.id} className="pm" aria-pressed={method === x.id} disabled={used || left <= 0} onClick={() => { setMethod(x.id); setErr(""); }}><x.icon size={22} />{x.name}{used && <Check size={14} />}</button>;
+            })}
+          </div>
+          <div className="pay-entry">
+            <label className="field" style={{ flex: 1 }}>{m?.cash ? tr("Cash received") : tr("Amount")}
+              <input className="input num" type="number" min="0" value={amount} disabled={left <= 0} placeholder={money(left)}
+                onChange={(e) => { setAmount(e.target.value); setCounts({}); setErr(""); }} onKeyDown={(e) => { if (e.key === "Enter") add(); }} aria-label={tr("Amount")} />
+            </label>
+            <button className="btn primary" onClick={add} disabled={left <= 0} style={{ alignSelf: "end" }}><Plus size={16} />{tr("Add")}</button>
+          </div>
+          <div className="quick-amts" aria-label={tr("Quick cash")}>
+            <button className="num" disabled={left <= 0} onClick={() => { setAmount(String(left)); setCounts({}); setErr(""); }}>{tr("Exact")} {money(left)}</button>
+            {DENOMINATIONS.map((v) => (
+              <button key={v} className="num denom" disabled={left <= 0} onClick={() => tapDenom(v)}>{money(v)}{counts[v] ? <span className="dcount">{counts[v]}</span> : null}</button>
+            ))}
+            <button disabled={amount === ""} onClick={clearInput}>{tr("Clear")}</button>
+          </div>
+          {preview > 0 && <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>{tr("Change to return")}: <b className="num">{money(preview)}</b></div>}
+          <label className="field">{tr("Reference")}
+            <input className="input" value={reference} onChange={(e) => setReference(e.target.value)} placeholder={tr("Card slip / transaction reference")} maxLength={100} />
+          </label>
+        </div>
+        <div className="pay-side">
+          <div className="pay-lines">
+            {lines.length === 0 ? <div className="muted" style={{ textAlign: "center", padding: "18px 6px", fontSize: 13 }}>{tr("Your added payments will be shown here")}</div>
+              : lines.map((l) => (
+                <div key={l.id} className="pay-line">
+                  <span>{l.name}{l.cash && l.given > l.amount ? <span className="muted" style={{ fontSize: 12 }}> · {tr("received {amount}", { amount: money(l.given) })}</span> : null}</span>
+                  <span style={{ display: "flex", gap: 6, alignItems: "center" }}><b className="num">{money(l.amount)}</b>
+                    <button className="icon-btn" style={{ width: 28, height: 28 }} onClick={() => remove(l.id)} aria-label={tr("Remove {name}", { name: l.name })}><X size={14} /></button></span>
+                </div>
+              ))}
+          </div>
+          <div className="sum-row"><span>{tr("Payable")}</span><span className="num">{money(due)}</span></div>
+          <div className="sum-row"><span>{tr("Paid")}</span><span className="num">{money(paid)}</span></div>
+          <div className="sum-row total"><span>{tr("Due")}</span><span className="num">{money(left)}</span></div>
+          {change > 0 && <div className="pay-change"><span>{tr("Change Amount")}</span><span className="num">{money(change)}</span></div>}
+        </div>
       </div>
-      {m?.cash && <>
-        <div className="quick-amts">
-          {quick.map((v, i) => <button key={i} className="num" onClick={() => setGiven(String(v))}>{i === 0 ? tr("Exact") : money(v)}</button>)}
-        </div>
-        <div className="grid2">
-          <label className="field">{tr("Cash received")}<input className="input num" type="number" min="0" value={given} onChange={(e) => setGiven(e.target.value)} placeholder={money(due)} /></label>
-          <label className="field">{tr("Change to return")}<input className="input num" readOnly value={money(change)} style={{ fontWeight: 800 }} /></label>
-        </div>
-        {short && <div style={{ color: "var(--danger)", fontSize: 13, fontWeight: 600 }}>{tr("Cash received is less than the amount due.")}</div>}
-      </>}
+      {(err || blocked) && <div role="alert" style={{ color: "var(--danger)", fontSize: 13, fontWeight: 600, marginTop: 10 }}>{err || blocked}</div>}
     </Modal>
   );
 }
@@ -2018,7 +2130,7 @@ function OrderDetails({ id, canPay, onClose, onError, onKot, onBill, onInvoice }
     <Modal title={o ? tr("Order {n}", { n: o.order_number || o.sale_no }) : tr("Order details")} onClose={onClose} size="lg"
       footer={o && <>
         <button className="btn" onClick={onKot}><Printer size={16} />{tr("Re-print KOT")}</button>
-        <button className="btn" onClick={onBill}><FileText size={16} />{tr("Print bill")}</button>
+        <button className="btn" onClick={onBill}><FileText size={16} />{tr("Print Draft")}</button>
         {canPay && <button className="btn primary" onClick={() => { onClose(); onInvoice(); }}><Receipt size={16} />{tr("Invoice")}</button>}
       </>}>
       {!o ? <p className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} className="spin" />{tr("Loading…")}</p> : <>
@@ -2181,6 +2293,15 @@ function SearchSelect({ value, options, onChange, placeholder, label, onSearch, 
   );
 }
 
+function salesHtml(title, first, rows, always) {
+  const list = rows || [];
+  if (!list.length && !always) return "";
+  const qty = list.reduce((a, r) => a + (Number(r.qty) || 0), 0);
+  const amt = list.reduce((a, r) => a + (Number(r.amount) || 0), 0);
+  return `<div class="hr"></div><div class="m b">${esc(title)}</div><table><tr class="b"><td>${esc(first)}</td><td class="r">Qty</td><td class="r">Amount</td></tr>
+${list.map((r) => `<tr><td>${esc(r.name)}</td><td class="r">${esc(String(r.qty))}</td><td class="r">${money(r.amount)}</td></tr>`).join("")}
+${list.length ? `<tr class="b"><td>Total</td><td class="r">${qty}</td><td class="r">${money(amt)}</td></tr>` : `<tr><td>No sales</td><td></td><td></td></tr>`}</table>`;
+}
 function registerHtml(s) {
   const rows = (s.methods || []).map((m) => `<tr><td>${esc(m.name)}</td><td class="r">${money(m.opening)}</td><td class="r">${money(m.sale)}</td><td class="r">${money(m.closing)}</td></tr>`).join("");
   const t = s.totals || {};
@@ -2192,7 +2313,133 @@ function registerHtml(s) {
 ${Number(t.due_receive) ? `<tr><td>Due received</td><td class="r">${money(t.due_receive)}</td></tr>` : ""}${Number(t.purchase) ? `<tr><td>Purchase</td><td class="r">-${money(t.purchase)}</td></tr>` : ""}
 ${Number(t.due_payment) ? `<tr><td>Due payment</td><td class="r">-${money(t.due_payment)}</td></tr>` : ""}${Number(t.expense) ? `<tr><td>Expense</td><td class="r">-${money(t.expense)}</td></tr>` : ""}
 ${Number(t.refund) ? `<tr><td>Refund (not deducted)</td><td class="r">${money(t.refund)}</td></tr>` : ""}
-<tr><td class="big">Closing</td><td class="r big">${esc(OUTLET.currency)} ${money(t.closing)}</td></tr></table></body></html>`;
+<tr><td class="big">Closing</td><td class="r big">${esc(OUTLET.currency)} ${money(t.closing)}</td></tr></table>
+${salesHtml("Item Wise Sales", "Food Menus", s.item_sales, true)}${salesHtml("Modifier Wise Sales", "Modifiers", s.modifier_sales, false)}</body></html>`;
+}
+
+// Recent sales (web POS "Recent Sales"): search by invoice no / customer, pick a day, see the invoice, reprint it.
+// Reprint uses the saved sale (GET /v1/invoices/{id}/print): same ZATCA QR, nothing is sent to ZATCA again.
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+function RecentSalesModal({ initial, onClose, onError, onReprint }) {
+  const [q, setQ] = useState("");
+  const [date, setDate] = useState(today());
+  const [list, setList] = useState(null);
+  const [open, setOpen] = useState(null);       // invoice shown in detail
+  const [printing, setPrinting] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    const t = setTimeout(() => {
+      const qs = new URLSearchParams({ limit: "100", ...(date ? { date } : {}), ...(q.trim() ? { search: q.trim() } : {}) });
+      get(`/v1/invoices?${qs}`).then((r) => alive && setList(r)).catch((e) => { if (alive) { setList(initial || []); onError(e); } });
+    }, q ? 300 : 0);
+    return () => { alive = false; clearTimeout(t); };
+  }, [q, date]); // eslint-disable-line
+  const view = async (id) => { try { setOpen(await get(`/v1/invoices/${id}`)); } catch (e) { onError(e); } };
+  const reprint = async (id) => { setPrinting(id); try { await onReprint(id); } finally { setPrinting(null); } };
+  const pbtn = (id) => (
+    <button className="btn" disabled={printing === id} onClick={() => reprint(id)}>{printing === id ? <Loader2 size={16} className="spin" /> : <Printer size={16} />}{tr("Reprint")}</button>
+  );
+
+  if (open) {
+    const t = open.totals || {};
+    return (
+      <Modal title={tr("Invoice {n}", { n: open.sale_no })} onClose={onClose} size="lg"
+        footer={<><button className="btn" onClick={() => setOpen(null)}>{tr("Back")}</button>{pbtn(open.id)}</>}>
+        <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
+          {typeName(open)}{open.tables_text ? ` · ${tr("Table {name}", { name: open.tables_text })}` : ""} · {open.customer?.name}{open.cashier ? ` · ${open.cashier}` : ""} · {open.date_time}
+        </div>
+        <div className="list">
+          {(open.items || []).map((l, i) => (
+            <div key={i} className="list-row">
+              <span><b>{l.qty} × {getLang() === "ar" && l.secondary_name ? l.secondary_name : l.name}</b>
+                {l.modifiers?.length > 0 && <div className="muted" style={{ fontSize: 12 }}>+ {l.modifiers.map((m) => m.name).join(", ")}</div>}</span>
+              <span className="num">{money(l.price_with_discount)}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <div className="sum-row"><span>{tr("Subtotal")}</span><span className="num">{money(t.sub_total)}</span></div>
+          {Number(t.total_discount_amount) > 0 && <div className="sum-row"><span>{tr("Discount")}</span><span className="num">-{money(t.total_discount_amount)}</span></div>}
+          {Number(t.charge_amount) > 0 && <div className="sum-row"><span>{t.charge_type === "delivery" ? tr("Delivery charge") : tr("Service charge")}</span><span className="num">{money(t.charge_amount)}</span></div>}
+          {Number(t.tips_amount) > 0 && <div className="sum-row"><span>{tr("Tips")}</span><span className="num">{money(t.tips_amount)}</span></div>}
+          <div className="sum-row"><span>{tr("Tax")}</span><span className="num">{money(t.total_vat)}</span></div>
+          <div className="sum-row total"><span>{tr("Total payable")}</span><span className="num">{OUTLET.currency} {money(t.total_payable)}</span></div>
+          {(open.payments || []).map((p, i) => <div key={i} className="sum-row"><span>{p.name}</span><span className="num">{money(p.amount)}</span></div>)}
+          {Number(t.change_amount) > 0 && <div className="sum-row"><span>{tr("Given")} / {tr("Change Amount")}</span><span className="num">{money(t.given_amount)} / {money(t.change_amount)}</span></div>}
+          {Number(t.due_amount) > 0 && <div className="sum-row" style={{ color: "var(--danger)" }}><span>{tr("Due")}</span><span className="num">{money(t.due_amount)}</span></div>}
+          {open.reference && <div className="sum-row"><span>{tr("Reference")}</span><span>{open.reference}</span></div>}
+        </div>
+      </Modal>
+    );
+  }
+  return (
+    <Modal title={tr("Recent sales")} onClose={onClose} size="lg">
+      <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        <input className="input" style={{ flex: "1 1 220px" }} placeholder={tr("Search invoice no, customer or phone")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={tr("Search")} />
+        <input className="input" type="date" style={{ flex: "0 0 170px" }} value={date} onChange={(e) => setDate(e.target.value)} aria-label={tr("Date")} />
+        {date && <button className="btn" onClick={() => setDate("")}>{tr("All days")}</button>}
+      </div>
+      {list === null ? <p className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} className="spin" />{tr("Loading…")}</p>
+        : list.length === 0 ? <p className="muted">{date === today() && !q ? tr("No sales yet today.") : tr("No sales found.")}</p> : (
+        <div className="list recent-list">
+          {list.map((s) => (
+            <div key={s.id} className="list-row">
+              <span style={{ minWidth: 0 }}><b className="num">{s.sale_no}</b> · {typeName(s)}{s.tables_text ? ` · ${s.tables_text}` : ""} · {s.customer?.name}
+                <div className="muted" style={{ fontSize: 12 }}>{s.cashier ? `${s.cashier} · ` : ""}{s.date_time}{Number(s.due_amount) > 0 ? ` · ${tr("Due")} ${money(s.due_amount)}` : ""}</div></span>
+              <span style={{ display: "flex", gap: 8, alignItems: "center", flex: "none" }}><b className="num">{OUTLET.currency} {money(s.total_payable ?? s.totals?.total_payable)}</b>
+                <button className="btn" onClick={() => view(s.id)}><Eye size={16} />{tr("View")}</button>
+                {pbtn(s.id)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// Log out / close the app while the register is open: close it first, or leave it open, or stay.
+function LeaveModal({ exit, onClose, onLeave }) {
+  const [busy, setBusy] = useState(null);
+  const go = async (closeRegister) => { setBusy(closeRegister ? "close" : "keep"); const done = await onLeave({ closeRegister, exit }); if (!done) setBusy(null); };
+  return (
+    <Modal title={exit ? tr("Close the app") : tr("Log out")} onClose={() => !busy && onClose()} closable={!busy}
+      footer={<>
+        <button className="btn" disabled={!!busy} onClick={onClose}>{tr("Cancel")}</button>
+        <button className="btn" disabled={!!busy} onClick={() => go(false)}>
+          {busy === "keep" ? <Loader2 size={16} className="spin" /> : <LogOut size={16} />}{exit ? tr("Exit without closing") : tr("Log out without closing")}
+        </button>
+        <button className="btn primary" disabled={!!busy} onClick={() => go(true)} style={{ background: "var(--danger)", borderColor: "var(--danger)" }}>
+          {busy === "close" ? <Loader2 size={16} className="spin" /> : <Ban size={16} />}{exit ? tr("Close register & exit") : tr("Close register & log out")}
+        </button>
+      </>}>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <Wallet size={28} color="var(--amber)" style={{ flex: "none" }} />
+        <p style={{ margin: 0 }}>{tr("Your register is still open. Do you want to close the register before you {action}?", { action: exit ? tr("close the app") : tr("log out") })}
+          <br /><span className="muted" style={{ fontSize: 13 }}>{tr("Closing prints the register report.")}</span></p>
+      </div>
+    </Modal>
+  );
+}
+
+// item / modifier wise sales of the register (web "Register Details": Item Wise Sales)
+function SalesTable({ title, first, rows, hideEmpty = false }) {
+  const list = rows || [];
+  if (hideEmpty && !list.length) return null;
+  const qty = list.reduce((a, r) => a + (Number(r.qty) || 0), 0);
+  const amt = list.reduce((a, r) => a + (Number(r.amount) || 0), 0);
+  return (
+    <div className="reg-sales">
+      <div className="reg-sales-h">{title}</div>
+      <table>
+        <thead><tr><th>{first}</th><th className="r">{tr("Quantity")}</th><th className="r">{tr("Amount")}</th></tr></thead>
+        <tbody>
+          {list.length === 0 ? <tr><td colSpan={3} className="muted">{tr("No sales yet")}</td></tr>
+            : list.map((r, i) => <tr key={i}><td>{r.name}</td><td className="r num">{r.qty}</td><td className="r num">{money(r.amount)}</td></tr>)}
+        </tbody>
+        {list.length > 0 && <tfoot><tr><td>{tr("Total")}</td><td className="r num">{qty}</td><td className="r num">{money(amt)}</td></tr></tfoot>}
+      </table>
+    </div>
+  );
 }
 
 function RegisterModal({ onClose, onClosed, onError, print }) {
@@ -2225,6 +2472,8 @@ function RegisterModal({ onClose, onClosed, onError, print }) {
           {Number(t.refund) > 0 && <div className="sum-row"><span>{tr("Refund (not deducted)")}</span><span className="num">{money(t.refund)}</span></div>}
           <div className="sum-row total"><span>{tr("Closing balance")}</span><span className="num">{OUTLET.currency} {money(t.closing)}</span></div>
         </div>
+        <SalesTable title={tr("Item Wise Sales")} first={tr("Food Menus")} rows={s.item_sales} />
+        <SalesTable title={tr("Modifier Wise Sales")} first={tr("Modifiers")} rows={s.modifier_sales} hideEmpty />
       </>}
     </Modal>
   );

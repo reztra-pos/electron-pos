@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   maximize: () => ipcRenderer.send("win:maximize"),
   close: () => ipcRenderer.send("win:close"),
   getAppInfo: () => ipcRenderer.invoke("app:info"),
+  // ask before the window closes (cashier with an open register). onRequest returns a function that stops asking.
+  closeGuard: {
+    onRequest: (cb) => { ipcRenderer.send("app:close-guard", true); const off = on("app:close-request", cb); return () => { off(); ipcRenderer.send("app:close-guard", false); }; },
+    confirm: () => ipcRenderer.send("app:close-confirmed"),   // close the window now
+  },
   trial: {
     get: () => call("app:trial"),                 // { enabled, until, days_left, hours_left, expired }
     onExpired: (cb) => on("trial:expired", cb),

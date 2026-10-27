@@ -15,6 +15,8 @@ const DEVICE_CHECK_MS = 60_000;                         // how often to confirm 
 
 let win;
 let deviceTimer = null;
+let closeGuard = false;   // true while the POS screen wants to be asked before the window closes
+let allowClose = false;   // set once the user has answered "exit"
 
 function windowTitle() {
   const t = trial.status();
@@ -30,6 +32,18 @@ function createWindow() {
   });
   win.once("ready-to-show", () => { win.maximize(); win.show(); });
   win.on("page-title-updated", (e) => { e.preventDefault(); win.setTitle(windowTitle()); });   // keep the testing label in the title
+  // closing the window while a cashier's register is open: the POS screen asks first (close register / exit / cancel)
+  win.on("close", (e) => {
+    if (allowClose || !closeGuard || win.webContents.isCrashed()) return;
+    e.preventDefault();
+    if (win.isMinimized()) win.restore();
+    win.focus();
+    send("app:close-request");
+  });
+  win.on("session-end", () => { allowClose = true; });                   // Windows shut down / log off: don't block it
+  win.on("unresponsive", () => { closeGuard = false; });                 // a frozen screen can't answer: let it close
+  win.webContents.on("render-process-gone", () => { closeGuard = false; });
+  win.webContents.on("did-start-loading", () => { closeGuard = false; }); // reload: the screen registers again
   if (DEV_URL) { win.loadURL(DEV_URL); win.webContents.openDevTools({ mode: "detach" }); }
   else win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: "deny" }; });
@@ -79,6 +93,8 @@ if (trial.enabled) setInterval(() => { if (trial.isExpired()) trialEnded(); }, 6
 ipcMain.on("win:minimize", () => win?.minimize());
 ipcMain.on("win:maximize", () => (win?.isMaximized() ? win.unmaximize() : win?.maximize()));
 ipcMain.on("win:close", () => win?.close());
+ipcMain.on("app:close-guard", (_e, on) => { closeGuard = !!on; });
+ipcMain.on("app:close-confirmed", () => { allowClose = true; if (win && !win.isDestroyed()) win.close(); });
 ipcMain.handle("app:info", () => {
   const d = device.publicInfo();
   return { version: app.getVersion(), terminal: d?.device_name || "Not activated", outlet: d?.outlet_name || "" };
