@@ -7,6 +7,8 @@ import { authApi } from "./api/auth.js";
 import { get } from "./api/pos.js";
 import { useSession, signOut as clearSession } from "./session.js";
 import { useTrial, trialDate } from "./trial.js";
+import "./theme.js";                                   // applies the saved light / dark mode at start-up
+import OnScreenKeyboard from "./osk.jsx";
 
 const EAPI = window.electronAPI;
 
@@ -18,6 +20,7 @@ export default function App() {
   return <>
     <Main trial={trial} />
     {trial.enabled && <TrialNotice trial={trial} />}
+    <OnScreenKeyboard />
   </>;
 }
 
@@ -95,7 +98,7 @@ function PosRoute({ trial }) {
     return () => { alive = false; };
   }, [attempt]);
 
-  const logout = async () => { await EAPI?.auth.logout().catch(() => {}); signOut(); navigate("/login", { replace: true }); };
+  const logout = async () => { await EAPI?.auth.logout().catch(() => { }); signOut(); navigate("/login", { replace: true }); };
 
   if (error) return <Splash text={error} action={{ label: "Retry", onClick: () => setAttempt((n) => n + 1) }} second={{ label: "Log out", onClick: logout }} />;
   if (!ready) return <Splash text="Loading menu, tables and settings…" />;
@@ -119,12 +122,12 @@ function Banner({ text, onClose }) {
 function Splash({ text, action, second }) {
   const btn = { marginTop: 14, height: 42, padding: "0 18px", borderRadius: 10, border: 0, background: "#5B3FD1", color: "#fff", fontWeight: 800, cursor: "pointer" };
   return (
-    <div style={{ height: "100vh", display: "grid", placeItems: "center", fontFamily: "Manrope, system-ui, sans-serif", color: "#5A6478", background: "#EEF0F5", padding: 20, textAlign: "center" }}>
+    <div style={{ height: "100vh", display: "grid", placeItems: "center", fontFamily: "Manrope, system-ui, sans-serif", color: "var(--app-ink2)", background: "var(--app-bg)", padding: 20, textAlign: "center" }}>
       <div>
         <div style={{ fontWeight: 700, fontSize: 15, maxWidth: 460 }}>{text}</div>
         <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
           {action && <button onClick={action.onClick} style={btn}>{action.label}</button>}
-          {second && <button onClick={second.onClick} style={{ ...btn, background: "#E6E9EF", color: "#1D2433" }}>{second.label}</button>}
+          {second && <button onClick={second.onClick} style={{ ...btn, background: "var(--app-btn2)", color: "var(--app-ink)" }}>{second.label}</button>}
         </div>
       </div>
     </div>
@@ -138,8 +141,10 @@ const left = (t) => (t.days_left > 1 ? `${t.days_left} days left` : t.hours_left
 function TrialStrip({ trial }) {
   if (!trial?.enabled) return null;
   return (
-    <div role="status" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 400, background: "#B45309", color: "#fff", textAlign: "center",
-      fontFamily: "Manrope, system-ui, sans-serif", fontWeight: 800, fontSize: 12.5, padding: "5px 10px", letterSpacing: ".02em" }}>
+    <div role="status" style={{
+      position: "fixed", top: 0, left: 0, right: 0, zIndex: 400, background: "#B45309", color: "#fff", textAlign: "center",
+      fontFamily: "Manrope, system-ui, sans-serif", fontWeight: 800, fontSize: 12.5, padding: "5px 10px", letterSpacing: ".02em"
+    }}>
       TESTING MODE — this copy works until {trialDate(trial)} ({left(trial)})
     </div>
   );
@@ -151,13 +156,13 @@ function TrialNotice({ trial }) {
   if (!open) return null;
   return (
     <div role="dialog" aria-label="Testing version" style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(20,24,40,.55)", display: "grid", placeItems: "center", padding: 20, fontFamily: "Manrope, system-ui, sans-serif" }}>
-      <div style={{ background: "#fff", borderRadius: 16, maxWidth: 440, width: "100%", padding: 26, boxShadow: "0 20px 60px rgba(0,0,0,.3)" }}>
+      <div style={{ background: "var(--app-panel)", borderRadius: 16, maxWidth: 440, width: "100%", padding: 26, boxShadow: "0 20px 60px rgba(0,0,0,.3)" }}>
         <div style={{ display: "inline-block", background: "#FEF3C7", color: "#92400E", fontWeight: 800, fontSize: 12, borderRadius: 999, padding: "3px 10px", marginBottom: 10 }}>TESTING MODE</div>
-        <h2 style={{ margin: "0 0 8px", fontSize: 20, color: "#1D2433" }}>This is a testing version</h2>
-        <p style={{ margin: "0 0 6px", color: "#5A6478", fontSize: 14.5, lineHeight: 1.5 }}>
-          You can use Reztra POS until <b style={{ color: "#1D2433" }}>{trialDate(trial)}</b> ({left(trial)}).
+        <h2 style={{ margin: "0 0 8px", fontSize: 20, color: "var(--app-ink)" }}>This is a testing version</h2>
+        <p style={{ margin: "0 0 6px", color: "var(--app-ink2)", fontSize: 14.5, lineHeight: 1.5 }}>
+          You can use Reztra POS until <b style={{ color: "var(--app-ink)" }}>{trialDate(trial)}</b> ({left(trial)}).
         </p>
-        <p style={{ margin: "0 0 18px", color: "#5A6478", fontSize: 14.5, lineHeight: 1.5 }}>After that the app stops working. Contact your supplier for the full version.</p>
+        <p style={{ margin: "0 0 18px", color: "var(--app-ink2)", fontSize: 14.5, lineHeight: 1.5 }}>After that the app stops working. Contact your supplier for the full version.</p>
         <button autoFocus onClick={() => setOpen(false)} style={{ width: "100%", height: 44, borderRadius: 10, border: 0, background: "#5B3FD1", color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Continue</button>
       </div>
     </div>
@@ -166,11 +171,11 @@ function TrialNotice({ trial }) {
 
 function TrialEnded({ trial }) {
   return (
-    <div style={{ height: "100vh", display: "grid", placeItems: "center", background: "#EEF0F5", fontFamily: "Manrope, system-ui, sans-serif", padding: 20, textAlign: "center" }}>
-      <div style={{ background: "#fff", borderRadius: 16, maxWidth: 460, padding: 30, boxShadow: "0 20px 50px rgba(30,36,60,.1)" }}>
+    <div style={{ height: "100vh", display: "grid", placeItems: "center", background: "var(--app-bg)", fontFamily: "Manrope, system-ui, sans-serif", padding: 20, textAlign: "center" }}>
+      <div style={{ background: "var(--app-panel)", borderRadius: 16, maxWidth: 460, padding: 30, boxShadow: "0 20px 50px rgba(30,36,60,.1)" }}>
         <div style={{ display: "inline-block", background: "#FDECEA", color: "#A4262C", fontWeight: 800, fontSize: 12, borderRadius: 999, padding: "3px 10px", marginBottom: 10 }}>TESTING PERIOD ENDED</div>
-        <h2 style={{ margin: "0 0 8px", fontSize: 21, color: "#1D2433" }}>This testing version has expired</h2>
-        <p style={{ margin: 0, color: "#5A6478", fontSize: 14.5, lineHeight: 1.55 }}>
+        <h2 style={{ margin: "0 0 8px", fontSize: 21, color: "var(--app-ink)" }}>This testing version has expired</h2>
+        <p style={{ margin: 0, color: "var(--app-ink2)", fontSize: 14.5, lineHeight: 1.55 }}>
           It could be used until {trialDate(trial)}. Please contact your supplier to get the full version of Reztra POS.
         </p>
       </div>

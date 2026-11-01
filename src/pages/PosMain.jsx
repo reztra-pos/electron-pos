@@ -24,8 +24,10 @@ import {
   Check, CreditCard, Banknote, Smartphone, Clock, ChefHat, StickyNote, FileText, ListOrdered,
   ShoppingCart, Users, Edit3, Sandwich, CupSoda, IceCreamCone, Beef, Drumstick, Citrus, Grape, Milk,
   GlassWater, Cookie, Martini, Flame, Soup, Image as ImageIcon, List, ShoppingBag, WifiOff, Loader2,
-  ShieldCheck, ShieldAlert, Settings2, ChevronDown, Eraser, Languages,
+  ShieldCheck, ShieldAlert, Settings2, ChevronDown, Eraser, Languages, Sun, Moon, Keyboard,
 } from "lucide-react";
+import { useTheme } from "../theme.js";
+import { useOskEnabled, openKeyboard } from "../osk.jsx";
 import { get, post, put, del, newKey, printHtml, printRaw } from "../api/pos.js";
 import { tr, tn, getLang, setLang, isRtl, LANGS } from "../i18n.js";
 
@@ -102,7 +104,7 @@ export function applyCatalog(boot, customers = []) {
     cat: it.category_id,
     prices: it.prices || { dine_in: 0, take_away: 0, delivery: 0, partners: {} },
     openPrice: !!it.open_price,
-    modifiers: (it.modifiers || []).map((m) => ({ id: m.id, name: m.name, price: Number(m.price) || 0 })),
+    modifiers: (it.modifiers || []).map((m) => ({ id: m.id, name: m.name, price: Number(m.price) || 0, openPrice: !!m.open_price })),
     veg: !!it.veg, bev: !!it.beverage, promo: !!it.promotion, promotion: it.promotion,
     combo: !!it.combo, comboGroups: it.combo?.type === 2 ? it.combo.groups || [] : null, comboItems: it.combo?.items || [],
     image: it.image_url || null,
@@ -173,6 +175,18 @@ function comboExtra(item, selections, type) {
     return sum + (Number(opt?.prices?.[key]) || 0);
   }, 0);
 }
+// grouped combo: the options chosen for a saved line, read back from its text "Fries (Qty: 1), Pepsi (Qty: 1)"
+function comboFromText(item, text) {
+  if (!item?.comboGroups || !text) return [];
+  const parts = String(text).split(/,\s*(?![^()]*\))/).map((x) => x.trim().toLowerCase());
+  return item.comboGroups.map((g) => {
+    const hit = g.options.find((o) => parts.includes(`${o.name} (Qty: ${Number(o.qty) || 1})`.toLowerCase()))
+      || g.options.find((o) => parts.some((p2) => p2.startsWith(`${String(o.name).toLowerCase()} (`)));
+    return hit?.food_menu_id;
+  }).filter(Boolean);
+}
+// "not applicable" modifier: price is typed at the till when it is selected (like the web POS keypad)
+const isOpenMod = (itemId, modId) => !!ITEM_BY_ID[itemId]?.modifiers.find((x) => x.id === modId)?.openPrice;
 const lineUnit = (l) => l.price + l.mods.reduce((s, m) => s + m.price, 0);
 const lineTotal = (l) => lineUnit(l) * l.qty * (1 - (Number(l.disc) || 0) / 100);
 const amountStr = ({ mode, value }) => (Number(value) > 0 ? (mode === "percent" ? `${Number(value)}%` : String(Number(value))) : "");
@@ -204,7 +218,10 @@ const lineAmount = (it) => (Number(it.price_with_discount) || 0) + (it.modifiers
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Arabic:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&display=swap');
-.pos{--bg:#EDF0F4;--panel:#FFFFFF;--ink:#1D2433;--ink2:#5A6478;--line:#DCE1E8;--brand:#5B3FD1;--brand-2:#EEE9FF;
+.pos{--bg:#EDF0F4;--panel:#FFFFFF;--ink:#1D2433;--ink2:#5A6478;--line:#DCE1E8;--brand:#5B3FD1;--brand-2:#EEE9FF;--brand-d:#3F2A9E;
+ --soft:#F6F7F9;--soft2:#F1F2F6;--hover:#FAFAFD;--line2:#EEF1F5;--muted:#9AA3B2;
+ --warn-bg:#FFF1D6;--warn-ink:#7A4F00;--warn-line:#F4D38E;--danger-bg:#FDECEA;--danger-ink:#A4262C;--danger-line:#F5C2C0;--ok-bg:#DCF2E3;--info-bg:#E3EEFD;
+ --modal-bg:rgba(18,22,34,.5);--tint-mix:100%;
  --ok:#1E9E6A;--danger:#DC3F35;--info:#1E7FD8;--amber:#E8A317;--veg:#1E8E3E;--radius:10px;
  font-family:Manrope,"Noto Sans Arabic","Noto Sans Devanagari",Tahoma,"Nirmala UI",system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg);
  height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;font-size:14px;-webkit-font-smoothing:antialiased}
@@ -220,18 +237,18 @@ const CSS = `
 .icon-btn:hover{background:var(--brand-2)}
 .icon-btn.danger{color:var(--danger)}
 .badge{position:absolute;top:3px;inset-inline-end:3px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center}
-.sync-pill{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:16px;border:1px solid var(--line);background:#fff;font-size:12px;font-weight:700;color:var(--ink2);white-space:nowrap;margin-inline-start:auto}
+.sync-pill{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:16px;border:1px solid var(--line);background:var(--panel);font-size:12px;font-weight:700;color:var(--ink2);white-space:nowrap;margin-inline-start:auto}
 .sync-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
 .sync-pill.off .dot{background:var(--danger)}.sync-pill.off{color:var(--danger)}
 .sync-pill.busy .dot{background:var(--amber);animation:pulse 1s infinite}
 @keyframes pulse{50%{opacity:.3}}
-.sync-pill .q{background:#FFF1D6;color:#7A4F00;border-radius:10px;padding:1px 7px}
+.sync-pill .q{background:var(--warn-bg);color:var(--warn-ink);border-radius:10px;padding:1px 7px}
 .sync-pill + .brand{margin-inline-start:8px}
 .brand{font-weight:800;font-size:18px;letter-spacing:.02em;color:var(--brand);padding:0 14px;border-inline-start:2px solid var(--line);border-inline-end:2px solid var(--line);white-space:nowrap;margin-inline-start:auto}
 .chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
 .chip{border:0;border-radius:8px;padding:8px 12px;font-weight:700;font-size:13px;white-space:nowrap;display:flex;align-items:center;gap:6px;color:#fff;opacity:.92}
 .chip[aria-pressed=true]{opacity:1;box-shadow:inset 0 0 0 2px rgba(0,0,0,.25)}
-.chip[aria-pressed=true]::before{content:"";width:6px;height:6px;border-radius:50%;background:#fff}
+.chip[aria-pressed=true]::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--panel)}
 .chip-abbr{display:none}
 .chip.veg{background:#4CAF50}.chip.bev{background:#5E7486}.chip.combo{background:#E8A317}.chip.promo{background:#E0245E}
 
@@ -242,61 +259,61 @@ const CSS = `
 /* running orders */
 .ro-head{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 6px}
 .ro-head h2{margin:0;font-size:17px;font-weight:800}
-.input{width:100%;height:38px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit;font-size:13px;background:#fff;color:var(--ink)}
+.input{width:100%;height:38px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit;font-size:13px;background:var(--panel);color:var(--ink)}
 .ro-list{flex:1;overflow-y:auto;padding:6px 10px;display:flex;flex-direction:column;gap:6px}
-.ro-card{text-align:start;border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 10px;display:grid;gap:3px;font-size:12px}
+.ro-card{text-align:start;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:8px 10px;display:grid;gap:3px;font-size:12px}
 .ro-card[aria-pressed=true]{border-color:var(--brand);background:var(--brand-2);box-shadow:inset 3px 0 0 var(--brand)}
 .ro-card .row{display:flex;justify-content:space-between;align-items:center;gap:6px}
 .ro-card b{font-size:14px}
-.tag{font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px;background:#EEF1F5;color:var(--ink2)}
-.tag.ready{background:#DCF2E3;color:var(--ok)}.tag.cooking{background:#FFF1D6;color:#9A6400}
+.tag{font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px;background:var(--soft2);color:var(--ink2)}
+.tag.ready{background:var(--ok-bg);color:var(--ok)}.tag.cooking{background:var(--warn-bg);color:var(--warn-ink)}
 .muted{color:var(--ink2)}
 .ro-empty{margin:auto;text-align:center;color:var(--ink2);font-size:13px;padding:20px}
 .ro-actions{padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px;border-top:1px solid var(--line)}
-.op-btn{grid-column:span 2;height:36px;border:1px solid var(--line);border-radius:8px;background:#F6F7F9;font-size:12.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px}
+.op-btn{grid-column:span 2;height:36px;border:1px solid var(--line);border-radius:8px;background:var(--soft);font-size:12.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px}
 .op-btn.half{grid-column:span 1}
-.op-btn:hover:not(:disabled){background:#fff;border-color:var(--brand);color:var(--brand)}
+.op-btn:hover:not(:disabled){background:var(--panel);border-color:var(--brand);color:var(--brand)}
 .op-btn:disabled{opacity:.45;cursor:not-allowed}
 
 /* cart */
 .cart{container-type:inline-size}
 .type-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px 10px 6px}
-.type-btn{height:40px;border:1px solid var(--line);border-radius:8px;background:#F6F7F9;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;overflow:hidden}
+.type-btn{height:40px;border:1px solid var(--line);border-radius:8px;background:var(--soft);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;overflow:hidden}
 .type-btn[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:#fff}
 .sel-row{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;padding:0 10px 8px}
-.select{height:38px;border:1px solid var(--line);border-radius:8px;padding:0 8px;font:inherit;font-size:13px;background:#fff;color:var(--ink);min-width:0;width:100%}
-.select:disabled{background:#F3F4F6;color:#9AA3B2}
-.sq-btn{width:38px;height:38px;border:1px solid var(--line);background:#F6F7F9;border-radius:8px;display:grid;place-items:center}
+.select{height:38px;border:1px solid var(--line);border-radius:8px;padding:0 8px;font:inherit;font-size:13px;background:var(--panel);color:var(--ink);min-width:0;width:100%}
+.select:disabled{background:var(--soft2);color:var(--muted)}
+.sq-btn{width:38px;height:38px;border:1px solid var(--line);background:var(--soft);border-radius:8px;display:grid;place-items:center}
 .sq-btn:hover{border-color:var(--brand);color:var(--brand)}
 .sel-actions{display:flex;gap:6px}
-.edit-banner{margin:0 10px 8px;padding:8px 10px;border-radius:8px;background:#FFF1D6;color:#7A4F00;font-size:12.5px;font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:8px}
-.edit-banner button{border:0;background:transparent;font-weight:700;text-decoration:underline;color:#7A4F00}
+.edit-banner{margin:0 10px 8px;padding:8px 10px;border-radius:8px;background:var(--warn-bg);color:var(--warn-ink);font-size:12.5px;font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.edit-banner button{border:0;background:transparent;font-weight:700;text-decoration:underline;color:var(--warn-ink)}
 .context-line{padding:0 12px 6px;font-size:12px;color:var(--ink2);display:flex;gap:10px;flex-wrap:wrap}
 .context-line b{color:var(--ink)}
 .cart-table{flex:1;min-height:0;display:flex;flex-direction:column;margin:0 10px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .cart-grid{display:grid;grid-template-columns:minmax(0,1fr) 70px 108px 76px 30px;align-items:center;gap:6px;padding:0 10px}
-.cart-head{height:36px;background:#F6F7F9;border-bottom:1px solid var(--line);font-size:12px;font-weight:800;color:var(--ink2)}
+.cart-head{height:36px;background:var(--soft);border-bottom:1px solid var(--line);font-size:12px;font-weight:800;color:var(--ink2)}
 .cart-head .r,.cart-row .r{text-align:end}
 .cart-body{flex:1;overflow-y:auto}
-.cart-row{user-select:none;min-height:50px;border-bottom:1px solid #EEF1F5;padding-top:6px;padding-bottom:6px}
-.cart-row:hover{background:#FAFAFD}
+.cart-row{user-select:none;min-height:50px;border-bottom:1px solid var(--line2);padding-top:6px;padding-bottom:6px}
+.cart-row:hover{background:var(--hover)}
 .cart-name{border:0;background:transparent;text-align:start;padding:0;font-weight:700;font-size:13.5px;min-width:0}
 .cart-name small{display:block;font-weight:500;font-size:11.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .qty{display:flex;align-items:center;border:1px solid var(--line);border-radius:8px;overflow:hidden;height:34px;width:max-content;justify-self:center}
-.qty button{width:32px;height:100%;border:0;background:#F6F7F9;display:grid;place-items:center}
+.qty button{width:32px;height:100%;border:0;background:var(--soft);display:grid;place-items:center}
 .qty button:hover{background:var(--brand-2);color:var(--brand)}
 .qty span{min-width:34px;text-align:center;font-weight:800}
-.del{border:0;background:transparent;color:#A3ABB9;width:30px;height:30px;border-radius:6px;display:grid;place-items:center}
-.del:hover{color:var(--danger);background:#FDECEA}
+.del{border:0;background:transparent;color:var(--muted);width:30px;height:30px;border-radius:6px;display:grid;place-items:center}
+.del:hover{color:var(--danger);background:var(--danger-bg)}
 .cart-empty{height:100%;display:grid;place-items:center;text-align:center;color:var(--ink2);padding:20px;font-size:13px}
-.cart-empty svg{color:#C4CAD4;margin-bottom:6px}
+.cart-empty svg{color:var(--muted);margin-bottom:6px}
 @container (max-width:430px){.cart-grid{grid-template-columns:minmax(0,1fr) 104px 70px 28px}.cart-grid .col-price{display:none}}
 @container (max-width:420px){.act svg{display:none}.act{font-size:13px}}
 @container (max-width:470px){.type-btn svg{display:none}.type-btn{font-size:12px;gap:0}}
-.total-bar{margin:8px 10px 0;height:48px;border-radius:8px;background:#F1F2F6;display:flex;align-items:center;justify-content:center;gap:6px;position:relative}
+.total-bar{margin:8px 10px 0;height:48px;border-radius:8px;background:var(--soft2);display:flex;align-items:center;justify-content:center;gap:6px;position:relative}
 .total-bar .amount{font-size:24px;font-weight:800;color:var(--ink)}
 .total-bar .lbl{font-size:15px;font-weight:600;color:var(--ink2);margin-inline-end:4px}
-.date-pop{position:absolute;bottom:54px;inset-inline-start:0;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;box-shadow:0 10px 30px rgba(20,24,40,.18);z-index:5;display:grid;gap:6px;font-size:12px;font-weight:700}
+.date-pop{position:absolute;bottom:54px;inset-inline-start:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;box-shadow:0 10px 30px rgba(20,24,40,.18);z-index:5;display:grid;gap:6px;font-size:12px;font-weight:700}
 .act-row{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;padding:8px 10px 10px}
 .act{height:46px;border:0;border-radius:8px;color:#fff !important;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
 .act.cancel{background:var(--danger)}.act.quick{background:#7C4DEB}.act.place{background:var(--info)}
@@ -305,14 +322,15 @@ const CSS = `
 /* menu */
 .menu-top{padding:10px 10px 8px}
 .search{position:relative}
-.search svg{position:absolute;inset-inline-start:11px;top:50%;transform:translateY(-50%);color:#9AA3B2}
+.search svg{position:absolute;inset-inline-start:11px;top:50%;transform:translateY(-50%);color:var(--muted)}
 .search .input{padding-inline-start:36px;height:42px;font-size:14px}
-.search kbd{position:absolute;inset-inline-end:10px;top:50%;transform:translateY(-50%);font:600 11px Manrope,sans-serif;color:#9AA3B2;border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+.search kbd{position:absolute;inset-inline-end:10px;top:50%;transform:translateY(-50%);font:600 11px Manrope,sans-serif;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
 .menu-body{flex:1;min-height:0;display:grid;grid-template-columns:136px 1fr;gap:10px;padding:0 10px 10px}
 .cats{overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-inline-end:2px}
-.cat{flex:none;min-height:42px;border:1px solid rgba(0,0,0,.05);border-radius:8px;font-weight:800;font-size:13px;padding:6px 8px;color:#2A3242}
+.cat{flex:none;min-height:42px;border:1px solid rgba(0,0,0,.05);border-radius:8px;font-weight:800;font-size:13px;padding:6px 8px;color:var(--ink)}
 .cat[aria-pressed=true]{box-shadow:inset 0 0 0 2px var(--ink);}
-.cat.all{background:#FFF3BF}
+.cat,.item{background:color-mix(in srgb,var(--tint,var(--panel)) var(--tint-mix),var(--panel))}
+.cat.all{--tint:#FFF3BF}
 .items{overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));grid-auto-rows:min-content;gap:10px;align-content:start;padding:8px 8px 8px 2px}
 .item{position:relative;min-height:100px;border:1px solid rgba(0,0,0,.05);border-radius:10px;padding:24px 10px 10px;text-align:center;display:flex;flex-direction:column;justify-content:space-between;gap:8px;box-shadow:0 1px 0 rgba(0,0,0,.04)}
 .item:hover{box-shadow:0 4px 14px rgba(30,40,70,.12)}
@@ -341,7 +359,7 @@ const CSS = `
 .thumb.sm{width:34px;height:34px;border-radius:8px;flex:none}
 .thumb.lg{height:170px;border-radius:12px;margin-bottom:14px}
 .view-toggle{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
-.view-toggle button{width:42px;height:42px;border:0;background:#fff;display:grid;place-items:center;color:var(--ink2)}
+.view-toggle button{width:42px;height:42px;border:0;background:var(--panel);display:grid;place-items:center;color:var(--ink2)}
 .view-toggle button[aria-pressed=true]{background:var(--brand);color:#fff}
 .menu-top{display:flex;gap:8px;align-items:center}.menu-top .search{flex:1;min-width:0}
 .cart-name.with-thumb{display:flex;align-items:center;gap:8px}
@@ -387,7 +405,7 @@ const CSS = `
  .main > .cart,.main > .menu{display:none}
  .main[data-tab=order] > .cart,.main[data-tab=menu] > .menu{display:flex}
  .mob-tabs{display:grid;grid-template-columns:1fr 1.3fr;gap:6px;padding:6px;background:var(--panel);border-top:1px solid var(--line)}
- .mob-tabs button{height:46px;border-radius:8px;border:1px solid var(--line);background:#F6F7F9;font-weight:800;display:flex;align-items:center;justify-content:center;gap:8px}
+ .mob-tabs button{height:46px;border-radius:8px;border:1px solid var(--line);background:var(--soft);font-weight:800;display:flex;align-items:center;justify-content:center;gap:8px}
  .mob-tabs button[aria-pressed=true]{background:var(--brand);color:#fff;border-color:var(--brand)}
  .tb-icons .opt-sm{display:none}
  .act{font-size:13px}
@@ -398,20 +416,20 @@ const CSS = `
 }
 
 /* modal */
-.modal-wrap{position:fixed;inset:0;z-index:100;background:rgba(18,22,34,.5);display:grid;place-items:start center;padding:4vh 12px;overflow-y:auto}
-.modal{background:#fff;border-radius:14px;width:100%;max-width:560px;box-shadow:0 24px 60px rgba(10,14,30,.3);display:flex;flex-direction:column;max-height:92vh}
+.modal-wrap{position:fixed;inset:0;z-index:100;background:var(--modal-bg);display:grid;place-items:start center;padding:4vh 12px;overflow-y:auto}
+.modal{background:var(--panel);border-radius:14px;width:100%;max-width:560px;box-shadow:0 24px 60px rgba(10,14,30,.3);display:flex;flex-direction:column;max-height:92vh}
 .modal.lg{max-width:820px}.modal.sm{max-width:420px}
 .modal-h{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line)}
 .modal-h h3{margin:0;font-size:19px;font-weight:800}
 .modal-b{padding:18px;overflow-y:auto}
 .modal-f{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line)}
-.btn{height:42px;padding:0 18px;border-radius:8px;border:1px solid var(--line);background:#F6F7F9;font-weight:700;display:inline-flex;align-items:center;gap:6px}
+.btn{height:42px;padding:0 18px;border-radius:8px;border:1px solid var(--line);background:var(--soft);font-weight:700;display:inline-flex;align-items:center;gap:6px}
 .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff !important}
 .btn.ok{background:var(--ok);border-color:var(--ok);color:#fff !important}
 .btn.danger{background:var(--danger);border-color:var(--danger);color:#fff !important}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .types{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.type-card{border:2px solid var(--line);border-radius:14px;background:#fff;padding:22px 10px 16px;display:grid;justify-items:center;gap:12px;font-weight:800;font-size:16px}
+.type-card{border:2px solid var(--line);border-radius:14px;background:var(--panel);padding:22px 10px 16px;display:grid;justify-items:center;gap:12px;font-weight:800;font-size:16px}
 .type-card:hover{border-color:var(--brand);background:var(--brand-2)}
 .type-card .ill{width:84px;height:84px;border-radius:50%;display:grid;place-items:center}
 @media (max-width:480px){.types{grid-template-columns:1fr}.type-card{grid-template-columns:auto 1fr;justify-items:start;align-items:center;padding:12px}.type-card .ill{width:54px;height:54px}}
@@ -419,7 +437,7 @@ const CSS = `
 .field textarea{min-height:64px;padding:8px 10px;height:auto}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .mod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:12px}
-.mod{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff;text-align:start;display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:600;font-size:13px}
+.mod{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel);text-align:start;display:flex;justify-content:space-between;align-items:center;gap:6px;font-weight:600;font-size:13px}
 .mod[aria-pressed=true]{border-color:var(--brand);background:var(--brand-2);color:var(--brand)}
 .qty.big{height:44px}.qty.big button{width:44px}.qty.big span{min-width:50px;font-size:18px}
 .sum-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px dashed var(--line);font-weight:600}
@@ -427,39 +445,55 @@ const CSS = `
 .inline-edit{display:flex;gap:6px;align-items:center}
 .inline-edit .input{width:90px;height:34px}.inline-edit .select{width:auto;height:34px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.seg button{border:0;background:#fff;padding:8px 14px;font-weight:700;font-size:13px}
+.seg button{border:0;background:var(--panel);padding:8px 14px;font-weight:700;font-size:13px}
 .seg button[aria-pressed=true]{background:var(--brand);color:#fff}
 .tables{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin:14px 0}
-.tbl{border:2px solid var(--line);border-radius:12px;background:#fff;padding:12px 8px;display:grid;justify-items:center;gap:4px}
+.tbl{border:2px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 8px;display:grid;justify-items:center;gap:4px}
 .tbl b{font-size:18px}
-.tbl.busy{background:#FFF6E6;border-color:#F4D38E}
+.tbl.busy{background:var(--warn-bg);border-color:var(--warn-line)}
 .tbl[aria-pressed=true]{border-color:var(--brand);background:var(--brand-2)}
 .list{display:grid;gap:8px}
 .list-row{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .pay-methods{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
-.pm{border:2px solid var(--line);border-radius:10px;background:#fff;padding:12px 6px;display:grid;justify-items:center;gap:6px;font-weight:700;font-size:13px}
+.pm{border:2px solid var(--line);border-radius:10px;background:var(--panel);padding:12px 6px;display:grid;justify-items:center;gap:6px;font-weight:700;font-size:13px}
 .pm[aria-pressed=true]{border-color:var(--brand);background:var(--brand-2);color:var(--brand)}
 .quick-amts{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
-.quick-amts button{border:1px solid var(--line);background:#F6F7F9;border-radius:8px;padding:8px 12px;font-weight:700;position:relative}
+.quick-amts button{border:1px solid var(--line);background:var(--soft);border-radius:8px;padding:8px 12px;font-weight:700;position:relative}
 .quick-amts button:disabled{opacity:.45;cursor:not-allowed}
 .dcount{position:absolute;top:-7px;inset-inline-end:-7px;background:var(--brand);color:#fff;border-radius:999px;font-size:11px;min-width:18px;height:18px;display:grid;place-items:center;padding:0 4px}
 .pay-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px}
 @media(max-width:700px){.pay-grid{grid-template-columns:1fr}}
-.pay-entry{display:flex;gap:8px;margin-bottom:10px}
-.pay-side{background:#F6F7F9;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:4px}
+.pay-entry-label{font-size:12.5px;font-weight:700;color:var(--ink2);margin-bottom:6px}
+.pay-entry{display:flex;gap:8px;margin-bottom:10px;align-items:stretch}
+.pay-entry .input{flex:1;height:46px;font-size:17px;font-weight:700}
+.pay-entry .btn{height:46px;flex:none}
+.change-box{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:8px 0 10px;padding:12px 14px;border-radius:10px;
+ background:var(--ok-bg);border:2px solid var(--ok);color:var(--ok);font-weight:800;font-size:16px}
+.change-box b{font-size:26px;line-height:1}
+.pay-side{background:var(--soft);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:4px}
 .pay-lines{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;min-height:60px}
-.pay-line{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 6px 6px 10px;font-size:14px;font-weight:600}
+.pay-line{display:flex;justify-content:space-between;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 6px 6px 10px;font-size:14px;font-weight:600}
 .reg-sales{margin-top:14px}
-.reg-sales-h{background:#EDEFF3;font-weight:700;padding:7px 10px;border-radius:6px;font-size:13.5px}
+.reg-sales-h{background:var(--soft2);font-weight:700;padding:7px 10px;border-radius:6px;font-size:13.5px}
 .reg-sales table{width:100%;border-collapse:collapse;font-size:13px}
 .reg-sales th{text-align:start;font-weight:700;padding:7px 4px;border-bottom:1px solid var(--line)}
 .reg-sales td{padding:6px 4px;border-bottom:1px dashed var(--line)}
 .reg-sales .r{text-align:end}
 .reg-sales tfoot td{font-weight:800;border-bottom:none}
+.modal.xl{max-width:1040px}
+.so-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:16px;min-height:340px}
+@media(max-width:820px){.so-grid{grid-template-columns:1fr}}
+.so-row{width:100%;border:1px solid var(--line);background:var(--panel);cursor:pointer;font:inherit;color:inherit}
+.so-row[aria-pressed=true]{border-color:var(--brand);background:var(--brand-2)}
+.so-detail{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--soft)}
+.so-items{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px}
+.so-items th{text-align:start;padding:6px 4px;border-bottom:1px solid var(--line);font-weight:700}
+.so-items td{padding:6px 4px;border-bottom:1px dashed var(--line);vertical-align:top}
+.so-items .r{text-align:end}
 .pay-change{display:flex;justify-content:space-between;color:var(--danger);font-weight:800;font-size:16px;margin-top:6px}
 .pm:disabled{opacity:.5;cursor:not-allowed}
-.pay-due{display:flex;justify-content:space-between;background:#F1F2F6;border-radius:10px;padding:14px;font-size:18px;font-weight:800;margin-bottom:14px}
-.menu-sheet{position:fixed;top:0;inset-inline-end:0;bottom:0;width:300px;max-width:88vw;background:#fff;z-index:60;box-shadow:-10px 0 40px rgba(10,14,30,.2);display:flex;flex-direction:column}
+.pay-due{display:flex;justify-content:space-between;background:var(--soft2);border-radius:10px;padding:14px;font-size:18px;font-weight:800;margin-bottom:14px}
+.menu-sheet{position:fixed;top:0;inset-inline-end:0;bottom:0;width:300px;max-width:88vw;background:var(--panel);z-index:60;box-shadow:-10px 0 40px rgba(10,14,30,.2);display:flex;flex-direction:column}
 .menu-sheet .item-link{display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;padding:12px 18px;font-weight:600;text-align:start;font-size:14px}
 .menu-sheet .item-link:hover{background:var(--brand-2);color:var(--brand)}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1D2433;color:#fff;padding:11px 18px;border-radius:10px;font-weight:600;font-size:13.5px;z-index:200;display:flex;gap:8px;align-items:center;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:92vw}
@@ -474,16 +508,16 @@ const CSS_ONLINE = `
 .pos[dir=rtl] .menu-sheet{box-shadow:10px 0 40px rgba(10,14,30,.2)}
 .trial-badge{flex:none;background:#B45309;color:#fff;font-weight:800;font-size:11.5px;letter-spacing:.02em;border-radius:999px;padding:5px 10px;white-space:nowrap}
 .lang-pick{display:flex;gap:6px;padding:10px 18px;border-top:1px solid var(--line)}
-.lang-pick button{flex:1;height:36px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:700;font-size:13px}
+.lang-pick button{flex:1;height:36px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-weight:700;font-size:13px}
 .lang-pick button[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:#fff}
-.lang-btn{display:inline-flex;align-items:center;gap:4px;height:34px;padding:0 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:800;font-size:12px;color:var(--ink2)}
-.lang-menu{position:absolute;top:calc(100% + 4px);inset-inline-start:0;z-index:70;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(30,36,60,.16);padding:4px;min-width:150px}
+.lang-btn{display:inline-flex;align-items:center;gap:4px;height:34px;padding:0 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-weight:800;font-size:12px;color:var(--ink2)}
+.lang-menu{position:absolute;top:calc(100% + 4px);inset-inline-start:0;z-index:70;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(30,36,60,.16);padding:4px;min-width:150px}
 .lang-menu button{display:flex;justify-content:space-between;width:100%;border:0;background:transparent;padding:8px 10px;border-radius:7px;font-weight:700;font-size:14px}
 .lang-menu button:hover,.lang-menu button[aria-pressed=true]{background:var(--brand-2);color:var(--brand)}
 .ss{position:relative;min-width:0}
-.ss-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:6px;text-align:start;cursor:pointer;background:#fff}
+.ss-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:6px;text-align:start;cursor:pointer;background:var(--panel)}
 .ss-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;unicode-bidi:plaintext}
-.ss-pop{position:absolute;z-index:60;top:calc(100% + 4px);inset-inline-start:0;min-width:100%;width:max-content;max-width:min(360px,90vw);background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(30,36,60,.16);overflow:hidden}
+.ss-pop{position:absolute;z-index:60;top:calc(100% + 4px);inset-inline-start:0;min-width:100%;width:max-content;max-width:min(360px,90vw);background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(30,36,60,.16);overflow:hidden}
 .ss-search{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);color:var(--ink2)}
 .ss-search input{border:0;outline:0;flex:1;font:inherit;font-size:14px;min-width:160px;color:var(--ink)}
 .ss-list{max-height:280px;overflow:auto;padding:4px}
@@ -491,20 +525,20 @@ const CSS_ONLINE = `
 .ss-opt small{color:var(--ink2);font-weight:500;font-size:12px}
 .ss-opt.hi{background:var(--brand-2)}.ss-opt[aria-selected=true]{color:var(--brand)}
 .ss-empty{padding:10px;color:var(--ink2);font-size:13px}
-.ss-foot{display:flex;align-items:center;gap:6px;width:100%;border:0;border-top:1px solid var(--line);background:#FAFAFD;padding:9px 12px;font-weight:700;color:var(--brand);cursor:pointer}
+.ss-foot{display:flex;align-items:center;gap:6px;width:100%;border:0;border-top:1px solid var(--line);background:var(--hover);padding:9px 12px;font-weight:700;color:var(--brand);cursor:pointer}
 .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 10px}
 @media (max-width:700px){.grid3{grid-template-columns:1fr 1fr}}
 .ferr{display:block;color:var(--danger);font-weight:600;margin-top:3px}
 .addr-pick{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;font-size:14px}
 .addr-pick label{display:flex;gap:8px;align-items:center;cursor:pointer}
 .na-head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-weight:800;font-size:15px;margin:4px 0 10px;padding-top:12px;border-top:1px solid var(--line)}
-.na-warn{color:#9A6400;font-size:12.5px;font-weight:600}.na-ok{color:var(--ok);font-size:12.5px;font-weight:700;display:inline-flex;gap:4px;align-items:center}
+.na-warn{color:var(--warn-ink);font-size:12.5px;font-weight:600}.na-ok{color:var(--ok);font-size:12.5px;font-weight:700;display:inline-flex;gap:4px;align-items:center}
 .link-reset{border:0;background:transparent;color:var(--brand);font-weight:700;cursor:pointer;padding:0;font-size:12px}
 .quick-amts button[aria-pressed=true]{border-color:var(--brand);background:var(--brand-2);color:var(--brand)}
 .ro-filter{display:grid;grid-template-columns:auto repeat(3,1fr);gap:4px;padding:0 10px 8px}
-.ro-filter button{border:1px solid var(--line);background:#fff;border-radius:8px;height:32px;display:flex;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:700;color:var(--ink2);padding:0 4px;min-width:0}
+.ro-filter button{border:1px solid var(--line);background:var(--panel);border-radius:8px;height:32px;display:flex;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:700;color:var(--ink2);padding:0 4px;min-width:0}
 .ro-filter button .lbl{white-space:nowrap}
-.ro-filter button .n{background:#EEF0F5;border-radius:999px;padding:0 6px;font-size:11px;line-height:17px}
+.ro-filter button .n{background:var(--soft2);border-radius:999px;padding:0 6px;font-size:11px;line-height:17px}
 .ro-filter button[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:#fff}
 .ro-filter button[aria-pressed=true] .n{background:rgba(255,255,255,.25)}
 .partner-pick{display:flex;align-items:center;gap:6px;text-align:start;overflow:hidden;white-space:nowrap;cursor:pointer}
@@ -512,48 +546,61 @@ const CSS_ONLINE = `
 .partner-pick span{overflow:hidden;text-overflow:ellipsis;unicode-bidi:plaintext}
 .partner-pick:disabled{opacity:.55;cursor:not-allowed}
 .partners{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-bottom:16px}
-.partner{position:relative;border:2px solid var(--line);border-radius:12px;background:#fff;padding:12px 8px;display:grid;justify-items:center;gap:8px;font-weight:800;font-size:14px}
-.partner .logo{width:84px;height:84px;border-radius:14px;display:grid;place-items:center;overflow:hidden;background:#F4F5F9;font-size:26px;color:var(--brand)}
+.partner{position:relative;border:2px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 8px;display:grid;justify-items:center;gap:8px;font-weight:800;font-size:14px}
+.partner .logo{width:84px;height:84px;border-radius:14px;display:grid;place-items:center;overflow:hidden;background:var(--soft2);font-size:26px;color:var(--brand)}
 .partner .logo img{width:100%;height:100%;object-fit:contain}
 .partner[aria-pressed=true]{border-color:var(--brand);background:var(--brand-2);box-shadow:0 6px 18px rgba(91,63,209,.15)}
 .partner .tick{position:absolute;top:-9px;inset-inline-start:-9px;width:24px;height:24px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center}
 .tsearch{margin-bottom:10px}
 .tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:10px;margin-top:10px;align-items:start}
-.tcard{border:1px solid var(--line);border-inline-start:4px solid var(--ok);border-radius:10px;background:#fff;padding:10px;display:grid;gap:8px}
+.tcard{border:1px solid var(--line);border-inline-start:4px solid var(--ok);border-radius:10px;background:var(--panel);padding:10px;display:grid;gap:8px}
 .tcard.part{border-inline-start-color:#E5A11A}.tcard.full{border-inline-start-color:var(--danger)}
 .tcard.sel{border-color:var(--brand);border-inline-start-color:var(--brand);background:var(--brand-2)}
 .tcard .th{display:flex;justify-content:space-between;align-items:flex-start;gap:6px}
 .tcard .th b{font-size:15px;display:block}
 .tcard .th-r{display:flex;gap:6px;align-items:center}
-.bk-btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:800;color:var(--brand);cursor:pointer}
+.bk-btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:2px 8px;font-size:12px;font-weight:800;color:var(--brand);cursor:pointer}
 .bk-btn:hover{border-color:var(--brand);background:var(--brand-2)}.tcard .th small{color:var(--ink2);font-size:11.5px}
-.tcard .seats{border-radius:999px;padding:2px 8px;font-size:12px;font-weight:800;white-space:nowrap;background:#E3F6EC;color:var(--ok)}
-.tcard.part .seats{background:#FFF1D6;color:#9A6400}.tcard.full .seats{background:#FDECEA;color:var(--danger)}
+.tcard .seats{border-radius:999px;padding:2px 8px;font-size:12px;font-weight:800;white-space:nowrap;background:var(--ok-bg);color:var(--ok)}
+.tcard.part .seats{background:var(--warn-bg);color:var(--warn-ink)}.tcard.full .seats{background:var(--danger-bg);color:var(--danger)}
 .bk{width:100%;font-size:13.5px;border-collapse:collapse;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.bk th{background:#EEE9FF;color:#3F2A9E;text-align:start;padding:8px 10px;font-weight:700;font-size:12.5px}
-.bk td{padding:8px 10px;border-top:1px solid #EEF1F5}.bk td:first-child{font-weight:700}
+.bk th{background:var(--brand-2);color:var(--brand-d);text-align:start;padding:8px 10px;font-weight:700;font-size:12.5px}
+.bk td{padding:8px 10px;border-top:1px solid var(--line2)}.bk td:first-child{font-weight:700}
 .tcard .add{display:flex;gap:6px;align-items:center}
 .tcard .add .qty{flex:none}.tcard .add .btn.primary{flex:1;justify-content:center}
 .tcard .add .btn{height:34px;padding:0 12px}
 .tchips{display:flex;flex-wrap:wrap;gap:6px;margin-inline-end:auto;align-items:center;font-weight:700;font-size:13px}
 .tchip{display:inline-flex;align-items:center;gap:6px;background:var(--brand-2);color:var(--brand-d,#3F2A9E);border-radius:999px;padding:4px 6px 4px 10px;font-size:12.5px;font-weight:700}
 .tchip button{border:0;background:transparent;color:inherit;display:grid;place-items:center;padding:0;cursor:pointer}
-.conn{display:flex;align-items:center;gap:8px;justify-content:center;background:#FDECEA;color:#A4262C;font-weight:700;font-size:13px;padding:6px 10px;border-bottom:1px solid #F5C2C0}
+.conn{display:flex;align-items:center;gap:8px;justify-content:center;background:var(--danger-bg);color:var(--danger-ink);font-weight:700;font-size:13px;padding:6px 10px;border-bottom:1px solid var(--danger-line)}
 .who{font-size:12px;color:var(--ink2);white-space:nowrap;padding:0 6px;display:flex;flex-direction:column;line-height:1.2;text-align:end}
 .who b{color:var(--ink);font-size:13px}
-.calc-msg{margin:6px 10px 0;padding:6px 10px;border-radius:8px;background:#FFF1D6;color:#7A4F00;font-size:12.5px;font-weight:600}
+.calc-msg{margin:6px 10px 0;padding:6px 10px;border-radius:8px;background:var(--warn-bg);color:var(--warn-ink);font-size:12.5px;font-weight:600}
 .total-bar .spin{animation:spin .8s linear infinite;color:var(--ink2)}@keyframes spin{to{transform:rotate(360deg)}}
-.tag.new{background:#E3EEFD;color:var(--info)}.tag.bill{background:#EBE2FA;color:#5B3FD1}
+.tag.new{background:var(--info-bg);color:var(--info)}.tag.bill{background:var(--brand-2);color:var(--brand)}
 .var-list{display:grid;gap:8px}
-.var-row{border:1px solid var(--line);border-radius:10px;background:#fff;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:14px}
+.var-row{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px 14px;display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:14px}
 .var-row:hover{border-color:var(--brand);background:var(--brand-2)}
 .combo-group{margin-bottom:12px}.combo-group .field{margin-bottom:6px}
 .done-box{text-align:center;padding:4px 0 8px}
 .done-box .big{font-size:26px;font-weight:800;margin:6px 0}
 .zatca{display:flex;gap:8px;align-items:flex-start;justify-content:center;margin-top:10px;font-size:13px;font-weight:700}
-.zatca.ok{color:var(--ok)}.zatca.warn{color:#9A6400}
+.zatca.ok{color:var(--ok)}.zatca.warn{color:var(--warn-ink)}
 .act:disabled,.op-btn:disabled{opacity:.5;cursor:not-allowed}
 .setting-row{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;font-weight:600;font-size:14px;border-top:1px solid var(--line)}
+
+/* ---------- dark mode (<html data-theme="dark">) ---------- */
+:root[data-theme=dark] .pos{--bg:#0F131B;--panel:#1A202B;--ink:#E8ECF3;--ink2:#A3ADBF;--line:#2E3746;--brand:#8B74F0;--brand-2:#2C2550;--brand-d:#C9BEFF;
+ --soft:#222936;--soft2:#252D3B;--hover:#212836;--line2:#262E3C;--muted:#768196;
+ --warn-bg:#3A2E12;--warn-ink:#F2C46B;--warn-line:#6B5520;--danger-bg:#3B1E1E;--danger-ink:#FF9C94;--danger-line:#6A2C2A;--ok-bg:#16352A;--info-bg:#17304C;
+ --ok:#34C08A;--danger:#EF5A50;--info:#4A9BEA;--modal-bg:rgba(0,0,0,.62);--tint-mix:22%}
+:root[data-theme=dark] .pos .cat,:root[data-theme=dark] .pos .item{border-color:rgba(255,255,255,.06)}
+:root[data-theme=dark] .pos .thumb.art{background:radial-gradient(circle at 30% 25%,rgba(255,255,255,.10),rgba(255,255,255,.02) 70%),color-mix(in srgb,var(--tint) 22%,var(--panel))}
+:root[data-theme=dark] .pos .thumb.art svg{color:rgba(232,236,243,.6);filter:none}
+:root[data-theme=dark] .pos .item.has-img .marks{background:rgba(26,32,43,.9)}
+:root[data-theme=dark] .pos .toast{background:#E8ECF3;color:#141922}
+:root[data-theme=dark] .pos input,:root[data-theme=dark] .pos textarea,:root[data-theme=dark] .pos select{color-scheme:dark}
+:root[data-theme=dark] .pos ::placeholder{color:#6F7A8E}
 `;
 
 /* ============================================================================
@@ -600,6 +647,7 @@ const KITCHEN_TAG = { new: ["new", "New"], cooking: ["cooking", "Cooking"], read
 /* ============================================================================
    MAIN
    ========================================================================== */
+const SELF_POLL_MS = 20000;        // waiting self / online orders (badge on the top bar)
 const RUNNING_POLL_MS = 10000;     // running orders + kitchen status (live sync with web POS / kitchen screen)
 const NOTIF_POLL_MS = 15000;
 
@@ -610,6 +658,8 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
   const changeLang = (l) => { setLang(l); setLangState(l); setLangOpen(false); };
   const dir = isRtl(lang) ? "rtl" : "ltr";
   const isWaiter = !!user?.permissions?.is_waiter;
+  const [theme, toggleTheme] = useTheme();
+  const [oskOn, setOskOn] = useOskEnabled();
   const canPay = !isWaiter || !!user?.permissions?.pos?.pos_1;
 
   // catalogue & filters
@@ -635,6 +685,8 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
   const [chargeTouched, setChargeTouched] = useState(false); // untouched = server default for the order type
   const [tips, setTips] = useState(0);
   const [editingId, setEditingId] = useState(null);          // running order id being modified
+  const [editingSelf, setEditingSelf] = useState(false);     // it was a self / online order: full KOT after the update
+  const [selfCount, setSelfCount] = useState(0);             // waiting self + online orders
 
   // server data
   const [calc, setCalc] = useState(null);                    // POST /orders/calculate result
@@ -775,7 +827,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
         const it = {
           food_menu_id: l.itemId,
           qty: l.qty,
-          modifier_ids: l.mods.map((m) => m.id),
+          modifier_ids: l.mods.map((m) => (isOpenMod(l.itemId, m.id) ? { id: m.id, price: Number(m.price) || 0 } : m.id)),
           note: l.note || "",
           discount: l.discRaw != null ? l.discRaw : (Number(l.disc) > 0 ? `${Number(l.disc)}%` : ""),
         };
@@ -862,7 +914,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
   const resetOrder = () => {
     setCart([]); setOrderType(defaultTypeKey()); setTable(null); setWaiter(firstWaiter()); setCustomerId(DEFAULT_CUSTOMER_ID);
     setPartner(""); setPartnerRef(""); setDiscount({ mode: "fixed", value: 0 }); setCharge({ mode: "percent", value: 0 }); setChargeTouched(false);
-    setTips(0); setEditingId(null); setOrderDate(new Date().toISOString().slice(0, 10)); setCalc(null); setCalcErr("");
+    setTips(0); setEditingId(null); setEditingSelf(false); setOrderDate(new Date().toISOString().slice(0, 10)); setCalc(null); setCalcErr("");
   };
 
   /* ---------- printing ----------
@@ -923,7 +975,10 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
         : await post("/v1/orders", body, { idempotencyKey: await newKey() });
       ok();
       notify(tr(editingId ? "Order {n} updated — sent to the kitchen" : "Order {n} placed — sent to the kitchen", { n: r.order.order_number || r.order.sale_no }));
-      if (prefs.printKot && r.kot?.prints?.length) printKot(r.kot);
+      let kot = r.kot;
+      // a self / online order changed before it went to the kitchen: the kitchen gets the whole order now
+      if (editingId && editingSelf) kot = await get(`/v1/orders/${editingId}/kot?all=1`).catch(() => r.kot);
+      if (prefs.printKot && kot?.prints?.length) printKot(kot);
       resetOrder();
       setModal(null);
       setTab("menu");
@@ -1021,14 +1076,19 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     if (cart.length && !editingId && !(await ask(tr("Replace the items in the current order with this running order?"), { confirmLabel: tr("Replace") }))) return;
     setBusy("load");
     try {
-      const o = await get(`/v1/orders/${sel.id}`);
+      loadOrder(await get(`/v1/orders/${sel.id}`));
+    } catch (e) { onError(e); }
+    finally { setBusy(null); }
+  };
+  const loadOrder = (o, fromSelf = false) => {
+    {
       setCart(o.items.filter((l) => !l.is_free).map((l) => {
         const d = parseAmount(l.discount);
         return {
           key: `line-${l.line_id}`, lineId: l.line_id, itemId: l.food_menu_id, name: l.name, price: Number(l.unit_price) || 0, qty: Number(l.qty) || 1,
           mods: (l.modifiers || []).map((x) => ({ id: x.id, name: x.name, price: Number(x.price) || 0 })), note: l.note || "",
           disc: d.mode === "percent" ? d.value : 0, discRaw: d.mode === "fixed" && d.value ? String(d.value) : null,
-          openPrice: false, comboSelections: [], cooking: l.cooking_status,
+          openPrice: false, comboSelections: comboFromText(ITEM_BY_ID[l.food_menu_id], l.combo_items), cooking: l.cooking_status,
         };
       }));
       setOrderType(TYPE_KEY[o.order_type] || "take");
@@ -1042,15 +1102,42 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
       setCharge(parseAmount(o.totals?.charge)); setChargeTouched(true);
       setTips(Number(o.totals?.tips) || 0);
       setOrderDate(o.sale_date || new Date().toISOString().slice(0, 10));
-      setEditingId(o.id); setDrawer(false); setTab("order");
+      setEditingId(o.id); setEditingSelf(fromSelf); setDrawer(false); setTab("order");
       notify(tr("Editing order {n}", { n: o.order_number || o.sale_no }));
-    } catch (e) { onError(e); }
-    finally { setBusy(null); }
+    }
+  };
+
+  /* ---------- self / online orders (web POS "Self/Online Orders") ---------- */
+  const canSelf = !isWaiter && (user?.role === "Admin" || !!user?.permissions?.pos?.pos_17);
+  const refreshSelf = useCallback(async () => {
+    if (!canSelf) return;
+    try { const r = await get("/v1/orders/self"); setSelfCount((r.self_orders?.length || 0) + (r.online_orders?.length || 0)); } catch { /* next time */ }
+  }, [canSelf]);
+  useEffect(() => { refreshSelf(); const t = setInterval(refreshSelf, SELF_POLL_MS); return () => clearInterval(t); }, [refreshSelf]);
+  const acceptSelf = async (o) => {
+    const r = await post(`/v1/orders/${o.id}/accept`);
+    if (prefs.printKot && r.kot?.prints?.length) printKot(r.kot);
+    notify(tr("Order {n} accepted — sent to the kitchen", { n: r.order.order_number || r.order.sale_no }));
+    refreshSelf(); await refreshRunning(); setSelectedRunning(r.order.id);
+  };
+  const declineSelf = async (o) => {
+    await post(`/v1/orders/${o.id}/decline`);
+    notify(tr("Order {n} declined", { n: o.order_number || o.sale_no }));
+    refreshSelf();
+  };
+  const modifySelf = async (o) => {
+    if (cart.length && !(await ask(tr("Replace the items in the current order with this order?"), { confirmLabel: tr("Replace") }))) return false;
+    const full = await post(`/v1/orders/${o.id}/accept-edit`);
+    setModal(null);
+    loadOrder(full, true);
+    refreshSelf(); refreshRunning();
+    return true;
   };
   const cancelRunning = () => { if (sel) setModal({ name: "cancelOrder", order: sel }); };
   const doCancel = async (o, reason) => {
     try {
-      await post(`/v1/orders/${o.id}/cancel`, { reason });
+      const r = await post(`/v1/orders/${o.id}/cancel`, { reason });
+      if (prefs.printKot && r?.kot?.prints?.length) printKot(r.kot);      // "ORDER CANCELLED" ticket for each kitchen
       if (editingId === o.id) resetOrder();
       setSelectedRunning(null);
       setModal(null);
@@ -1059,15 +1146,20 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     } catch (e) { onError(e); }
   };
   // "Clear running orders" (same as the web POS): your open orders; Admin: all open orders of the outlet
-  const doClearRunning = async () => {
+  const doClearRunning = async (password) => {
     try {
-      const r = await post("/v1/orders/clear-mine");
+      const r = await post("/v1/orders/clear-mine", { password });
       if (editingId) resetOrder();
       setSelectedRunning(null);
       setModal(null);
       notify(r.cleared ? tn(r.cleared, "{n} running order cleared", "{n} running orders cleared") : tr("No running orders to clear"));
       refreshRunning();
-    } catch (e) { onError(e); }
+      return null;
+    } catch (e) {
+      if (e?.code === "WRONG_PASSWORD" || e?.code === "PASSWORD_REQUIRED") return tr("The password is not correct.");
+      onError(e);
+      return null;
+    }
   };
   const reprintKot = async (id) => {
     try { printKot(await get(`/v1/orders/${id}/kot?full=1`)); } catch (e) { onError(e); }
@@ -1102,9 +1194,13 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
         const dd = parseAmount(l.discount);
         lines.push({
           key: `draft-${l.food_menu_id}-${lines.length}`, itemId: it.id, name: it.name, price: Number(l.unit_price) || priceFor(it, TYPE_KEY[o.order_type], o.delivery_partner_id),
-          qty: Number(l.qty) || 1, mods: (l.modifier_ids || []).map((id) => it.modifiers.find((m) => m.id === id)).filter(Boolean),
+          qty: Number(l.qty) || 1, mods: (l.modifier_ids || []).map((x) => {
+            const id = typeof x === "object" && x ? x.id : x;
+            const base = it.modifiers.find((m) => m.id === id);
+            return base && (typeof x === "object" && x && x.price != null ? { ...base, price: Number(x.price) || 0 } : base);
+          }).filter(Boolean),
           note: l.note || "", disc: dd.mode === "percent" ? dd.value : 0, discRaw: dd.mode === "fixed" && dd.value ? String(dd.value) : null,
-          openPrice: it.openPrice, comboSelections: [], lineId: null,
+          openPrice: it.openPrice, comboSelections: (l.combo_selections || []).map(Number), lineId: null,
         });
       });
       setCart(lines);
@@ -1142,6 +1238,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     { id: "drafts", label: tr("Open drafts"), icon: FolderOpen, cls: "", badge: drafts.length, on: () => { setModal({ name: "drafts" }); refreshDrafts(); } },
     ...(canPay ? [{ id: "print", label: tr("Print last invoice"), icon: Printer, cls: "opt-sm", on: printLast }] : []),
     ...(canPay ? [{ id: "recent", label: tr("Recent sales"), icon: History, cls: "", on: openRecent }] : []),
+    ...(canSelf ? [{ id: "self", label: tr("Self / Online orders"), icon: Smartphone, cls: "", badge: selfCount, on: () => setModal({ name: "selfOrders" }) }] : []),
     { id: "notif", label: tr("Kitchen notifications"), icon: Bell, cls: "", badge: unread, on: () => { setModal({ name: "notifications" }); markSeen(); refreshNotifications(); } },
     ...(!isWaiter ? [{ id: "register", label: tr("Register details"), icon: Wallet, cls: "opt-sm", on: () => setModal({ name: "register" }) }] : []),
     { id: "clear", label: tr("Clear running orders"), icon: Eraser, cls: "opt-md", danger: true, on: () => setModal({ name: "clearRunning" }) },
@@ -1157,7 +1254,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
   // cashier / admin: the register must be open before the POS can be used (same rule as the web POS)
   if (!isWaiter && registerOpen === false) {
     return (
-      <div className="pos" dir={dir} lang={lang} style={{ background: "#EEF0F5" }}>
+      <div className="pos" dir={dir} lang={lang}>
         <style>{CSS}</style>
         <style>{CSS_ONLINE}</style>
         <OpenRegisterModal gate user={user} onError={onError} onLogout={onLogout}
@@ -1187,6 +1284,9 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
             </button>
           ))}
         </nav>
+        <button className="icon-btn theme-btn" onClick={toggleTheme} title={theme === "dark" ? tr("Light mode") : tr("Dark mode")} aria-label={theme === "dark" ? tr("Light mode") : tr("Dark mode")}>
+          {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
         <div style={{ position: "relative" }}>
           <button className="lang-btn" onClick={() => setLangOpen((v) => !v)} title={tr("Language")} aria-label={tr("Language")} aria-expanded={langOpen}>
             <Languages size={16} />{LANGS.find((x) => x.code === lang)?.short}
@@ -1249,7 +1349,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
                   <div className="row muted"><span style={{ display: "flex", alignItems: "center", gap: 4 }}><TI size={13} />{o.order_type === 1 && o.tables_text ? tr("Table {name}", { name: o.tables_text }) : typeName(o)}{o.order_type === 3 && partnerById(o.delivery_partner_id) ? ` · ${partnerById(o.delivery_partner_id).name}` : ""}</span></div>
                   <div className="row muted"><span>{o.customer?.name}</span><span>{o.waiter?.name}</span></div>
                   <div className="row"><span className="muted" style={{ display: "flex", alignItems: "center", gap: 4 }}><Clock size={12} />{timeAgo(o.minutes_open ?? o.date_time)}</span><b className="num" style={{ fontSize: 13 }}>{money(o.total_payable)}</b></div>
-                  {editingId === o.id && <span className="tag" style={{ background: "#FFF1D6", color: "#7A4F00", justifySelf: "start" }}>{tr("Editing")}</span>}
+                  {editingId === o.id && <span className="tag" style={{ background: "var(--warn-bg)", color: "var(--warn-ink)", justifySelf: "start" }}>{tr("Editing")}</span>}
                 </button>
               );
             })}
@@ -1324,7 +1424,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
                       <small>{[...l.mods.map((m) => m.name), l.disc > 0 ? tr("{v}% off", { v: l.disc }) : "", l.discRaw ? tr("{v} off", { v: l.discRaw }) : "", l.note ? `“${l.note}”` : "", l.cooking && l.cooking !== "New" ? tr(l.cooking) : ""].filter(Boolean).join(", ")}</small>
                     )}</span>
                   </button>
-                  <span className="r num col-price" title={l.priceEdited ? tr("Price changed for this customer") : ""} style={l.priceEdited ? { color: "#9A6400", fontWeight: 800 } : null}>{money(lineUnit(l))}{l.priceEdited ? "*" : ""}</span>
+                  <span className="r num col-price" title={l.priceEdited ? tr("Price changed for this customer") : ""} style={l.priceEdited ? { color: "var(--warn-ink)", fontWeight: 800 } : null}>{money(lineUnit(l))}{l.priceEdited ? "*" : ""}</span>
                   <Qty value={l.qty} onChange={(q) => setLineQty(l.key, q)} />
                   <span className="r num" style={{ fontWeight: 800 }}>{money(lineTotal(l))}</span>
                   <button className="del" onClick={() => removeLine(l.key)} aria-label={tr("Remove {name}", { name: l.name })}><Trash2 size={16} /></button>
@@ -1372,7 +1472,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
             <div className="cats" role="tablist" aria-label={tr("Categories")}>
               <button className="cat all" aria-pressed={activeCat === "all"} onClick={() => setActiveCat("all")}>{tr("All")}</button>
               {CATEGORIES.map((c) => (
-                <button key={c.id} className="cat" style={{ background: c.tint }} aria-pressed={activeCat === c.id} onClick={() => setActiveCat(c.id)}>{catName(c)}</button>
+                <button key={c.id} className="cat" style={{ "--tint": c.tint }} aria-pressed={activeCat === c.id} onClick={() => setActiveCat(c.id)}>{catName(c)}</button>
               ))}
             </div>
             <div className="items">
@@ -1381,7 +1481,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
                 const tint = catById[it.cat]?.tint;
                 const priceTxt = it.openPrice ? tr("Open price") : it.variations.length ? tr("From {price}", { price: money(shownPrice(it)) }) : money(shownPrice(it));
                 return (
-                  <button key={it.id} className={`item ${showImages ? "has-img" : ""}`} style={{ background: tint, opacity: it.unavailable ? 0.5 : 1 }} onClick={() => onItemClick(it)}
+                  <button key={it.id} className={`item ${showImages ? "has-img" : ""}`} style={{ "--tint": tint, opacity: it.unavailable ? 0.5 : 1 }} onClick={() => onItemClick(it)}
                     onContextMenu={(e) => { e.preventDefault(); if (!orderType || it.variations.length) return onItemClick(it); setModal({ name: "item", item: it }); }} title={`${it.code} · ${tr("right-click or long-press for options")}`}>
                     <span className="marks">{it.veg && <span className="vegmark" title={tr("Vegetarian")} />}{it.combo && <span className="mini c">{tr("COMBO")}</span>}{it.promo && <span className="mini p">{tr("PROMO")}</span>}</span>
                     {qtyById[it.id] > 0 && <span className="inq num">{qtyById[it.id]}</span>}
@@ -1426,6 +1526,9 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
                   <h.icon size={18} />{h.label}{h.badge > 0 ? ` (${h.badge})` : ""}
                 </button>
               ))}
+              <button className="item-link" onClick={toggleTheme}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}{theme === "dark" ? tr("Light mode") : tr("Dark mode")}</button>
+              <div className="setting-row"><span style={{ display: "flex", gap: 8, alignItems: "center" }}><Keyboard size={16} />{tr("On-screen keyboard")}</span>
+                <input type="checkbox" checked={oskOn} onChange={(e) => setOskOn(e.target.checked)} aria-label={tr("On-screen keyboard")} /></div>
               <div className="lang-pick" role="group" aria-label={tr("Language")}>
                 {LANGS.map((x) => <button key={x.code} aria-pressed={lang === x.code} onClick={() => changeLang(x.code)} lang={x.code}>{x.name}</button>)}
               </div>
@@ -1444,7 +1547,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
           <div className="types">
             {Object.entries(ORDER_TYPES).map(([k, v]) => (
               <button key={k} className="type-card" onClick={() => onOrderTypePicked(k)}>
-                <span className="ill" style={{ background: TYPE_ILL[k][0], color: TYPE_ILL[k][1] }}><v.icon size={40} strokeWidth={1.8} /></span>
+                <span className="ill" style={{ background: `color-mix(in srgb, ${TYPE_ILL[k][0]} var(--tint-mix), var(--panel))`, color: TYPE_ILL[k][1] }}><v.icon size={40} strokeWidth={1.8} /></span>
                 {tr(v.label)}
               </button>
             ))}
@@ -1484,8 +1587,10 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
             basePrice={priceFor(item, orderType, partner)}
             orderType={orderType}
             onClose={() => setModal(null)}
-            onSave={(data) => {
-              if (modal.line) setCart((c) => c.map((l) => (l.key === modal.line.key ? { ...l, ...data } : l)));
+            onSave={({ comboChanged, ...data }) => {
+              // combo choice changed on a line the kitchen already has: it goes out as cancelled + a new line on the KOT
+              if (modal.line && comboChanged) setCart((c) => c.map((l) => (l.key === modal.line.key ? { ...l, ...data, lineId: null, cooking: undefined, key: `${l.itemId}-${Date.now()}` } : l)));
+              else if (modal.line) setCart((c) => c.map((l) => (l.key === modal.line.key ? { ...l, ...data } : l)));
               else addToCart(item, data);
               setModal(null);
             }}
@@ -1607,7 +1712,8 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
 
 
       {modal?.name === "leave" && (
-        <LeaveModal exit={modal.exit} onClose={() => setModal(null)} onLeave={leave} />
+        <LeaveModal exit={modal.exit} onClose={() => setModal(null)} onLeave={leave}
+          onPrint={async () => { try { await print(registerHtml(await get("/v1/register/summary")), tr("Register details")); } catch (e) { onError(e); } }} />
       )}
 
       {modal?.name === "register" && (
@@ -1620,12 +1726,11 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
       )}
 
       {modal?.name === "clearRunning" && (
-        <ConfirmModal title={tr("Clear running orders")} danger confirmLabel={tr("Clear running orders")} onClose={() => setModal(null)} onConfirm={doClearRunning}>
-          <p style={{ marginTop: 0 }}>{user?.role === "Admin"
-            ? tr("This removes all open orders of this outlet, from the web POS and the kitchen screen too.")
-            : tr("This removes your open orders (orders you placed or are the waiter of) from the web POS and the kitchen screen too. Other staff's orders stay.")}</p>
-          <p className="muted" style={{ marginBottom: 0 }}>{tr("Paid invoices are not affected. This cannot be undone.")}</p>
-        </ConfirmModal>
+        <ClearRunningModal admin={user?.role === "Admin"} onClose={() => setModal(null)} onConfirm={doClearRunning} />
+      )}
+
+      {modal?.name === "selfOrders" && (
+        <SelfOrdersModal onClose={() => setModal(null)} onError={onError} onAccept={acceptSelf} onDecline={declineSelf} onModify={modifySelf} />
       )}
 
       <ConfirmHost />
@@ -1809,13 +1914,27 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
     : (item.comboGroups || []).map((g) => g.options[0]?.food_menu_id).filter(Boolean));
 
   const kitchenLine = !!line?.lineId;   // already sent to the kitchen: price stays as ordered
-  const listPrice = kitchenLine && !line.priceEdited ? line.price : basePrice + comboExtra(item, combo, orderType);
+  const sameSet = (a, b) => [...(a || [])].sort().join(",") === [...(b || [])].sort().join(",");
+  const comboChanged = !!item.comboGroups && kitchenLine && !sameSet(combo, line.comboSelections);
+  const listPrice = kitchenLine && !line.priceEdited && !comboChanged ? line.price : basePrice + comboExtra(item, combo, orderType);
   const edited = !item.openPrice && edit !== "" && Number(edit) >= 0 && Number(edit) !== listPrice;
   const price = item.openPrice ? Number(open) || 0 : edited ? Number(edit) : listPrice;
   const unit = price + mods.reduce((s, m) => s + m.price, 0);
-  const toggle = (m) => setMods((ms) => (ms.some((x) => x.id === m.id) ? ms.filter((x) => x.id !== m.id) : [...ms, m]));
+  const [askMod, setAskMod] = useState(null);         // open-price modifier whose price is being entered
+  const modPriceRef = useRef(null);
+  const priceRef = useRef(null);
+  const toggle = (m) => {
+    if (mods.some((x) => x.id === m.id)) { setMods((ms) => ms.filter((x) => x.id !== m.id)); if (askMod === m.id) setAskMod(null); return; }
+    if (m.openPrice) { setMods((ms) => [...ms, { ...m, price: 0, entered: "" }]); setAskMod(m.id); return; }
+    setMods((ms) => [...ms, m]);
+  };
+  const setModPrice = (id, v) => setMods((ms) => ms.map((x) => (x.id === id ? { ...x, entered: v, price: Number(v) || 0 } : x)));
+  // the number pad comes up by itself: open-price item as soon as the popup opens, open-price modifier when picked
+  useEffect(() => { if (item.openPrice && !line) openKeyboard(priceRef.current); }, []); // eslint-disable-line
+  useEffect(() => { if (askMod) openKeyboard(modPriceRef.current); }, [askMod]);
+  const modNeedsPrice = mods.some((x) => x.openPrice && x.entered === "");
   const pickCombo = (g, id) => setCombo((c) => [...c.filter((x) => !g.options.some((o) => o.food_menu_id === x)), id]);
-  const needPrice = item.openPrice && !(Number(open) > 0);
+  const needPrice = (item.openPrice && !(Number(open) > 0)) || modNeedsPrice;
 
   return (
     <Modal title={item.name} onClose={onClose}
@@ -1823,9 +1942,9 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
         {onRemove && <button className="btn" style={{ marginInlineEnd: "auto", color: "var(--danger)" }} onClick={onRemove}><Trash2 size={16} />{tr("Remove")}</button>}
         <button className="btn" onClick={onClose}>{tr("Cancel")}</button>
         <button className="btn primary" disabled={needPrice} onClick={() => onSave({
-          qty: Math.max(1, qty), mods, disc: Number(disc) || 0, note: note.trim(), price, priceEdited: edited,
+          qty: Math.max(1, qty), mods: mods.map(({ entered, ...m }) => m), disc: Number(disc) || 0, note: note.trim(), price, priceEdited: edited,
           discRaw: Number(disc) > 0 ? null : (line?.discRaw ?? null),
-          comboSelections: item.comboGroups ? combo : [],
+          comboSelections: item.comboGroups ? combo : [], comboChanged,
         })}>
           {line ? tr("Update item") : tr("Add to order")} · {money(unit * Math.max(1, qty) * (1 - (Number(disc) || 0) / 100))}
         </button>
@@ -1837,7 +1956,7 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
       </div>
       {item.openPrice ? (
         <label className="field">{tr("Price ({currency})", { currency: OUTLET.currency })}
-          <input className="input num" type="number" min="0" step="any" autoFocus value={open} onChange={(e) => setOpen(e.target.value)} placeholder={tr("Enter the price")} />
+          <input ref={priceRef} className="input num" type="number" min="0" step="any" autoFocus value={open} onChange={(e) => setOpen(e.target.value)} placeholder={tr("Enter the price")} />
         </label>
       ) : (
         <label className="field">
@@ -1855,7 +1974,7 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
               const k = orderType === "delivery" ? "delivery" : orderType === "take" ? "take_away" : "dine_in";
               const extra = Number(o.prices?.[k]) || 0;
               return (
-                <button key={o.food_menu_id} className="mod" disabled={kitchenLine} aria-pressed={combo.includes(o.food_menu_id)} onClick={() => pickCombo(g, o.food_menu_id)}>
+                <button key={o.food_menu_id} className="mod" aria-pressed={combo.includes(o.food_menu_id)} onClick={() => pickCombo(g, o.food_menu_id)}>
                   <span>{o.qty > 1 ? `${o.qty} × ` : ""}{o.name}</span><span className="num">{extra ? `+${money(extra)}` : tr("Included")}</span>
                 </button>
               );
@@ -1866,12 +1985,22 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
       {item.modifiers.length > 0 && <>
         <div className="field" style={{ marginBottom: 6 }}>{tr("Modifiers")}</div>
         <div className="mod-grid">
-          {item.modifiers.map((m) => (
-            <button key={m.id} className="mod" aria-pressed={mods.some((x) => x.id === m.id)} onClick={() => toggle(m)}>
-              <span>{m.name}</span><span className="num">{m.price ? `+${money(m.price)}` : tr("Free")}</span>
-            </button>
-          ))}
+          {item.modifiers.map((m) => {
+            const sel = mods.find((x) => x.id === m.id);
+            const tag = m.openPrice ? (sel && sel.entered !== "" ? `+${money(sel.price)}` : tr("Enter price")) : m.price ? `+${money(m.price)}` : tr("Free");
+            return (
+              <button key={m.id} className="mod" aria-pressed={!!sel} onClick={() => toggle(m)}>
+                <span>{m.name}</span><span className="num">{tag}</span>
+              </button>
+            );
+          })}
         </div>
+        {mods.filter((x) => x.openPrice).map((x) => (
+          <label key={x.id} className="field" style={{ marginTop: 8 }}>{tr("Price for {name} ({currency})", { name: x.name, currency: OUTLET.currency })}
+            <input ref={askMod === x.id ? modPriceRef : null} className="input num" type="number" min="0" step="any" value={x.entered ?? String(x.price)}
+              onChange={(e) => setModPrice(x.id, e.target.value)} placeholder={tr("Enter the price")} aria-label={tr("Price for {name} ({currency})", { name: x.name, currency: OUTLET.currency })} />
+          </label>
+        ))}
       </>}
       {ITEM_DISCOUNT_ENABLED && (
         <label className="field">{tr("Item discount (%)")}<input className="input num" type="number" min="0" max="100" value={disc} onChange={(e) => setDisc(e.target.value)} /></label>
@@ -1969,21 +2098,23 @@ function PaymentModal({ due: dueIn, label, busy, allowDue, onClose, onPay }) {
               return <button key={x.id} className="pm" aria-pressed={method === x.id} disabled={used || left <= 0} onClick={() => { setMethod(x.id); setErr(""); }}><x.icon size={22} />{x.name}{used && <Check size={14} />}</button>;
             })}
           </div>
+          <div className="pay-entry-label">{m?.cash ? tr("Cash received") : tr("Amount")}</div>
           <div className="pay-entry">
-            <label className="field" style={{ flex: 1 }}>{m?.cash ? tr("Cash received") : tr("Amount")}
-              <input className="input num" type="number" min="0" value={amount} disabled={left <= 0} placeholder={money(left)}
-                onChange={(e) => { setAmount(e.target.value); setCounts({}); setErr(""); }} onKeyDown={(e) => { if (e.key === "Enter") add(); }} aria-label={tr("Amount")} />
-            </label>
-            <button className="btn primary" onClick={add} disabled={left <= 0} style={{ alignSelf: "end" }}><Plus size={16} />{tr("Add")}</button>
+            <input className="input num" type="number" min="0" value={amount} disabled={left <= 0} placeholder={money(left)}
+              onChange={(e) => { setAmount(e.target.value); setCounts({}); setErr(""); }} onKeyDown={(e) => { if (e.key === "Enter") add(); }} aria-label={tr("Amount")} />
+            <button className="btn primary" onClick={add} disabled={left <= 0}><Plus size={16} />{tr("Add")}</button>
           </div>
-          <div className="quick-amts" aria-label={tr("Quick cash")}>
-            <button className="num" disabled={left <= 0} onClick={() => { setAmount(String(left)); setCounts({}); setErr(""); }}>{tr("Exact")} {money(left)}</button>
-            {DENOMINATIONS.map((v) => (
-              <button key={v} className="num denom" disabled={left <= 0} onClick={() => tapDenom(v)}>{money(v)}{counts[v] ? <span className="dcount">{counts[v]}</span> : null}</button>
-            ))}
-            <button disabled={amount === ""} onClick={clearInput}>{tr("Clear")}</button>
-          </div>
-          {preview > 0 && <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>{tr("Change to return")}: <b className="num">{money(preview)}</b></div>}
+          {/* denominations (quick cash) only for cash */}
+          {m?.cash && (
+            <div className="quick-amts" aria-label={tr("Quick cash")}>
+              <button className="num" disabled={left <= 0} onClick={() => { setAmount(String(left)); setCounts({}); setErr(""); }}>{tr("Exact")} {money(left)}</button>
+              {DENOMINATIONS.map((v) => (
+                <button key={v} className="num denom" disabled={left <= 0} onClick={() => tapDenom(v)}>{money(v)}{counts[v] ? <span className="dcount">{counts[v]}</span> : null}</button>
+              ))}
+              <button disabled={amount === ""} onClick={clearInput}>{tr("Clear")}</button>
+            </div>
+          )}
+          {preview > 0 && <div className="change-box" role="status"><span>{tr("Change to return")}</span><b className="num">{OUTLET.currency} {money(preview)}</b></div>}
           <label className="field">{tr("Reference")}
             <input className="input" value={reference} onChange={(e) => setReference(e.target.value)} placeholder={tr("Card slip / transaction reference")} maxLength={100} />
           </label>
@@ -2002,7 +2133,7 @@ function PaymentModal({ due: dueIn, label, busy, allowDue, onClose, onPay }) {
           <div className="sum-row"><span>{tr("Payable")}</span><span className="num">{money(due)}</span></div>
           <div className="sum-row"><span>{tr("Paid")}</span><span className="num">{money(paid)}</span></div>
           <div className="sum-row total"><span>{tr("Due")}</span><span className="num">{money(left)}</span></div>
-          {change > 0 && <div className="pay-change"><span>{tr("Change Amount")}</span><span className="num">{money(change)}</span></div>}
+          {change > 0 && <div className="change-box" role="status"><span>{tr("Change to return")}</span><b className="num">{OUTLET.currency} {money(change)}</b></div>}
         </div>
       </div>
       {(err || blocked) && <div role="alert" style={{ color: "var(--danger)", fontSize: 13, fontWeight: 600, marginTop: 10 }}>{err || blocked}</div>}
@@ -2077,7 +2208,7 @@ function CustomerModal({ edit, onClose, onSave, onError }) {
         <button className="btn primary" disabled={!f.name.trim() || saving || loading} onClick={save}>{saving && <Loader2 size={16} className="spin" />}{edit ? tr("Save customer") : tr("Add customer")}</button></>}>
       {loading ? <p className="muted">{tr("Loading…")}</p> : <>
         <div className="grid3">
-          {fld("name", <>{tr("Name")} <span style={{ color: "var(--danger)" }}>*</span></>, { autoFocus: true })}
+          {fld("name", <span>{tr("Name")} <span style={{ color: "var(--danger)" }}>*</span></span>, { autoFocus: true })}
           {fld("phone", tr("Phone"), { inputMode: "tel" })}
           {fld("email", tr("Email"), { type: "email" })}
           {fld("trn_number", tr("TRN"))}
@@ -2212,7 +2343,7 @@ function CancelOrderModal({ order, onClose, onConfirm }) {
     <Modal title={tr("Cancel order {n}", { n: order.order_number || order.sale_no })} onClose={onClose} size="sm"
       footer={<><button className="btn" onClick={onClose}>{tr("Keep order")}</button>
         <button className="btn" style={{ background: "var(--danger)", borderColor: "var(--danger)", color: "#fff" }} disabled={!reason.trim() || busy} onClick={go}>
-          {busy ? <Loader2 size={16} className="spin" /> : <Ban size={16} />}Cancel order</button></>}>
+          {busy ? <Loader2 size={16} className="spin" /> : <Ban size={16} />}{tr("Cancel order")}</button></>}>
       <p className="muted" style={{ marginTop: 0 }}>{typeName(order)}{order.tables_text ? ` · ${tr("Table {name}", { name: order.tables_text })}` : ""} · {order.customer?.name} · {money(order.total_payable)}. {tr("The kitchen is told the order is cancelled.")}</p>
       <div className="quick-amts" style={{ marginBottom: 8 }}>
         {quick.map((q) => <button key={q} onClick={() => setReason(q)} aria-pressed={reason === q}>{q}</button>)}
@@ -2220,6 +2351,126 @@ function CancelOrderModal({ order, onClose, onConfirm }) {
       <label className="field">{tr("Reason")}
         <textarea className="input" autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder={tr("Why is this order cancelled?")} />
       </label>
+    </Modal>
+  );
+}
+
+// Self / Online orders (web POS "Self/Online Orders"): orders customers placed themselves (QR self order, online shop).
+// Accept -> a normal running order + KOT. Modify -> accepted and opened in the cart; KOT when Update Order is pressed.
+// Decline -> removed from the list (web: set_as_running_order_decline).
+function SelfOrdersModal({ onClose, onError, onAccept, onDecline, onModify }) {
+  const [tab, setTab] = useState("self");
+  const [data, setData] = useState(null);
+  const [q, setQ] = useState("");
+  const [selId, setSelId] = useState(null);
+  const [o, setO] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const load = useCallback(async () => { try { setData(await get("/v1/orders/self")); } catch (e) { onError(e); setData({ self_orders: [], online_orders: [] }); } }, []); // eslint-disable-line
+  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
+  useEffect(() => {
+    setO(null);
+    if (!selId) return;
+    get(`/v1/orders/${selId}`).then(setO).catch((e) => { onError(e); setSelId(null); });
+  }, [selId]); // eslint-disable-line
+  const list = (data?.[tab === "self" ? "self_orders" : "online_orders"] || []).filter((r) => {
+    const t = q.trim().toLowerCase();
+    return !t || [r.sale_no, r.order_number, r.token_number, r.customer?.name, r.customer?.phone, r.tables_text].some((v) => String(v || "").toLowerCase().includes(t));
+  });
+  const sel = list.find((r) => r.id === selId) || (data ? [...data.self_orders, ...data.online_orders].find((r) => r.id === selId) : null);
+  const act = async (kind) => {
+    if (!sel) return;
+    if (kind === "decline" && !(await ask(tr("Decline order {n}? The customer's order will not be made.", { n: sel.order_number || sel.sale_no }), { title: tr("Decline"), confirmLabel: tr("Decline"), danger: true }))) return;
+    setBusy(kind);
+    try {
+      if (kind === "accept") await onAccept(sel);
+      else if (kind === "decline") await onDecline(sel);
+      else { if (await onModify(sel)) return; }
+      setSelId(null); await load();
+    } catch (e) { onError(e); await load(); setSelId(null); }
+    finally { setBusy(null); }
+  };
+  const t = o?.totals || {};
+  const count = (k) => data?.[k]?.length || 0;
+  return (
+    <Modal title={tr("Self / Online orders")} onClose={onClose} size="xl"
+      footer={<>
+        <button className="btn" disabled={!o || !!busy} onClick={() => act("modify")}>{busy === "modify" ? <Loader2 size={16} className="spin" /> : <Edit3 size={16} />}{tr("Modify Order")}</button>
+        <button className="btn" disabled={!o || !!busy} onClick={() => act("decline")} style={{ color: "var(--danger)" }}>{busy === "decline" ? <Loader2 size={16} className="spin" /> : <Ban size={16} />}{tr("Decline")}</button>
+        <button className="btn ok" disabled={!o || !!busy} onClick={() => act("accept")}>{busy === "accept" ? <Loader2 size={16} className="spin" /> : <Check size={16} />}{tr("Accept")}</button>
+      </>}>
+      <div className="so-grid">
+        <div className="so-list">
+          <div className="seg" role="tablist" style={{ marginBottom: 8 }}>
+            <button aria-pressed={tab === "self"} onClick={() => { setTab("self"); setSelId(null); }}>{tr("Self Orders")} ({count("self_orders")})</button>
+            <button aria-pressed={tab === "online"} onClick={() => { setTab("online"); setSelId(null); }}>{tr("Online Orders")} ({count("online_orders")})</button>
+          </div>
+          <input className="input" placeholder={tr("Search customer, mobile number or token")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={tr("Search")} style={{ marginBottom: 8 }} />
+          {data === null ? <p className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} className="spin" />{tr("Loading…")}</p>
+            : list.length === 0 ? <p className="muted">{tr("No new orders.")}</p> : (
+            <div className="list">
+              {list.map((r) => (
+                <button key={r.id} className="list-row so-row" data-id={r.id} aria-pressed={selId === r.id} onClick={() => setSelId(r.id)}>
+                  <span style={{ minWidth: 0, textAlign: "start" }}><b className="num">{r.order_number || r.sale_no}</b>{r.token_number ? ` · ${tr("Token")} ${r.token_number}` : ""} · {typeName(r)}
+                    <div className="muted" style={{ fontSize: 12 }}>{r.customer?.name}{r.customer?.phone ? ` (${r.customer.phone})` : ""}{r.tables_text ? ` · ${tr("Table {name}", { name: r.tables_text })}` : ""}</div>
+                    <div className="muted" style={{ fontSize: 12 }}>{r.date_time || ""}</div></span>
+                  <b className="num" style={{ flex: "none" }}>{money(r.total_payable)}</b>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="so-detail">
+          <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>{tr("Order Details")}</h3>
+          {!selId ? <p className="muted">{tr("Choose an order on the left.")}</p> : !o ? <p className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} className="spin" />{tr("Loading…")}</p> : <>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
+              {typeName(o)} · {o.customer?.name}{o.waiter?.name ? ` · ${tr("Waiter {name}", { name: o.waiter.name })}` : ""}{o.tables_text ? ` · ${tr("Table {name}", { name: o.tables_text })}` : ""}
+            </div>
+            <table className="so-items">
+              <thead><tr><th>{tr("Item")}</th><th className="r">{tr("Price")}</th><th className="r">{tr("Qty")}</th><th className="r">{tr("Total")}</th></tr></thead>
+              <tbody>
+                {(o.items || []).map((l, i) => (
+                  <tr key={l.line_id || i}><td>{getLang() === "ar" && l.secondary_name ? l.secondary_name : l.name}
+                    {(l.modifiers?.length > 0 || l.combo_items || l.note) && <div className="muted" style={{ fontSize: 11.5 }}>{[...(l.modifiers || []).map((m) => m.name), l.combo_items, l.note ? `“${l.note}”` : ""].filter(Boolean).join(", ")}</div>}</td>
+                    <td className="r num">{money(l.unit_price)}</td><td className="r num">{l.qty}</td><td className="r num">{money(l.total ?? l.price_with_discount ?? (l.unit_price * l.qty))}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="sum-row"><span>{tr("Subtotal")}</span><span className="num">{money(t.sub_total)}</span></div>
+            {Number(t.total_discount_amount) > 0 && <div className="sum-row"><span>{tr("Discount")}</span><span className="num">-{money(t.total_discount_amount)}</span></div>}
+            {Number(t.charge_amount) > 0 && <div className="sum-row"><span>{tr("Service charge")}</span><span className="num">{money(t.charge_amount)}</span></div>}
+            <div className="sum-row"><span>{tr("Tax")}</span><span className="num">{money(t.total_vat)}</span></div>
+            <div className="sum-row total"><span>{tr("Total payable")}</span><span className="num">{OUTLET.currency} {money(t.total_payable)}</span></div>
+          </>}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// "Clear running orders": the user's own login password is checked by the server before anything is removed
+function ClearRunningModal({ admin, onClose, onConfirm }) {
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const go = async () => {
+    if (!pw) return setErr(tr("Enter your login password."));
+    setBusy(true); setErr("");
+    try { const e = await onConfirm(pw); if (e) setErr(e); } finally { setBusy(false); }
+  };
+  return (
+    <Modal title={tr("Clear running orders")} onClose={onClose} size="sm"
+      footer={<><button className="btn" onClick={onClose}>{tr("Cancel")}</button>
+        <button className="btn primary" style={{ background: "var(--danger)", borderColor: "var(--danger)" }} disabled={busy || !pw} onClick={go}>
+          {busy && <Loader2 size={16} className="spin" />}{tr("Clear running orders")}</button></>}>
+      <p style={{ marginTop: 0 }}>{admin
+        ? tr("This removes all open orders of this outlet, from the web POS and the kitchen screen too.")
+        : tr("This removes your open orders (orders you placed or are the waiter of) from the web POS and the kitchen screen too. Other staff's orders stay.")}</p>
+      <p className="muted">{tr("Paid invoices are not affected. This cannot be undone.")}</p>
+      <label className="field">{tr("Your login password")}
+        <input className="input" type="password" autoFocus value={pw} onChange={(e) => { setPw(e.target.value); setErr(""); }}
+          onKeyDown={(e) => { if (e.key === "Enter") go(); }} autoComplete="current-password" aria-label={tr("Your login password")} />
+      </label>
+      {err && <div role="alert" style={{ color: "var(--danger)", fontSize: 13, fontWeight: 600 }}>{err}</div>}
     </Modal>
   );
 }
@@ -2249,7 +2500,7 @@ function SearchSelect({ value, options, onChange, placeholder, label, onSearch, 
   const list = (t ? options.filter((o) => `${o.label} ${o.sub || ""}`.toLowerCase().includes(t)) : options).slice(0, 100);
   useEffect(() => {
     if (!open) return;
-    const off = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    const off = (e) => { if (box.current && !box.current.contains(e.target) && !e.target.closest?.("[data-osk-root]")) setOpen(false); };
     document.addEventListener("mousedown", off);
     setTimeout(() => input.current?.focus(), 0);
     return () => document.removeEventListener("mousedown", off);
@@ -2398,13 +2649,16 @@ function RecentSalesModal({ initial, onClose, onError, onReprint }) {
 }
 
 // Log out / close the app while the register is open: close it first, or leave it open, or stay.
-function LeaveModal({ exit, onClose, onLeave }) {
+function LeaveModal({ exit, onClose, onLeave, onPrint }) {
   const [busy, setBusy] = useState(null);
   const go = async (closeRegister) => { setBusy(closeRegister ? "close" : "keep"); const done = await onLeave({ closeRegister, exit }); if (!done) setBusy(null); };
+  const printIt = async () => { setBusy("print"); try { await onPrint(); } finally { setBusy(null); } };
   return (
     <Modal title={exit ? tr("Close the app") : tr("Log out")} onClose={() => !busy && onClose()} closable={!busy}
       footer={<>
-        <button className="btn" disabled={!!busy} onClick={onClose}>{tr("Cancel")}</button>
+        <button className="btn" disabled={!!busy} onClick={printIt} style={{ marginInlineEnd: "auto" }}>
+          {busy === "print" ? <Loader2 size={16} className="spin" /> : <Printer size={16} />}{tr("Print")}
+        </button>
         <button className="btn" disabled={!!busy} onClick={() => go(false)}>
           {busy === "keep" ? <Loader2 size={16} className="spin" /> : <LogOut size={16} />}{exit ? tr("Exit without closing") : tr("Log out without closing")}
         </button>
@@ -2415,7 +2669,7 @@ function LeaveModal({ exit, onClose, onLeave }) {
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         <Wallet size={28} color="var(--amber)" style={{ flex: "none" }} />
         <p style={{ margin: 0 }}>{tr("Your register is still open. Do you want to close the register before you {action}?", { action: exit ? tr("close the app") : tr("log out") })}
-          <br /><span className="muted" style={{ fontSize: 13 }}>{tr("Closing prints the register report.")}</span></p>
+          <br /><span className="muted" style={{ fontSize: 13 }}>{tr("Print gives the register report without closing the register. Closing the register prints it too.")}</span></p>
       </div>
     </Modal>
   );

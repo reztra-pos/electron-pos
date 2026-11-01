@@ -1,4 +1,37 @@
 /* Global reset — each screen injects its own styles */
-html, body, #root { height: 100%; margin: 0; }
-body { background: #EDF0F4; overflow: hidden; }
-*, *::before, *::after { box-sizing: border-box; }
+html,
+body,
+#root {
+    height: 100%;
+    margin: 0;
+}
+
+body {
+    background: var(--app-bg);
+    overflow: hidden;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+/* colours shared by the small screens in App.jsx (start-up, testing notice) — light / dark */
+:root {
+    color-scheme: light;
+    --app-bg: #EDF0F4;
+    --app-panel: #FFFFFF;
+    --app-ink: #1D2433;
+    --app-ink2: #5A6478;
+    --app-btn2: #E6E9EF;
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --app-bg: #0F131B;
+    --app-panel: #1A202B;
+    --app-ink: #E8ECF3;
+    --app-ink2: #A3ADBF;
+    --app-btn2: #2A3242;
+}

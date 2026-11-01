@@ -31,10 +31,27 @@ function clear() {
   cache = null;
 }
 
-// What the activation screen shows before connecting (never exposes the token)
-function preview(apiKey) {
+// What the activation screen shows before connecting: the key is checked with the server (not used up) so the
+// screen can show the device and outlet NAMES. Never exposes the token or the server address.
+async function preview(apiKey) {
   const k = decryptApiKey(apiKey);
-  return { url: k.url, device_id: k.device_id, outlet_id: k.outlet_id, expires: k.exp ? new Date(k.exp * 1000).toISOString() : null };
+  const out = { device_id: k.device_id, device_name: "", outlet_id: k.outlet_id, outlet_name: "", expires: k.exp ? new Date(k.exp * 1000).toISOString() : null, checked: false };
+  let res;
+  try {
+    res = await net.fetch(`${k.url}/v1/devices/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ device_id: k.device_id, code: k.code }),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (e) {
+    throw new Error(`Can't reach the server. ${netReason(e)}`);
+  }
+  const raw = await res.json().catch(() => ({}));
+  if (res.status === 404 && !raw.code) return out;               // older server without the check: show what the key has
+  if (!res.ok) throw new Error(raw.message || `The server refused this key (HTTP ${res.status}).`);
+  const body = raw && "data" in raw ? raw.data : raw;
+  return { ...out, device_name: body.device?.name || "", outlet_name: body.outlet?.name || "", checked: true };
 }
 
 async function activate(apiKey) {

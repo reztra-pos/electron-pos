@@ -4,35 +4,36 @@
  * Also shown when the device was disabled in the web app ("notice" says why).
  */
 import React, { useState } from "react";
-import { KeyRound, Server, Monitor, Store, Loader2, ShieldAlert, CheckCircle2, ClipboardPaste, CalendarClock } from "lucide-react";
+import { KeyRound, Monitor, Store, Loader2, ShieldAlert, CheckCircle2, ClipboardPaste, CalendarClock } from "lucide-react";
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
-.act{--ink:#1D2433;--ink2:#5A6478;--line:#DCE1E8;--brand:#5B3FD1;--brand-2:#EEE9FF;--brand-d:#3F2A9E;--danger:#DC3F35;--ok:#1E9E6A;
- font-family:Manrope,system-ui,"Segoe UI",sans-serif;color:var(--ink);background:#EEF0F5;height:100vh;display:grid;place-items:center;padding:20px;overflow:auto}
+.act{--ink:#1D2433;--ink2:#5A6478;--line:#DCE1E8;--brand:#5B3FD1;--brand-2:#EEE9FF;--brand-d:#3F2A9E;--danger:#DC3F35;--ok:#1E9E6A;--bg:#EEF0F5;--panel:#fff;--soft:#F4F5F9;--line2:#EEF1F5;
+ font-family:Manrope,system-ui,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg);height:100vh;display:grid;place-items:center;padding:20px;overflow:auto}
 .act *{box-sizing:border-box}
-.act .card{width:100%;max-width:560px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:28px;box-shadow:0 20px 50px rgba(30,36,60,.08)}
+.act .card{width:100%;max-width:560px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:28px;box-shadow:0 20px 50px rgba(30,36,60,.08)}
 .act .head{display:flex;gap:14px;align-items:center;margin-bottom:6px}
 .act .mark{width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#6A4BE6,#9A3FB8);display:grid;place-items:center;color:#fff;flex:none}
 .act h1{margin:0;font-size:22px;font-weight:800}
 .act p{margin:4px 0 0;color:var(--ink2);font-size:14px;line-height:1.5}
 .act ol{margin:16px 0 18px;padding-left:20px;color:var(--ink2);font-size:13.5px;line-height:1.7}
 .act label{display:block;font-size:12.5px;font-weight:700;color:var(--ink2);margin-bottom:6px}
-.act textarea{width:100%;min-height:110px;border:1.5px solid var(--line);border-radius:10px;padding:12px;font:500 13px ui-monospace,Consolas,monospace;color:var(--ink);resize:vertical;word-break:break-all}
+.act textarea{width:100%;min-height:110px;border:1.5px solid var(--line);border-radius:10px;padding:12px;font:500 13px ui-monospace,Consolas,monospace;color:var(--ink);background:var(--panel);resize:vertical;word-break:break-all}
 .act textarea:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 4px var(--brand-2)}
 .act .row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
-.act button{font-family:inherit;cursor:pointer;height:46px;border-radius:10px;padding:0 18px;font-weight:800;font-size:14.5px;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:#F4F5F9;color:var(--ink)}
+.act button{font-family:inherit;cursor:pointer;height:46px;border-radius:10px;padding:0 18px;font-weight:800;font-size:14.5px;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--soft);color:var(--ink)}
 .act button.primary{background:var(--brand);border-color:var(--brand);color:#fff;flex:1;justify-content:center}
 .act button.primary:hover:not(:disabled){background:var(--brand-d)}
 .act button:disabled{opacity:.55;cursor:not-allowed}
 .act .msg{margin-top:12px;font-size:13.5px;font-weight:600;display:flex;gap:8px;align-items:flex-start}
 .act .msg.err{color:var(--danger)}.act .msg.ok{color:var(--ok)}
 .act .info{margin-top:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.act .info div{display:flex;gap:10px;align-items:center;padding:10px 12px;font-size:13.5px;border-bottom:1px solid #EEF1F5}
+.act .info div{display:flex;gap:10px;align-items:center;padding:10px 12px;font-size:13.5px;border-bottom:1px solid var(--line2)}
 .act .info div:last-child{border:0}
 .act .info span{color:var(--ink2);min-width:84px}
 .act .info b{word-break:break-all}
 .act .spin{animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+:root[data-theme=dark] .act{--ink:#E8ECF3;--ink2:#A3ADBF;--line:#2E3746;--brand:#8B74F0;--brand-2:#2C2550;--brand-d:#C9BEFF;--danger:#EF5A50;--ok:#34C08A;--bg:#0F131B;--panel:#1A202B;--soft:#252D3B;--line2:#262E3C}
 `;
 
 export default function Activate({ onActivated, notice = "" }) {
@@ -46,7 +47,9 @@ export default function Activate({ onActivated, notice = "" }) {
   const check = async (value = key) => {
     setError(""); setPreview(null);
     if (!value.trim()) return;
+    setStep("Checking the key…");
     try { setPreview(await api.device.preview(value)); } catch (e) { setError(e.message); }
+    finally { setStep(""); }
   };
 
   const paste = async () => {
@@ -75,9 +78,8 @@ export default function Activate({ onActivated, notice = "" }) {
         </div>
         {notice && <div className="msg err" role="alert" style={{ marginTop: 14 }}><ShieldAlert size={16} />{notice}</div>}
         <ol>
-          <li>In the web app, open <b>Settings → POS Devices</b> and add this till (or click <b>Generate key</b> on an existing one).</li>
-          <li>Click <b>Copy key</b>.</li>
-          <li>Paste it below and click <b>Activate</b>.</li>
+          <li>Paste the device API key you received below.</li>
+          <li>Check the device and outlet names, then click <b>Activate</b>.</li>
         </ol>
 
         <label htmlFor="key">Device API key</label>
@@ -88,16 +90,15 @@ export default function Activate({ onActivated, notice = "" }) {
 
         {preview && (
           <div className="info">
-            <div><Server size={16} /><span>Server</span><b>{preview.url}</b></div>
-            <div><Monitor size={16} /><span>Device ID</span><b>{preview.device_id}</b></div>
-            {preview.outlet_id && <div><Store size={16} /><span>Outlet</span><b>{preview.outlet_id}</b></div>}
+            <div><Monitor size={16} /><span>Device</span><b>{preview.device_name || preview.device_id}</b></div>
+            <div><Store size={16} /><span>Outlet</span><b>{preview.outlet_name || (preview.outlet_id ? `#${preview.outlet_id}` : "—")}</b></div>
             {preview.expires && <div><CalendarClock size={16} /><span>Key expires</span><b>{new Date(preview.expires).toLocaleString()}</b></div>}
           </div>
         )}
 
         {error && <div className="msg err" role="alert"><ShieldAlert size={16} />{error}</div>}
         {step && <div className="msg" role="status"><Loader2 size={16} className="spin" />{step}</div>}
-        {preview && !error && !busy && <div className="msg ok"><CheckCircle2 size={16} />Key is valid. Click Activate to connect.</div>}
+        {preview && !error && !busy && !step && <div className="msg ok"><CheckCircle2 size={16} />Key is valid. Click Activate to connect.</div>}
 
         <div className="row">
           <button onClick={paste} disabled={busy}><ClipboardPaste size={17} />Paste</button>
