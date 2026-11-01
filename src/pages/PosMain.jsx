@@ -196,7 +196,10 @@ const parseAmount = (s) => {
   return t.endsWith("%") ? { mode: "percent", value: Number(t.slice(0, -1)) || 0 } : { mode: "fixed", value: Number(t) || 0 };
 };
 const firstError = (e) => (e?.errors && Object.values(e.errors)[0]) || e?.message || "Something went wrong.";
-const timeAgo = (when) => {
+const timeAgo = (when, at) => {
+  // a self / online order keeps the customer's phone time; if that clock is ahead of the server the
+  // minutes come out negative - show when it was placed instead of a wrong "just now"
+  if (typeof when === "number" && when < 0 && at) return tr("placed {time}", { time: String(at).slice(11, 16) });
   const t = typeof when === "number" ? Date.now() - when * 60000 : new Date(String(when).replace(" ", "T"));
   const m = Math.max(0, Math.round((Date.now() - t) / 60000));
   return m < 1 ? tr("just now") : m < 60 ? tr("{m} min ago", { m }) : tr("{h} h {m} min ago", { h: Math.floor(m / 60), m: m % 60 });
@@ -490,6 +493,11 @@ const CSS = `
 .so-items th{text-align:start;padding:6px 4px;border-bottom:1px solid var(--line);font-weight:700}
 .so-items td{padding:6px 4px;border-bottom:1px dashed var(--line);vertical-align:top}
 .so-items .r{text-align:end}
+.submit-ovl{position:fixed;inset:0;z-index:300;background:var(--modal-bg);display:grid;place-items:center;animation:sfade .15s ease-out}
+.submit-box{background:var(--panel);border-radius:16px;padding:28px 40px;display:grid;justify-items:center;gap:10px;box-shadow:0 24px 60px rgba(10,14,30,.3);min-width:260px;text-align:center}
+.submit-box svg{color:var(--brand)}.submit-box b{font-size:17px}
+@keyframes sfade{from{opacity:0}to{opacity:1}}
+.zatca-pill{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:999px;border:1px solid var(--line);background:var(--warn-bg);color:var(--warn-ink);font-weight:800;font-size:12px;white-space:nowrap}
 .pay-change{display:flex;justify-content:space-between;color:var(--danger);font-weight:800;font-size:16px;margin-top:6px}
 .pm:disabled{opacity:.5;cursor:not-allowed}
 .pay-due{display:flex;justify-content:space-between;background:var(--soft2);border-radius:10px;padding:14px;font-size:18px;font-weight:800;margin-bottom:14px}
@@ -1024,14 +1032,28 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     const payBody = { payments, reference };
     if (given !== "" && given != null) payBody.given_amount = Number(given);
     setBusy("pay");
+    setSubmitting(true);                                   // "Submitting invoice…" shown at least 1.5 s
+    const shownAt = Date.now();
     try {
       const key = await newKey();
-      let invoice;
-      if (m.source === "running") {
-        invoice = await post(`/v1/orders/${m.orderId}/invoice`, payBody, { idempotencyKey: key });
-      } else {
-        const r = await post("/v1/invoices/quick", { ...orderBody(m.type, m.tbl), ...payBody }, { idempotencyKey: key });
-        invoice = r.invoice;
+      // the previous invoice may still be with ZATCA (one sale at a time per outlet): wait and try again, same key
+      const send = async () => {
+        for (let i = 0; ; i++) {
+          try {
+            return m.source === "running"
+              ? { invoice: await post(`/v1/orders/${m.orderId}/invoice`, payBody, { idempotencyKey: key }) }
+              : await post("/v1/invoices/quick", { ...orderBody(m.type, m.tbl), ...payBody }, { idempotencyKey: key });
+          } catch (e) {
+            if (e?.code !== "ZATCA_BUSY" || i >= 40) throw e;
+            notify(tr("Waiting for the previous invoice to finish with ZATCA…"), 4000);
+            await new Promise((res) => setTimeout(res, 1500));
+          }
+        }
+      };
+      const r = await send();
+      const invoice = r.invoice;
+      await new Promise((res) => setTimeout(res, Math.max(0, 1500 - (Date.now() - shownAt))));
+      if (m.source !== "running") {
         if (prefs.printKot && r.kot?.prints?.length) printKot(r.kot);
         resetOrder();
       }
@@ -1039,12 +1061,44 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
       if (m.source === "running" && selectedRunning === m.orderId) setSelectedRunning(null);
       refreshRunning();
       setSales((s) => [invoice, ...s.filter((x) => x.id !== invoice.id)]);
-      setModal({ name: "done", invoice });
-      if (prefs.printInvoice && invoice.print_job) {
-        printJob(invoice.print_job).then((ok) => ok && setModal((md) => (md?.name === "done" && md.invoice.id === invoice.id ? { ...md, printed: true } : md)));
-      }
+      // straight on to the next order; ZATCA runs on the server and the invoice prints when it is done
+      setModal(null);
+      setTab("menu");
+      notify(tr("Invoice {n} saved — sending to ZATCA…", { n: invoice.sale_no }), 4000);
+      watchZatca(invoice);
     } catch (e) { onError(e, tr("Payment was not saved.")); }
-    finally { setBusy(null); }
+    finally { setBusy(null); setSubmitting(false); }
+  };
+
+  /* ---------- ZATCA after the sale (runs on the server after the reply) ---------- */
+  const [zatcaQueue, setZatcaQueue] = useState([]);          // [{ id, sale_no }]
+  const [submitting, setSubmitting] = useState(false);       // invoice submit overlay
+  const watchZatca = (invoice) => {
+    if (!invoice?.zatca?.pending) {                          // older server: everything came with the reply
+      if (prefs.printInvoice && invoice?.print_job) printJob(invoice.print_job);
+      return;
+    }
+    setZatcaQueue((q) => [...q.filter((x) => x.id !== invoice.id), { id: invoice.id, sale_no: invoice.sale_no }]);
+    const started = Date.now();
+    const tick = async () => {
+      let st = null;
+      try { st = await get(`/v1/invoices/${invoice.id}/zatca`); } catch { /* network blip: try again */ }
+      if (st?.state === "done") {
+        setZatcaQueue((q) => q.filter((x) => x.id !== invoice.id));
+        const z = st.zatca || {};
+        if (z.synced) notify(tr("Invoice {n}: reported to ZATCA", { n: invoice.sale_no }));
+        else notify(tr("Invoice {n}: ZATCA — {msg}", { n: invoice.sale_no, msg: z.message || tr("not reported yet") }), 9000);
+        if (prefs.printInvoice && st.print_job) await printJob(st.print_job);
+        return;
+      }
+      if (Date.now() - started > 15 * 60000) {                // give up watching; Recent sales still has it
+        setZatcaQueue((q) => q.filter((x) => x.id !== invoice.id));
+        notify(tr("Invoice {n}: ZATCA is taking long. Check it in Recent sales.", { n: invoice.sale_no }), 9000);
+        return;
+      }
+      setTimeout(tick, Date.now() - started < 60000 ? 1500 : 5000);
+    };
+    setTimeout(tick, 800);
   };
 
   const onOrderTypePicked = (type) => {
@@ -1309,6 +1363,11 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
           </>}
         </div>
         <button className="icon-btn" onClick={() => setSheet(true)} title={tr("Main menu")} aria-label={tr("Main menu")}><Menu size={22} /></button>
+        {zatcaQueue.length > 0 && (
+          <button className="zatca-pill" onClick={openRecent} title={zatcaQueue.map((x) => x.sale_no).join(", ")} aria-label={tr("Invoices being sent to ZATCA")}>
+            <Loader2 size={14} className="spin" />{tr("ZATCA")} · {zatcaQueue.length}
+          </button>
+        )}
         {trial?.enabled && (
           <span className="trial-badge" style={{ marginInlineStart: "auto" }} title={tr("Testing version: works until {date}", { date: new Date(trial.until).toLocaleString() })}>
             {tr("TESTING MODE")} · {trial.days_left > 1 ? tr("{n} days left", { n: trial.days_left }) : trial.hours_left >= 1 ? tr("{n} hours left", { n: trial.hours_left }) : tr("less than an hour left")}
@@ -1358,7 +1417,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
                   <div className="row"><b className="num">#{o.order_number || o.sale_no}</b><span className={`tag ${tagCls}`}>{tagTxt}</span></div>
                   <div className="row muted"><span style={{ display: "flex", alignItems: "center", gap: 4 }}><TI size={13} />{o.order_type === 1 && o.tables_text ? tr("Table {name}", { name: o.tables_text }) : typeName(o)}{o.order_type === 3 && partnerById(o.delivery_partner_id) ? ` · ${partnerById(o.delivery_partner_id).name}` : ""}</span></div>
                   <div className="row muted"><span>{o.customer?.name}</span><span>{o.waiter?.name}</span></div>
-                  <div className="row"><span className="muted" style={{ display: "flex", alignItems: "center", gap: 4 }}><Clock size={12} />{timeAgo(o.minutes_open ?? o.date_time)}</span><b className="num" style={{ fontSize: 13 }}>{money(o.total_payable)}</b></div>
+                  <div className="row"><span className="muted" style={{ display: "flex", alignItems: "center", gap: 4 }}><Clock size={12} />{timeAgo(o.minutes_open ?? o.date_time, o.date_time)}</span><b className="num" style={{ fontSize: 13 }}>{money(o.total_payable)}</b></div>
                   {editingId === o.id && <span className="tag" style={{ background: "var(--warn-bg)", color: "var(--warn-ink)", justifySelf: "start" }}>{tr("Editing")}</span>}
                 </button>
               );
@@ -1743,6 +1802,11 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
         <SelfOrdersModal onClose={() => setModal(null)} onError={onError} onAccept={acceptSelf} onDecline={declineSelf} onModify={modifySelf} />
       )}
 
+      {submitting && (
+        <div className="submit-ovl" role="status" aria-live="polite" aria-label={tr("Submitting invoice…")}>
+          <div className="submit-box"><Loader2 size={44} className="spin" /><b>{tr("Submitting invoice…")}</b><span className="muted">{tr("Please wait a moment")}</span></div>
+        </div>
+      )}
       <ConfirmHost />
       {toast && <div className="toast" role="status"><Check size={16} />{toast}</div>}
     </div>
