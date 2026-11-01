@@ -57,5 +57,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   print: {
     html: (html, opts) => call("print:html", html, opts),
     raw: (job) => call("print:raw", job),
+    pdf: (html, opts) => call("print:pdf", html, opts),     // save an A4 PDF (asks where), returns { saved, path }
   },
 });

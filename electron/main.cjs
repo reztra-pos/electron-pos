@@ -1,7 +1,8 @@
 // Electron main process — ONLINE mode.
 // The POS screen talks to the server for everything (menu, orders, kitchen, payments, ZATCA).
 // Only the device registration is kept on this PC (device.cjs). No local database, no offline queue.
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
+const fs = require("fs");
 const path = require("path");
 const device = require("./device.cjs");
 const api = require("./api.cjs");
@@ -52,7 +53,7 @@ function createWindow() {
 const send = (channel, payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); };
 // handlers answer { ok, data } or { ok:false, error, code, status, errors } so the screen gets the server's reason
 // testing build: these stop working when the testing period is over
-const TRIAL_GUARDED = new Set(["device:activate", "auth:pin", "auth:password", "api:call", "api:newKey", "print:raw", "print:html"]);
+const TRIAL_GUARDED = new Set(["device:activate", "auth:pin", "auth:password", "api:call", "api:newKey", "print:raw", "print:html", "print:pdf"]);
 const handle = (channel, fn) => ipcMain.handle(channel, async (_e, ...args) => {
   try {
     if (TRIAL_GUARDED.has(channel) && trial.isExpired()) { trialEnded(); trial.guard(); }
@@ -146,6 +147,23 @@ handle("api:newKey", () => api.newKey());
 handle("print:raw", (job) => printRaw(job && job.printer, job && job.print_bytes));
 
 // register report (HTML) on the default Windows printer
+// A4 PDF from an HTML page (register report download): asks where to save it, then opens it.
+handle("print:pdf", async (html, { fileName = "report.pdf", open = true } = {}) => {
+  const pw = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } });
+  try {
+    await pw.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    const pdf = await pw.webContents.printToPDF({ pageSize: "A4", printBackground: true, margins: { marginType: "default" } });
+    const safe = String(fileName).replace(/[\\/:*?"<>|]+/g, "-");
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: "Save PDF", defaultPath: path.join(app.getPath("downloads"), safe), filters: [{ name: "PDF", extensions: ["pdf"] }],
+    });
+    if (canceled || !filePath) return { saved: false };
+    await fs.promises.writeFile(filePath, pdf);
+    if (open) shell.openPath(filePath).catch(() => {});
+    return { saved: true, path: filePath };
+  } finally { pw.destroy(); }
+});
+
 handle("print:html", (html, { silent = true } = {}) => new Promise((resolve, reject) => {
   const pw = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } });
   pw.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`).then(() => {

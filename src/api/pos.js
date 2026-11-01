@@ -17,4 +17,5 @@ export const newKey = () => (E?.api ? E.api.newKey() : Promise.resolve(String(Da
 
 export const printHtml = (html, opts) => (E?.print ? E.print.html(html, opts) : Promise.reject(new Error("Printing needs the desktop app.")));
 // raw ESC/POS job from the API: { title, printer, print_bytes, error }
+export const savePdf = (html, opts) => (E?.print?.pdf ? E.print.pdf(html, opts) : Promise.reject(new Error("Saving a PDF needs the desktop app.")));
 export const printRaw = (job) => (E?.print?.raw ? E.print.raw(job) : Promise.reject(new Error("Printing needs the desktop app.")));

@@ -24,11 +24,11 @@ import {
   Check, CreditCard, Banknote, Smartphone, Clock, ChefHat, StickyNote, FileText, ListOrdered,
   ShoppingCart, Users, Edit3, Sandwich, CupSoda, IceCreamCone, Beef, Drumstick, Citrus, Grape, Milk,
   GlassWater, Cookie, Martini, Flame, Soup, Image as ImageIcon, List, ShoppingBag, WifiOff, Loader2,
-  ShieldCheck, ShieldAlert, Settings2, ChevronDown, Eraser, Languages, Sun, Moon, Keyboard,
+  ShieldCheck, ShieldAlert, Settings2, ChevronDown, Eraser, Languages, Sun, Moon, Keyboard, FileDown,
 } from "lucide-react";
 import { useTheme } from "../theme.js";
 import { useOskEnabled, openKeyboard } from "../osk.jsx";
-import { get, post, put, del, newKey, printHtml, printRaw } from "../api/pos.js";
+import { get, post, put, del, newKey, printHtml, printRaw, savePdf } from "../api/pos.js";
 import { tr, tn, getLang, setLang, isRtl, LANGS } from "../i18n.js";
 
 /* ============================================================================
@@ -762,7 +762,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
       try {
         const r = await post("/v1/register/close");
         setRegisterOpen(null);
-        await print(registerHtml(r), tr("Register report"));
+        await printJob(r.print_job);                 // web: Escposbuilder::buildRegister on the receipt printer
       } catch (e) {
         if (e?.code !== "REGISTER_CLOSED") { onError(e, tr("The register was not closed.")); return false; }
       }
@@ -936,6 +936,16 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     if (r.ok) notify(tr("{what} sent to the printer", { what: r.title }));
     else notify(tr("{what} not printed: {error}", { what: r.title || tr("Receipt"), error: r.error }), 8000);
     return r.ok;
+  };
+  // register report: same ticket as the web POS (Sale::registerDetailsAsBytes -> Escposbuilder::buildRegister)
+  const printRegister = async () => { try { await printJob(await get("/v1/register/print")); } catch (e) { onError(e); } };
+  // register report as an A4 PDF (new layout with the outlet's details)
+  const downloadRegister = async (summary) => {
+    try {
+      const s2 = summary || await get("/v1/register/summary");
+      const r = await savePdf(registerA4Html(s2), { fileName: `register-report-${String(s2.opened_at || "").slice(0, 10) || "today"}-${new Date().toTimeString().slice(0, 8).replace(/:/g, "")}.pdf` });
+      if (r?.saved) notify(tr("PDF saved: {path}", { path: r.path }), 6000);
+    } catch (e) { onError(e); }
   };
   // KOT: one ticket per kitchen, each on its own kitchen printer
   const printKot = async (kot) => {
@@ -1713,11 +1723,11 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
 
       {modal?.name === "leave" && (
         <LeaveModal exit={modal.exit} onClose={() => setModal(null)} onLeave={leave}
-          onPrint={async () => { try { await print(registerHtml(await get("/v1/register/summary")), tr("Register details")); } catch (e) { onError(e); } }} />
+          onPrint={printRegister} />
       )}
 
       {modal?.name === "register" && (
-        <RegisterModal onClose={() => setModal(null)} onError={onError} print={print}
+        <RegisterModal onClose={() => setModal(null)} onError={onError} printJob={printJob} onPrint={printRegister} onPdf={downloadRegister}
           onClosed={() => { setModal(null); onLogout(); }} />
       )}
 
@@ -2553,19 +2563,81 @@ function salesHtml(title, first, rows, always) {
 ${list.map((r) => `<tr><td>${esc(r.name)}</td><td class="r">${esc(String(r.qty))}</td><td class="r">${money(r.amount)}</td></tr>`).join("")}
 ${list.length ? `<tr class="b"><td>Total</td><td class="r">${qty}</td><td class="r">${money(amt)}</td></tr>` : `<tr><td>No sales</td><td></td><td></td></tr>`}</table>`;
 }
-function registerHtml(s) {
-  const rows = (s.methods || []).map((m) => `<tr><td>${esc(m.name)}</td><td class="r">${money(m.opening)}</td><td class="r">${money(m.sale)}</td><td class="r">${money(m.closing)}</td></tr>`).join("");
+// Register report, A4 (download as PDF): outlet header + per payment method + item / modifier wise sales.
+function registerA4Html(s) {
+  const o = SETTINGS.outlet || {};
+  const logo = SETTINGS.invoice?.logo_url || o.logo_url || "";
   const t = s.totals || {};
-  return `<!doctype html><html><head><meta charset="utf-8"><style>${RECEIPT_CSS}</style></head><body>
-<h1>${esc(OUTLET.name)}</h1><h2>REGISTER ${s.status === "closed" ? "CLOSED" : "DETAILS"}</h2>
-<div class="m">User: ${esc(s.user)}</div><div class="m">Opened: ${esc(s.opened_at || "")}</div>${s.closed_at ? `<div class="m">Closed: ${esc(s.closed_at)}</div>` : ""}
-<div class="hr"></div><table><tr class="b"><td>Method</td><td class="r">Open</td><td class="r">Sale</td><td class="r">Close</td></tr>${rows}</table><div class="hr"></div>
-<table><tr><td>Opening</td><td class="r">${money(t.opening)}</td></tr><tr><td>Sales</td><td class="r">${money(t.sale)}</td></tr>
-${Number(t.due_receive) ? `<tr><td>Due received</td><td class="r">${money(t.due_receive)}</td></tr>` : ""}${Number(t.purchase) ? `<tr><td>Purchase</td><td class="r">-${money(t.purchase)}</td></tr>` : ""}
-${Number(t.due_payment) ? `<tr><td>Due payment</td><td class="r">-${money(t.due_payment)}</td></tr>` : ""}${Number(t.expense) ? `<tr><td>Expense</td><td class="r">-${money(t.expense)}</td></tr>` : ""}
-${Number(t.refund) ? `<tr><td>Refund (not deducted)</td><td class="r">${money(t.refund)}</td></tr>` : ""}
-<tr><td class="big">Closing</td><td class="r big">${esc(OUTLET.currency)} ${money(t.closing)}</td></tr></table>
-${salesHtml("Item Wise Sales", "Food Menus", s.item_sales, true)}${salesHtml("Modifier Wise Sales", "Modifiers", s.modifier_sales, false)}</body></html>`;
+  const cur = esc(OUTLET.currency);
+  const m2 = (v) => esc(money(v));
+  const methods = (s.methods || []).filter((m) => !isLoyalty(m));
+  const rows = (cells, cls = "") => `<tr class="${cls}">${cells.map((c, i) => `<td class="${i ? "r" : ""}">${c}</td>`).join("")}</tr>`;
+  const sales = (title, first, list) => {
+    if (!list?.length) return "";
+    const q = list.reduce((a, r) => a + (Number(r.qty) || 0), 0), amt = list.reduce((a, r) => a + (Number(r.amount) || 0), 0);
+    return `<h3>${esc(title)}</h3><table class="grid"><thead><tr><th>#</th><th>${esc(first)}</th><th class="r">Quantity</th><th class="r">Amount</th></tr></thead><tbody>
+${list.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td class="r">${esc(String(r.qty))}</td><td class="r">${m2(r.amount)}</td></tr>`).join("")}
+<tr class="tot"><td></td><td>Total</td><td class="r">${esc(String(q))}</td><td class="r">${m2(amt)}</td></tr></tbody></table>`;
+  };
+  const info = [["Address", o.address], ["Phone", o.phone], ["Email", o.email], ["VAT No (TRN)", o.trn], ["CR No", o.cr_number]].filter(([, v]) => v);
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Register report</title><style>
+@page{size:A4;margin:14mm 12mm}
+*{box-sizing:border-box}body{font:11.5px/1.45 "Segoe UI",Tahoma,Arial,"Noto Sans Arabic",sans-serif;color:#1d2433;margin:0}
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:3px solid #5b3fd1;padding-bottom:10px}
+.head img{max-height:62px;max-width:170px;object-fit:contain}
+.firm h1{margin:0;font-size:20px}.firm .ar{font-size:15px;direction:rtl;text-align:start}.firm .out{color:#5a6478;font-weight:600;margin-top:2px}
+.kv{margin-top:6px;display:grid;grid-template-columns:auto 1fr;gap:1px 10px;font-size:10.5px;color:#3b4456}.kv b{font-weight:600;color:#5a6478}
+.title{display:flex;justify-content:space-between;align-items:flex-end;margin:14px 0 8px}
+.title h2{margin:0;font-size:17px}.title .ar{font-size:14px;color:#5a6478}
+.meta{display:grid;grid-template-columns:1.1fr 1.3fr 1.3fr .8fr;gap:8px;margin-bottom:12px}
+.meta div{background:#f3f4f8;border-radius:6px;padding:7px 9px;min-width:0}.meta span{display:block;font-size:9.5px;color:#5a6478;text-transform:uppercase;letter-spacing:.04em}.meta b{font-size:11.5px;white-space:nowrap}
+h3{font-size:13px;margin:16px 0 6px;color:#3f2a9e}
+table{width:100%;border-collapse:collapse}
+.grid th{background:#eeeaff;color:#3f2a9e;text-align:start;padding:6px 8px;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em}
+.grid td{padding:5px 8px;border-bottom:1px solid #e4e7ee}
+.r{text-align:end !important}.tot td{font-weight:700;border-top:2px solid #1d2433;border-bottom:none}
+.pm{page-break-inside:avoid}
+.summary{margin-top:14px;margin-inline-start:auto;width:52%}
+.summary td{padding:5px 8px;border-bottom:1px solid #e4e7ee}.summary .big td{font-size:15px;font-weight:800;border-bottom:none;border-top:2px solid #1d2433}
+.foot{margin-top:24px;display:flex;justify-content:space-between;color:#8a93a6;font-size:9.5px;border-top:1px solid #e4e7ee;padding-top:6px}
+.sign{margin-top:36px;display:grid;grid-template-columns:1fr 1fr;gap:40px}.sign div{border-top:1px solid #1d2433;padding-top:4px;text-align:center;font-size:10.5px;color:#5a6478}
+</style></head><body>
+<div class="head">
+  <div class="firm">
+    <h1>${esc(o.firm_name_1 || o.name || "")}</h1>
+    ${o.firm_name_2 ? `<div class="ar">${esc(o.firm_name_2)}</div>` : ""}
+    <div class="out">${esc(o.name || "")}${o.code ? ` · ${esc(o.code)}` : ""}</div>
+    <div class="kv">${info.map(([k, v]) => `<b>${esc(k)}</b><span>${esc(v)}</span>`).join("")}</div>
+  </div>
+  ${logo ? `<img src="${esc(logo)}" alt="">` : ""}
+</div>
+<div class="title"><h2>Register Report</h2><span class="ar">تقرير السجل النقدي</span></div>
+<div class="meta">
+  <div><span>User</span><b>${esc(s.user || "")}</b></div>
+  <div><span>Opened</span><b>${esc(s.opened_at || "")}</b></div>
+  <div><span>${s.closed_at ? "Closed" : "Printed"}</span><b>${esc(s.closed_at || new Date().toLocaleString())}</b></div>
+  <div><span>Status</span><b>${s.status === "closed" ? "Closed" : "Open"}</b></div>
+</div>
+<h3>Payment methods</h3>
+<table class="grid"><thead><tr><th>Payment method</th><th class="r">Opening</th><th class="r">Sales</th><th class="r">Due received</th><th class="r">Purchase</th><th class="r">Due paid</th><th class="r">Expense</th><th class="r">Refund</th><th class="r">Closing</th></tr></thead><tbody>
+${methods.map((m) => rows([esc(m.name), m2(m.opening), m2(m.sale), m2(m.due_receive), m2(m.purchase), m2(m.due_payment), m2(m.expense), m2(m.refund), `<b>${m2(m.closing)}</b>`], "pm")).join("")}
+${rows(["Total", m2(t.opening), m2(t.sale), m2(t.due_receive), m2(t.purchase), m2(t.due_payment), m2(t.expense), m2(t.refund), m2(t.closing)], "tot")}
+</tbody></table>
+<table class="summary"><tbody>
+<tr><td>Opening balance</td><td class="r">${m2(t.opening)}</td></tr>
+<tr><td>Sales</td><td class="r">${m2(t.sale)}</td></tr>
+${Number(t.due_receive) ? `<tr><td>Due received</td><td class="r">${m2(t.due_receive)}</td></tr>` : ""}
+${Number(t.purchase) ? `<tr><td>Purchase</td><td class="r">-${m2(t.purchase)}</td></tr>` : ""}
+${Number(t.due_payment) ? `<tr><td>Due paid</td><td class="r">-${m2(t.due_payment)}</td></tr>` : ""}
+${Number(t.expense) ? `<tr><td>Expense</td><td class="r">-${m2(t.expense)}</td></tr>` : ""}
+${Number(t.refund) ? `<tr><td>Refund</td><td class="r">-${m2(t.refund)}</td></tr>` : ""}
+<tr class="big"><td>Closing balance</td><td class="r">${cur} ${m2(t.closing)}</td></tr>
+</tbody></table>
+${sales("Item wise sales", "Food menu", s.item_sales)}
+${sales("Modifier wise sales", "Modifier", s.modifier_sales)}
+<div class="sign"><div>Cashier</div><div>Manager</div></div>
+<div class="foot"><span>${esc(o.name || "")} — Register report</span><span>Generated ${esc(new Date().toLocaleString())} · Reztra POS</span></div>
+</body></html>`;
 }
 
 // Recent sales (web POS "Recent Sales"): search by invoice no / customer, pick a day, see the invoice, reprint it.
@@ -2696,22 +2768,24 @@ function SalesTable({ title, first, rows, hideEmpty = false }) {
   );
 }
 
-function RegisterModal({ onClose, onClosed, onError, print }) {
+function RegisterModal({ onClose, onClosed, onError, printJob, onPrint, onPdf }) {
   const [s, setS] = useState(null);
   const [closing, setClosing] = useState(false);
+  const [busy, setBusy] = useState(null);
   useEffect(() => { get("/v1/register/summary").then(setS).catch((e) => { onError(e); onClose(); }); }, []); // eslint-disable-line
   const close = async () => {
     if (!(await ask(tr("Close the register? The report is printed and you are logged out."), { title: tr("Close register"), confirmLabel: tr("Close register & log out"), danger: true }))) return;
     setClosing(true);
-    try { const r = await post("/v1/register/close"); print(registerHtml(r), tr("Register report")); onClosed(); }
+    try { const r = await post("/v1/register/close"); await printJob(r.print_job); onClosed(); }
     catch (e) { onError(e); }
     finally { setClosing(false); }
   };
   const t = s?.totals || {};
   return (
     <Modal title={tr("Register details")} onClose={onClose}
-      footer={s && <><button className="btn" onClick={() => print(registerHtml(s), tr("Register details"))}><Printer size={16} />{tr("Print")}</button>
-        <button className="btn" style={{ color: "var(--danger)" }} disabled={closing} onClick={close}>{closing ? <Loader2 size={16} className="spin" /> : <Ban size={16} />}Close register &amp; log out</button></>}>
+      footer={s && <><button className="btn" disabled={!!busy} onClick={async () => { setBusy("print"); try { await onPrint(); } finally { setBusy(null); } }}>{busy === "print" ? <Loader2 size={16} className="spin" /> : <Printer size={16} />}{tr("Print")}</button>
+        <button className="btn" disabled={!!busy} onClick={async () => { setBusy("pdf"); try { await onPdf(s); } finally { setBusy(null); } }}>{busy === "pdf" ? <Loader2 size={16} className="spin" /> : <FileDown size={16} />}{tr("Download PDF")}</button>
+        <button className="btn" style={{ color: "var(--danger)", marginInlineStart: "auto" }} disabled={closing} onClick={close}>{closing ? <Loader2 size={16} className="spin" /> : <Ban size={16} />}{tr("Close register & log out")}</button></>}>
       {!s ? <p className="muted">{tr("Loading…")}</p> : <>
         <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>{s.user} · opened {s.opened_at}</div>
         <div className="list">
