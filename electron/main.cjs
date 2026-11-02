@@ -74,7 +74,18 @@ api.setHandlers({
 
 function startDeviceCheck() {
   stopDeviceCheck();
-  deviceTimer = setInterval(() => { if (device.load()) api.checkDevice().catch(() => {}); }, DEVICE_CHECK_MS);
+  deviceTimer = setInterval(() => {
+    const d = device.load();
+    if (!d) return;
+    // access period over (the server refuses this PC from then on too): back to the activation screen
+    if (d.access_until && Date.now() >= Date.parse(d.access_until)) {
+      api.logout().catch(() => {});
+      device.clear(); stopDeviceCheck();
+      send("device:revoked", `The access period of this device ended on ${new Date(d.access_until).toLocaleString()}. Ask your manager for a new key.`);
+      return;
+    }
+    api.checkDevice().then((r) => { if (r && "access_until" in r) device.setAccessUntil(r.access_until); }).catch(() => {});
+  }, DEVICE_CHECK_MS);
 }
 function stopDeviceCheck() { if (deviceTimer) clearInterval(deviceTimer); deviceTimer = null; }
 

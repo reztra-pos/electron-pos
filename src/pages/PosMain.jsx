@@ -1073,6 +1073,17 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
   /* ---------- ZATCA after the sale (runs on the server after the reply) ---------- */
   const [zatcaQueue, setZatcaQueue] = useState([]);          // [{ id, sale_no }]
   const [submitting, setSubmitting] = useState(false);       // invoice submit overlay
+  // the till's access period (Settings -> POS Devices): warn in the last 3 days
+  const [accessUntil, setAccessUntil] = useState(null);
+  const [nowTick, setNowTick] = useState(Date.now());
+  useEffect(() => {
+    const load = () => window.electronAPI?.device?.get?.().then((d) => setAccessUntil(d?.access_until || null)).catch(() => {});
+    load();
+    const t = setInterval(() => { setNowTick(Date.now()); load(); }, 60000);     // follows changes made in the web app
+    return () => clearInterval(t);
+  }, []);
+  const accessLeft = accessUntil && Date.parse(accessUntil) - nowTick <= 3 * 86400000
+    ? { ms: Math.max(0, Date.parse(accessUntil) - nowTick), date: new Date(accessUntil).toLocaleString() } : null;
   const watchZatca = (invoice) => {
     if (!invoice?.zatca?.pending) {                          // older server: everything came with the reply
       if (prefs.printInvoice && invoice?.print_job) printJob(invoice.print_job);
@@ -1236,6 +1247,15 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     } catch (e) { onError(e); }
   };
 
+  // Re-print KOT / Print Draft: the button spins for 1 s, the popup closes, printing carries on in the background
+  const [spin, setSpin] = useState(null);                  // "kot" | "bill" (running panel / order details)
+  const inBackground = (kind, work, closeModal = false) => {
+    if (spin) return;
+    setSpin(kind);
+    work();                                                // not awaited: it reports by itself (toast)
+    setTimeout(() => { setSpin(null); if (closeModal) setModal(null); }, 1000);
+  };
+
   /* ---------- drafts ---------- */
   const saveDraft = async () => {
     if (!cart.length) return notify(tr("Nothing to save — the order is empty"));
@@ -1363,6 +1383,11 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
           </>}
         </div>
         <button className="icon-btn" onClick={() => setSheet(true)} title={tr("Main menu")} aria-label={tr("Main menu")}><Menu size={22} /></button>
+        {accessLeft !== null && (
+          <span className="trial-badge" style={{ background: accessLeft.ms <= 86400000 ? "var(--danger)" : undefined }} title={tr("This till's access ends on {date}", { date: accessLeft.date })}>
+            {accessLeft.ms <= 86400000 ? tr("Access ends today") : tr("Access ends in {n} days", { n: Math.ceil(accessLeft.ms / 86400000) })}
+          </span>
+        )}
         {zatcaQueue.length > 0 && (
           <button className="zatca-pill" onClick={openRecent} title={zatcaQueue.map((x) => x.sale_no).join(", ")} aria-label={tr("Invoices being sent to ZATCA")}>
             <Loader2 size={14} className="spin" />{tr("ZATCA")} · {zatcaQueue.length}
@@ -1426,7 +1451,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
           <div className="ro-actions">
             <button className="op-btn" disabled={!sel || !!busy} onClick={modifyOrder}><Edit3 size={14} />{tr("Modify Order")}</button>
             <button className="op-btn" disabled={!sel} onClick={() => setModal({ name: "details", id: sel.id })}><Info size={14} />{tr("Order Details")}</button>
-            <button className="op-btn" disabled={!sel} onClick={() => reprintKot(sel.id)}><Printer size={14} />{tr("Re-print KOT")}</button>
+            <button className="op-btn" disabled={!sel || !!spin} onClick={() => inBackground("kot", () => reprintKot(sel.id))}>{spin === "kot" && modal?.name !== "details" ? <Loader2 size={14} className="spin" /> : <Printer size={14} />}{tr("Re-print KOT")}</button>
             {canPay && <button className="op-btn half" disabled={!sel || !!busy} onClick={() => openOrderPayment(sel.id)}><Receipt size={14} />{tr("Invoice")}</button>}
             <button className={`op-btn ${canPay ? "half" : ""}`} onClick={saveDraft} title={tr("Save the current order as a draft")}><FileText size={14} />{tr("Draft")}</button>
             <button className="op-btn" disabled={!sel} onClick={cancelRunning}><Ban size={14} />{tr("Cancel Order")}</button>
@@ -1738,7 +1763,8 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
       )}
 
       {modal?.name === "details" && <OrderDetails id={modal.id} canPay={canPay} onClose={() => setModal(null)} onError={onError}
-        onKot={() => reprintKot(modal.id)} onBill={() => printBill(modal.id)} onInvoice={() => openOrderPayment(modal.id)} />}
+        spin={spin} onKot={() => inBackground("kot", () => reprintKot(modal.id), true)} onBill={() => inBackground("bill", () => printBill(modal.id), true)}
+        onInvoice={() => openOrderPayment(modal.id)} />}
 
       {modal?.name === "drafts" && (
         <Modal title={tr("Drafts")} onClose={() => setModal(null)}>
@@ -1782,7 +1808,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
 
       {modal?.name === "leave" && (
         <LeaveModal exit={modal.exit} onClose={() => setModal(null)} onLeave={leave}
-          onPrint={printRegister} />
+          onPrint={printRegister} onPdf={() => downloadRegister()} />
       )}
 
       {modal?.name === "register" && (
@@ -2327,15 +2353,15 @@ function CustomerModal({ edit, onClose, onSave, onError }) {
 }
 
 // Running order details, live from the server (kitchen status per item).
-function OrderDetails({ id, canPay, onClose, onError, onKot, onBill, onInvoice }) {
+function OrderDetails({ id, canPay, onClose, onError, onKot, onBill, onInvoice, spin }) {
   const [o, setO] = useState(null);
   useEffect(() => { get(`/v1/orders/${id}`).then(setO).catch((e) => { onError(e); onClose(); }); }, [id]); // eslint-disable-line
   const t = o?.totals || {};
   return (
     <Modal title={o ? tr("Order {n}", { n: o.order_number || o.sale_no }) : tr("Order details")} onClose={onClose} size="lg"
       footer={o && <>
-        <button className="btn" onClick={onKot}><Printer size={16} />{tr("Re-print KOT")}</button>
-        <button className="btn" onClick={onBill}><FileText size={16} />{tr("Print Draft")}</button>
+        <button className="btn" disabled={!!spin} onClick={onKot}>{spin === "kot" ? <Loader2 size={16} className="spin" /> : <Printer size={16} />}{tr("Re-print KOT")}</button>
+        <button className="btn" disabled={!!spin} onClick={onBill}>{spin === "bill" ? <Loader2 size={16} className="spin" /> : <FileText size={16} />}{tr("Print Draft")}</button>
         {canPay && <button className="btn primary" onClick={() => { onClose(); onInvoice(); }}><Receipt size={16} />{tr("Invoice")}</button>}
       </>}>
       {!o ? <p className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} className="spin" />{tr("Loading…")}</p> : <>
@@ -2785,15 +2811,19 @@ function RecentSalesModal({ initial, onClose, onError, onReprint }) {
 }
 
 // Log out / close the app while the register is open: close it first, or leave it open, or stay.
-function LeaveModal({ exit, onClose, onLeave, onPrint }) {
+function LeaveModal({ exit, onClose, onLeave, onPrint, onPdf }) {
   const [busy, setBusy] = useState(null);
   const go = async (closeRegister) => { setBusy(closeRegister ? "close" : "keep"); const done = await onLeave({ closeRegister, exit }); if (!done) setBusy(null); };
   const printIt = async () => { setBusy("print"); try { await onPrint(); } finally { setBusy(null); } };
+  const pdfIt = async () => { setBusy("pdf"); try { await onPdf(); } finally { setBusy(null); } };
   return (
-    <Modal title={exit ? tr("Close the app") : tr("Log out")} onClose={() => !busy && onClose()} closable={!busy}
+    <Modal title={exit ? tr("Close the app") : tr("Log out")} onClose={() => !busy && onClose()} closable={!busy} size="lg"
       footer={<>
-        <button className="btn" disabled={!!busy} onClick={printIt} style={{ marginInlineEnd: "auto" }}>
+        <button className="btn" disabled={!!busy} onClick={printIt}>
           {busy === "print" ? <Loader2 size={16} className="spin" /> : <Printer size={16} />}{tr("Print")}
+        </button>
+        <button className="btn" disabled={!!busy} onClick={pdfIt} style={{ marginInlineEnd: "auto" }}>
+          {busy === "pdf" ? <Loader2 size={16} className="spin" /> : <FileDown size={16} />}{tr("Download PDF")}
         </button>
         <button className="btn" disabled={!!busy} onClick={() => go(false)}>
           {busy === "keep" ? <Loader2 size={16} className="spin" /> : <LogOut size={16} />}{exit ? tr("Exit without closing") : tr("Log out without closing")}
@@ -2805,7 +2835,7 @@ function LeaveModal({ exit, onClose, onLeave, onPrint }) {
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         <Wallet size={28} color="var(--amber)" style={{ flex: "none" }} />
         <p style={{ margin: 0 }}>{tr("Your register is still open. Do you want to close the register before you {action}?", { action: exit ? tr("close the app") : tr("log out") })}
-          <br /><span className="muted" style={{ fontSize: 13 }}>{tr("Print gives the register report without closing the register. Closing the register prints it too.")}</span></p>
+          <br /><span className="muted" style={{ fontSize: 13 }}>{tr("Print or download the register report without closing the register. Closing the register prints it too.")}</span></p>
       </div>
     </Modal>
   );

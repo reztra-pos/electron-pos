@@ -93,6 +93,7 @@ export default function Activate({ onActivated, notice = "" }) {
             <div><Monitor size={16} /><span>Device</span><b>{preview.device_name || preview.device_id}</b></div>
             <div><Store size={16} /><span>Outlet</span><b>{preview.outlet_name || (preview.outlet_id ? `#${preview.outlet_id}` : "—")}</b></div>
             {preview.expires && <div><CalendarClock size={16} /><span>Key expires</span><b>{new Date(preview.expires).toLocaleString()}</b></div>}
+            {preview.checked && <div><CalendarClock size={16} /><span>Access</span><b>{preview.access_days ? `${preview.access_days} days after activation` : "No limit"}</b></div>}
           </div>
         )}
 

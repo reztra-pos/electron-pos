@@ -51,7 +51,7 @@ async function preview(apiKey) {
   if (res.status === 404 && !raw.code) return out;               // older server without the check: show what the key has
   if (!res.ok) throw new Error(raw.message || `The server refused this key (HTTP ${res.status}).`);
   const body = raw && "data" in raw ? raw.data : raw;
-  return { ...out, device_name: body.device?.name || "", outlet_name: body.outlet?.name || "", checked: true };
+  return { ...out, device_name: body.device?.name || "", outlet_name: body.outlet?.name || "", access_days: body.access_days ?? null, checked: true };
 }
 
 async function activate(apiKey) {
@@ -92,6 +92,7 @@ async function activate(apiKey) {
     outlet_name: body.outlet?.name || "",
     device_token: body.device_token,
     activated_at: new Date().toISOString(),
+    access_until: body.access_until || null,          // end of the access period (null = no limit)
   };
   save(data);
   return publicInfo(data);
@@ -99,7 +100,13 @@ async function activate(apiKey) {
 
 const publicInfo = (d = load()) => d && {
   url: d.url, device_id: d.device_id, device_name: d.device_name, device_short: d.device_short,
-  outlet_id: d.outlet_id, outlet_name: d.outlet_name, activated_at: d.activated_at,
+  outlet_id: d.outlet_id, outlet_name: d.outlet_name, activated_at: d.activated_at, access_until: d.access_until || null,
 };
 
-module.exports = { load, preview, activate, clear, publicInfo };
+/** keep the access end date in step with the server (changed / extended in Settings -> POS Devices) */
+function setAccessUntil(until) {
+  const d = load();
+  if (d && (d.access_until || null) !== (until || null)) save({ ...d, access_until: until || null });
+}
+
+module.exports = { load, preview, activate, clear, publicInfo, setAccessUntil };
