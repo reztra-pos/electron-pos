@@ -105,7 +105,7 @@ export function applyCatalog(boot, customers = []) {
     prices: it.prices || { dine_in: 0, take_away: 0, delivery: 0, partners: {} },
     openPrice: !!it.open_price,
     modifiers: (it.modifiers || []).map((m) => ({ id: m.id, name: m.name, price: Number(m.price) || 0, openPrice: !!m.open_price })),
-    veg: !!it.veg, bev: !!it.beverage, promo: !!it.promotion, promotion: it.promotion,
+    veg: !!it.veg, bev: !!it.beverage, promo: !!it.promotion, promotion: it.promotion ? { ...it.promotion, text: promoTitle(it.promotion.text) } : null,
     combo: !!it.combo, comboGroups: it.combo?.type === 2 ? it.combo.groups || [] : null, comboItems: it.combo?.items || [],
     image: it.image_url || null,
     unavailable: !!it.unavailable,
@@ -187,8 +187,26 @@ function comboFromText(item, text) {
 }
 // "not applicable" modifier: price is typed at the till when it is selected (like the web POS keypad)
 const isOpenMod = (itemId, modId) => !!ITEM_BY_ID[itemId]?.modifiers.find((x) => x.id === modId)?.openPrice;
+// the web app's promotion text is HTML ("2 Get 1 Free<br><span>Buy: <i>…</i></span>"): keep only the title, as plain text
+const promoTitle = (html) => {
+  const first = String(html || "").split(/<br\s*\/?>/i)[0];
+  const d = document.createElement("div");
+  d.innerHTML = first;
+  return (d.textContent || "").replace(/\s+/g, " ").trim();
+};
 const lineUnit = (l) => l.price + l.mods.reduce((s, m) => s + m.price, 0);
 const lineTotal = (l) => lineUnit(l) * l.qty * (1 - (Number(l.disc) || 0) / 100);
+// promotion of an item (from the web app's Promotions): 1 = discount ("25%" or a fixed amount), 2 = buy X get Y free
+const promoDiscountAmount = (promo, price, qty) => {
+  if (!promo || promo.type !== 1 || !promo.discount) return 0;
+  const v = String(promo.discount).trim();
+  const n = parseFloat(v);
+  if (!(n > 0)) return 0;
+  const base = price * qty;
+  return Math.min(base, v.endsWith("%") ? Math.round(base * n) / 100 : n);
+};
+const promoFreeQty = (promo, qty) => (promo && promo.type === 2 && promo.buy_qty > 0 ? Math.floor(qty / promo.buy_qty) * (promo.free_qty || 0) : 0);
+const discLabel = (d) => { const v = String(d || "").trim(); return v.endsWith("%") ? tr("{v}% off", { v: v.slice(0, -1) }) : tr("{v} off", { v: money(Number(v) || 0) }); };
 const amountStr = ({ mode, value }) => (Number(value) > 0 ? (mode === "percent" ? `${Number(value)}%` : String(Number(value))) : "");
 const parseAmount = (s) => {
   const t = String(s ?? "").trim();
@@ -300,6 +318,14 @@ const CSS = `
 .cart-body{flex:1;overflow-y:auto}
 .cart-row{user-select:none;min-height:50px;border-bottom:1px solid var(--line2);padding-top:6px;padding-bottom:6px}
 .cart-row:hover{background:var(--hover)}
+.cart-row .was{display:block;font-size:11px;font-weight:600;color:var(--muted)}
+.promo-tag,.free-tag{display:inline-block;margin-inline-start:6px;font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:4px;color:#fff;background:#E0245E;vertical-align:2px}
+.free-tag{background:#2E9E5B}
+.cart-row.free-row{min-height:38px;background:color-mix(in srgb,#2E9E5B 8%,transparent)}
+.cart-row.free-row .cart-name{cursor:default}
+.promo-box{border:1px dashed #E0245E;border-radius:8px;padding:8px 10px;margin-bottom:12px;font-size:13px;display:grid;gap:3px}
+.promo-box b.t{color:#E0245E}
+.promo-box .row{display:flex;justify-content:space-between;gap:10px}
 .cart-name{border:0;background:transparent;text-align:start;padding:0;font-weight:700;font-size:13.5px;min-width:0}
 .cart-name small{display:block;font-weight:500;font-size:11.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .qty{display:flex;align-items:center;border:1px solid var(--line);border-radius:8px;overflow:hidden;height:34px;width:max-content;justify-self:center}
@@ -729,8 +755,18 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     return { ...m, [key]: (m[key] || 0) + l.qty };
   }, {}), [cart]);
   const catById = useMemo(() => Object.fromEntries(CATEGORIES.map((c) => [c.id, c])), []);
-  const itemCount = cart.reduce((s, l) => s + l.qty, 0);
   const totals = calc?.totals || null;
+  // the server's line for each cart row (promotion discount, free items), in cart order; free lines follow their item
+  const srvLines = useMemo(() => {
+    const out = [];
+    let cur = null;
+    for (const it of calc?.items || []) {
+      if (it.is_free) { if (cur) cur.free.push(it); } else { cur = { ...it, free: [] }; out.push(cur); }
+    }
+    return out;
+  }, [calc]);
+  const srvFor = (i) => { const sl = srvLines[i]; return sl && cart[i] && Number(sl.food_menu_id) === Number(cart[i].itemId) && Number(sl.qty) === Number(cart[i].qty) ? sl : null; };
+  const itemCount = cart.reduce((s, l) => s + l.qty, 0) + srvLines.reduce((s, l) => s + l.free.reduce((a, f) => a + Number(f.qty || 0), 0), 0);
 
   const notify = (text, ms = 3200) => {
     setToast(text);
@@ -1509,21 +1545,36 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
             <div className="cart-body">
               {cart.length === 0 ? (
                 <div className="cart-empty"><div><ShoppingCart size={40} /><div>{tr("Tap an item on the menu to start an order.")}</div></div></div>
-              ) : cart.map((l) => (
-                <div key={l.key} className="cart-grid cart-row">
+              ) : cart.map((l, i) => { const sv = srvFor(i); const pd = sv && Number(sv.discount_amount) > 0 && !l.disc ? sv : null; const promo = ITEM_BY_ID[l.itemId]?.promotion; return (
+                <React.Fragment key={l.key}>
+                <div className="cart-grid cart-row">
                   <button className={`cart-name ${showImages ? "with-thumb" : ""}`} onClick={() => setModal({ name: "item", line: l })} title={tr("Edit item")}>
                     {showImages && (() => { const it = ITEM_BY_ID[l.itemId]; return it ? <ItemThumb item={it} size="sm" tint={catById[it.cat]?.tint} /> : null; })()}
                     <span className="txt">{ITEM_BY_ID[l.itemId] ? itemName(ITEM_BY_ID[l.itemId]) : l.name}
+                    {pd && <span className="promo-tag" title={promo?.text || ""}>{tr("PROMO")} · {discLabel(pd.discount)}</span>}
                     {(l.mods.length > 0 || l.note || l.disc > 0 || l.discRaw || l.cooking) && (
                       <small>{[...l.mods.map((m) => m.name), l.disc > 0 ? tr("{v}% off", { v: l.disc }) : "", l.discRaw ? tr("{v} off", { v: l.discRaw }) : "", l.note ? `“${l.note}”` : "", l.cooking && l.cooking !== "New" ? tr(l.cooking) : ""].filter(Boolean).join(", ")}</small>
                     )}</span>
                   </button>
-                  <span className="r num col-price" title={l.priceEdited ? tr("Price changed for this customer") : ""} style={l.priceEdited ? { color: "var(--warn-ink)", fontWeight: 800 } : null}>{money(lineUnit(l))}{l.priceEdited ? "*" : ""}</span>
+                  <span className="r num col-price" title={l.priceEdited ? tr("Price changed for this customer") : ""} style={l.priceEdited ? { color: "var(--warn-ink)", fontWeight: 800 } : null}>
+                    {pd ? <><s className="was">{money(lineUnit(l))}</s>{money(Number(pd.line_total) / Number(pd.qty))}</> : <>{money(lineUnit(l))}{l.priceEdited ? "*" : ""}</>}
+                  </span>
                   <Qty value={l.qty} onChange={(q) => setLineQty(l.key, q)} />
-                  <span className="r num" style={{ fontWeight: 800 }}>{money(lineTotal(l))}</span>
+                  <span className="r num" style={{ fontWeight: 800 }}>{pd ? <><s className="was">{money(lineTotal(l))}</s>{money(pd.line_total)}</> : money(lineTotal(l))}</span>
                   <button className="del" onClick={() => removeLine(l.key)} aria-label={tr("Remove {name}", { name: l.name })}><Trash2 size={16} /></button>
                 </div>
-              ))}
+                {(sv?.free || []).map((f, fi) => (
+                  <div key={`${l.key}-free-${fi}`} className="cart-grid cart-row free-row" title={promo?.text || ""}>
+                    <span className="cart-name"><span className="txt">{ITEM_BY_ID[f.food_menu_id] ? itemName(ITEM_BY_ID[f.food_menu_id]) : f.name}<span className="free-tag">{tr("FREE")}</span>
+                      {promo?.text && <small>{promo.text}</small>}</span></span>
+                    <span className="r num col-price">{money(0)}</span>
+                    <span className="num" style={{ textAlign: "center", fontWeight: 800 }}>{Number(f.qty)}</span>
+                    <span className="r num" style={{ fontWeight: 800 }}>{money(0)}</span>
+                    <span />
+                  </div>
+                ))}
+                </React.Fragment>
+              ); })}
             </div>
           </div>
 
@@ -2035,6 +2086,11 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
   const modNeedsPrice = mods.some((x) => x.openPrice && x.entered === "");
   const pickCombo = (g, id) => setCombo((c) => [...c.filter((x) => !g.options.some((o) => o.food_menu_id === x)), id]);
   const needPrice = (item.openPrice && !(Number(open) > 0)) || modNeedsPrice;
+  const promo = item.promotion || null;
+  const q1 = Math.max(1, qty);
+  const promoOff = !(Number(disc) > 0) ? promoDiscountAmount(promo, price, q1) : 0;
+  const freeQty = promoFreeQty(promo, q1);
+  const freeItem = promo?.free_food_menu_id ? ITEM_BY_ID[promo.free_food_menu_id] : null;
 
   return (
     <Modal title={item.name} onClose={onClose}
@@ -2046,7 +2102,7 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
           discRaw: Number(disc) > 0 ? null : (line?.discRaw ?? null),
           comboSelections: item.comboGroups ? combo : [], comboChanged,
         })}>
-          {line ? tr("Update item") : tr("Add to order")} · {money(unit * Math.max(1, qty) * (1 - (Number(disc) || 0) / 100))}
+          {line ? tr("Update item") : tr("Add to order")} · {money(unit * Math.max(1, qty) * (1 - (Number(disc) || 0) / 100) - promoOff)}
         </button>
       </>}>
       <ItemThumb item={item} size="lg" tint={(CATEGORIES.find((c) => c.id === item.cat) || {}).tint} />
@@ -2054,6 +2110,19 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
         <span className="muted">{item.code}{item.openPrice ? "" : ` · ${money(price)} each`}{edited && <b style={{ color: "var(--amber, #9A6400)" }}> {tr("· price changed")}</b>}</span>
         <Qty big value={qty} onChange={(v) => setQty(Math.max(1, v))} />
       </div>
+      {promo && (promo.type === 1 || promo.type === 2) && (
+        <div className="promo-box" aria-label={tr("Promotion")}>
+          <b className="t">{tr("PROMO")}{promo.text ? ` · ${promo.text}` : ""}</b>
+          {promo.type === 1 ? <>
+            <div className="row"><span>{tr("Discount")} ({discLabel(promo.discount)})</span><b className="num">−{money(promoOff)}</b></div>
+            <div className="row"><span>{tr("Price after discount")}</span><b className="num">{money((price * q1 - promoOff) / q1)} {tr("each")}</b></div>
+          </> : <>
+            <div className="row"><span>{tr("Buy")}: {item.name}</span><b className="num">{promo.buy_qty} {tr("qty")}</b></div>
+            <div className="row"><span>{tr("Get free")}: {freeItem ? freeItem.name : ""}</span><b className="num">{promo.free_qty} {tr("qty")}</b></div>
+            <div className="row"><span>{tr("Free with this order")}</span><b className="num">{freeQty}{freeQty === 0 && promo.buy_qty > q1 ? ` · ${tr("add {n} more", { n: promo.buy_qty - q1 })}` : ""}</b></div>
+          </>}
+        </div>
+      )}
       {item.openPrice ? (
         <label className="field">{tr("Price ({currency})", { currency: OUTLET.currency })}
           <input ref={priceRef} className="input num" type="number" min="0" step="any" autoFocus value={open} onChange={(e) => setOpen(e.target.value)} placeholder={tr("Enter the price")} />
