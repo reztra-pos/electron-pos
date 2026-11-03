@@ -91,7 +91,8 @@ const PAY_ICON = (name) => (/card|visa|master|mada/i.test(name) ? CreditCard : /
 /** Turn GET /v1/pos/bootstrap (+ GET /v1/customers) into what the screen uses. */
 export function applyCatalog(boot, customers = []) {
   SETTINGS = boot.settings || {};
-  OUTLET = { name: SETTINGS.outlet?.name || "", currency: SETTINGS.currency || "", precision: Number(SETTINGS.precision ?? 2) };
+  OUTLET = { name: SETTINGS.outlet?.name || "", currency: SETTINGS.currency || "", precision: Number(SETTINGS.precision ?? 2),
+    zatca: !!SETTINGS.zatca_math };    // totals with the ZATCA invoice math: no tips (not on the invoice)
   CATEGORIES = (boot.categories || []).map((c, i) => ({ id: c.id, name: c.name, name2: c.secondary_name || "", tint: TINTS[i % TINTS.length], art: artFor(c.name) }));
   const catArt = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.art]));
   const mapItem = (it, parent = null) => ({
@@ -153,7 +154,9 @@ const tblText = (t) => (t || []).map((x) => x.name).join(", ");
 const tblPersons = (t) => (t || []).reduce((s, x) => s + (Number(x.persons) || 0), 0);
 // open price, combo choices or modifiers: ask before adding to the cart
 // item discount in the item popup is switched off for now; set to true to bring it back
-const ITEM_DISCOUNT_ENABLED = false;
+// item discount: % or an amount off each item (ZATCA line discount); the server turns it off for phase 2 outlets
+// until their ZATCA report has the discount (config pos_api_zatca_math_phase2)
+const itemDiscountOn = () => SETTINGS.item_discount !== false;
 const needsOptions = (it) => !!(it && (it.openPrice || it.comboGroups || it.modifiers?.length));
 const partnerById = (id) => PARTNERS.find((p) => String(p.id) === String(id));
 const defaultTypeKey = () => TYPE_KEY[Number(SETTINGS.default_order_type)] || null;
@@ -195,7 +198,9 @@ const promoTitle = (html) => {
   return (d.textContent || "").replace(/\s+/g, " ").trim();
 };
 const lineUnit = (l) => l.price + l.mods.reduce((s, m) => s + m.price, 0);
-const lineTotal = (l) => lineUnit(l) * l.qty * (1 - (Number(l.disc) || 0) / 100);
+// item discount of one unit: "10%" (rounded to 0.01 like the ZATCA line) or a fixed amount off each; modifiers are not discounted
+const unitDiscount = (price, l) => Number(l.disc) > 0 ? Math.round(price * Number(l.disc)) / 100 : Math.min(price, Number(l.discRaw) || 0);
+const lineTotal = (l) => lineUnit(l) * l.qty - unitDiscount(l.price, l) * l.qty;
 // promotion of an item (from the web app's Promotions): 1 = discount ("25%" or a fixed amount), 2 = buy X get Y free
 const promoDiscountAmount = (promo, price, qty) => {
   if (!promo || promo.type !== 1 || !promo.discount) return 0;
@@ -206,7 +211,7 @@ const promoDiscountAmount = (promo, price, qty) => {
   return Math.min(base, v.endsWith("%") ? Math.round(base * n) / 100 : n);
 };
 const promoFreeQty = (promo, qty) => (promo && promo.type === 2 && promo.buy_qty > 0 ? Math.floor(qty / promo.buy_qty) * (promo.free_qty || 0) : 0);
-const discLabel = (d) => { const v = String(d || "").trim(); return v.endsWith("%") ? tr("{v}% off", { v: v.slice(0, -1) }) : tr("{v} off", { v: money(Number(v) || 0) }); };
+const discLabel = (d) => { const v = String(d || "").trim(); return v.endsWith("%") ? tr("{v}% off", { v: v.slice(0, -1) }) : tr("{v} off each", { v: money(Number(v) || 0) }); };
 const amountStr = ({ mode, value }) => (Number(value) > 0 ? (mode === "percent" ? `${Number(value)}%` : String(Number(value))) : "");
 const parseAmount = (s) => {
   const t = String(s ?? "").trim();
@@ -319,10 +324,21 @@ const CSS = `
 .cart-row{user-select:none;min-height:50px;border-bottom:1px solid var(--line2);padding-top:6px;padding-bottom:6px}
 .cart-row:hover{background:var(--hover)}
 .cart-row .was{display:block;font-size:11px;font-weight:600;color:var(--muted)}
+.promo-tag.disc{background:#B7791F}
 .promo-tag,.free-tag{display:inline-block;margin-inline-start:6px;font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:4px;color:#fff;background:#E0245E;vertical-align:2px}
 .free-tag{background:#2E9E5B}
 .cart-row.free-row{min-height:38px;background:color-mix(in srgb,#2E9E5B 8%,transparent)}
 .cart-row.free-row .cart-name{cursor:default}
+.disc-row{display:flex;gap:8px;align-items:center;margin-top:6px}
+.disc-row .input{flex:1;min-width:0}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.seg button{border:0;background:var(--soft);padding:0 12px;height:38px;font-weight:700;color:var(--ink2);white-space:nowrap}
+.seg button[aria-pressed=true]{background:var(--brand);color:#fff}
+.disc-amt{color:#B7791F;min-width:64px;text-align:end}
+.disc-err{color:var(--danger);font-size:12.5px;font-weight:600}
+.pay-adjust{display:grid;gap:8px;margin-bottom:12px;padding:10px;border:1px solid var(--line);border-radius:10px}
+.pay-adjust .adj{display:grid;grid-template-columns:118px minmax(0,1fr) auto 74px;gap:8px;align-items:center;font-size:13px;font-weight:700}
+.pay-adjust .adj .num.amt{text-align:end}
 .promo-box{border:1px dashed #E0245E;border-radius:8px;padding:8px 10px;margin-bottom:12px;font-size:13px;display:grid;gap:3px}
 .promo-box b.t{color:#E0245E}
 .promo-box .row{display:flex;justify-content:space-between;gap:10px}
@@ -939,7 +955,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     setCart((c) => {
       const plain = !mods.length && !note && !disc && !item.openPrice && !comboSelections.length && !priceEdited;
       if (plain) {
-        const i = c.findIndex((l) => l.itemId === item.id && !l.lineId && !l.note && !l.disc && !l.mods.length && !l.openPrice && !l.comboSelections?.length);
+        const i = c.findIndex((l) => l.itemId === item.id && !l.lineId && !l.note && !l.disc && !l.discRaw && !l.mods.length && !l.openPrice && !l.comboSelections?.length);
         if (i > -1 && !c[i].priceEdited) return c.map((l, j) => (j === i ? { ...l, qty: l.qty + qty } : l));
       }
       return [...c, { key: `${item.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, itemId: item.id, name: item.name, price: unit, qty, mods, note, disc, openPrice: !!item.openPrice, comboSelections, lineId: null, priceEdited }];
@@ -1048,7 +1064,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     try {
       const r = await post("/v1/orders/calculate", orderBody(type, tbl));
       setCalc(r);
-      setModal({ name: "payment", source: "cart", type, tbl, due: r.totals.total_payable, allowDue: customer.id !== DEFAULT_CUSTOMER_ID, label: `${tr(ORDER_TYPES[type].label)}${hasTables(tbl) ? ` · ${tr("Table {name}", { name: tblText(tbl) })}` : ""}${type === "delivery" && partner ? ` · ${partnerById(partner)?.name || ""}` : ""} · ${customer.name}` });
+      setModal({ name: "payment", source: "cart", type, tbl, due: r.totals.total_payable, totals: r.totals, adjust: { discount, charge: chargeTouched ? charge : parseAmount(r.totals?.charge_value) }, allowDue: customer.id !== DEFAULT_CUSTOMER_ID, label: `${tr(ORDER_TYPES[type].label)}${hasTables(tbl) ? ` · ${tr("Table {name}", { name: tblText(tbl) })}` : ""}${type === "delivery" && partner ? ` · ${partnerById(partner)?.name || ""}` : ""} · ${customer.name}` });
     } catch (e) { onError(e); }
     finally { setBusy(null); }
   };
@@ -1057,15 +1073,25 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     setBusy("calc");
     try {
       const o = await get(`/v1/orders/${orderId}`);
-      setModal({ name: "payment", source: "running", orderId, due: o.totals.total_payable, allowDue: !!o.customer?.id && o.customer.id !== DEFAULT_CUSTOMER_ID && o.customer.name !== "Walk-in Customer", label: `${typeName(o)}${o.tables_text ? ` · ${tr("Table {name}", { name: o.tables_text })}` : ""} · ${o.customer?.name || ""}` });
+      setModal({ name: "payment", source: "running", orderId, delivery: Number(o.order_type) === 3, due: o.totals.total_payable, totals: o.totals, adjust: { discount: parseAmount(o.totals?.discount), charge: parseAmount(o.totals?.charge) }, allowDue: !!o.customer?.id && o.customer.id !== DEFAULT_CUSTOMER_ID && o.customer.name !== "Walk-in Customer", label: `${typeName(o)}${o.tables_text ? ` · ${tr("Table {name}", { name: o.tables_text })}` : ""} · ${o.customer?.name || ""}` });
     } catch (e) { onError(e); }
     finally { setBusy(null); }
   };
 
-  const completePayment = async ({ payments, given, reference }) => {
+  // Finalize Sale: new order discount / service charge -> the server's totals (nothing saved yet)
+  const adjustTotals = async ({ discount: d, charge: c }) => {
+    const m = modal;
+    if (m.source === "running") return (await post(`/v1/orders/${m.orderId}/totals`, { discount: d, charge: c })).totals;
+    const r = await post("/v1/orders/calculate", { ...orderBody(m.type, m.tbl), discount: d, charge: c });
+    setDiscount(parseAmount(d)); setCharge(parseAmount(c)); setChargeTouched(true);
+    return r.totals;
+  };
+
+  const completePayment = async ({ payments, given, reference, discount: d, charge: c }) => {
     if (busy) return;
     const m = modal;
     const payBody = { payments, reference };
+    if (d !== undefined) { payBody.discount = d; payBody.charge = c; }
     if (given !== "" && given != null) payBody.given_amount = Number(given);
     setBusy("pay");
     setSubmitting(true);                                   // "Submitting invoice…" shown at least 1.5 s
@@ -1545,22 +1571,22 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
             <div className="cart-body">
               {cart.length === 0 ? (
                 <div className="cart-empty"><div><ShoppingCart size={40} /><div>{tr("Tap an item on the menu to start an order.")}</div></div></div>
-              ) : cart.map((l, i) => { const sv = srvFor(i); const pd = sv && Number(sv.discount_amount) > 0 && !l.disc ? sv : null; const promo = ITEM_BY_ID[l.itemId]?.promotion; return (
+              ) : cart.map((l, i) => { const sv = srvFor(i); const pd = sv && Number(sv.discount_amount) > 0 ? sv : null; const promo = ITEM_BY_ID[l.itemId]?.promotion; const isPromo = promo?.type === 1 && !!promo.discount; return (
                 <React.Fragment key={l.key}>
                 <div className="cart-grid cart-row">
                   <button className={`cart-name ${showImages ? "with-thumb" : ""}`} onClick={() => setModal({ name: "item", line: l })} title={tr("Edit item")}>
                     {showImages && (() => { const it = ITEM_BY_ID[l.itemId]; return it ? <ItemThumb item={it} size="sm" tint={catById[it.cat]?.tint} /> : null; })()}
                     <span className="txt">{ITEM_BY_ID[l.itemId] ? itemName(ITEM_BY_ID[l.itemId]) : l.name}
-                    {pd && <span className="promo-tag" title={promo?.text || ""}>{tr("PROMO")} · {discLabel(pd.discount)}</span>}
-                    {(l.mods.length > 0 || l.note || l.disc > 0 || l.discRaw || l.cooking) && (
-                      <small>{[...l.mods.map((m) => m.name), l.disc > 0 ? tr("{v}% off", { v: l.disc }) : "", l.discRaw ? tr("{v} off", { v: l.discRaw }) : "", l.note ? `“${l.note}”` : "", l.cooking && l.cooking !== "New" ? tr(l.cooking) : ""].filter(Boolean).join(", ")}</small>
+                    {pd && <span className={`promo-tag ${isPromo ? "" : "disc"}`} title={isPromo ? promo?.text || "" : ""}>{isPromo ? tr("PROMO") : tr("Discount")} · {discLabel(pd.discount)}</span>}
+                    {(l.mods.length > 0 || l.note || l.cooking) && (
+                      <small>{[...l.mods.map((m) => m.name), l.note ? `“${l.note}”` : "", l.cooking && l.cooking !== "New" ? tr(l.cooking) : ""].filter(Boolean).join(", ")}</small>
                     )}</span>
                   </button>
                   <span className="r num col-price" title={l.priceEdited ? tr("Price changed for this customer") : ""} style={l.priceEdited ? { color: "var(--warn-ink)", fontWeight: 800 } : null}>
                     {pd ? <><s className="was">{money(lineUnit(l))}</s>{money(Number(pd.line_total) / Number(pd.qty))}</> : <>{money(lineUnit(l))}{l.priceEdited ? "*" : ""}</>}
                   </span>
                   <Qty value={l.qty} onChange={(q) => setLineQty(l.key, q)} />
-                  <span className="r num" style={{ fontWeight: 800 }}>{pd ? <><s className="was">{money(lineTotal(l))}</s>{money(pd.line_total)}</> : money(lineTotal(l))}</span>
+                  <span className="r num" style={{ fontWeight: 800 }}>{pd ? <><s className="was">{money(lineUnit(l) * l.qty)}</s>{money(pd.line_total)}</> : money(lineTotal(l))}</span>
                   <button className="del" onClick={() => removeLine(l.key)} aria-label={tr("Remove {name}", { name: l.name })}><Trash2 size={16} /></button>
                 </div>
                 {(sv?.free || []).map((f, fi) => (
@@ -1762,9 +1788,9 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
               <span className="num" style={{ minWidth: 60, textAlign: "end" }}>{totals ? money(totals.charge_amount) : "—"}</span>
             </div>
           </div>
-          <div className="sum-row"><span>{tr("Tips")}</span>
+          {!OUTLET.zatca && <div className="sum-row"><span>{tr("Tips")}</span>
             <div className="inline-edit"><input className="input num" type="number" min="0" value={tips} onChange={(e) => setTips(e.target.value)} aria-label={tr("Tips")} /><span className="num" style={{ minWidth: 60, textAlign: "end" }}>{totals ? money(totals.tips_amount) : "—"}</span></div>
-          </div>
+          </div>}
           {(totals?.taxes || []).map((t, i) => (
             <div key={i} className="sum-row"><span>{t.tax_field_type}</span><span className="num">{money(t.tax_field_amount)}</span></div>
           ))}
@@ -1775,7 +1801,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
       )}
 
       {modal?.name === "payment" && (
-        <PaymentModal due={modal.due} label={modal.label} allowDue={modal.allowDue} busy={busy === "pay"} onClose={() => !busy && setModal(null)} onPay={completePayment} />
+        <PaymentModal due={modal.due} totals={modal.totals} adjust={modal.adjust} onAdjust={adjustTotals} chargeLabel={(modal.source === "cart" ? modal.type === "delivery" : modal.delivery) ? tr("Delivery charge") : tr("Service charge")} label={modal.label} allowDue={modal.allowDue} busy={busy === "pay"} onClose={() => !busy && setModal(null)} onPay={completePayment} />
       )}
 
       {modal?.name === "done" && (() => {
@@ -2056,7 +2082,9 @@ function PartnerModal({ current, currentRef, onClose, onSubmit }) {
 function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove }) {
   const [qty, setQty] = useState(line?.qty || 1);
   const [mods, setMods] = useState(line?.mods || []);
-  const [disc, setDisc] = useState(line?.disc || 0);
+  // item discount: "percent" = % of the price, "fixed" = amount off each item
+  const [discMode, setDiscMode] = useState(line?.discRaw ? "fixed" : "percent");
+  const [disc, setDisc] = useState(line?.discRaw ? String(line.discRaw) : line?.disc ? String(line.disc) : "");
   const [note, setNote] = useState(line?.note || "");
   const [open, setOpen] = useState(line?.openPrice ? String(line.price) : "");
   // price for this customer: any item can be changed at the till
@@ -2088,7 +2116,11 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
   const needPrice = (item.openPrice && !(Number(open) > 0)) || modNeedsPrice;
   const promo = item.promotion || null;
   const q1 = Math.max(1, qty);
-  const promoOff = !(Number(disc) > 0) ? promoDiscountAmount(promo, price, q1) : 0;
+  const promoDisc = promo?.type === 1 && !!promo.discount;            // the promotion's discount replaces a typed one (server rule)
+  const discNum = Number(disc) || 0;
+  const discBad = !promoDisc && discNum > 0 && (discMode === "percent" ? discNum > 100 : discNum > price);
+  const manualOff = promoDisc || discBad || !(discNum > 0) ? 0 : unitDiscount(price, discMode === "percent" ? { disc: discNum } : { discRaw: discNum }) * q1;
+  const promoOff = promoDisc ? promoDiscountAmount(promo, price, q1) : 0;
   const freeQty = promoFreeQty(promo, q1);
   const freeItem = promo?.free_food_menu_id ? ITEM_BY_ID[promo.free_food_menu_id] : null;
 
@@ -2097,12 +2129,13 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
       footer={<>
         {onRemove && <button className="btn" style={{ marginInlineEnd: "auto", color: "var(--danger)" }} onClick={onRemove}><Trash2 size={16} />{tr("Remove")}</button>}
         <button className="btn" onClick={onClose}>{tr("Cancel")}</button>
-        <button className="btn primary" disabled={needPrice} onClick={() => onSave({
-          qty: Math.max(1, qty), mods: mods.map(({ entered, ...m }) => m), disc: Number(disc) || 0, note: note.trim(), price, priceEdited: edited,
-          discRaw: Number(disc) > 0 ? null : (line?.discRaw ?? null),
+        <button className="btn primary" disabled={needPrice || discBad} onClick={() => onSave({
+          qty: Math.max(1, qty), mods: mods.map(({ entered, ...m }) => m), note: note.trim(), price, priceEdited: edited,
+          disc: !promoDisc && discMode === "percent" && discNum > 0 ? discNum : 0,
+          discRaw: !promoDisc && discMode === "fixed" && discNum > 0 ? String(discNum) : null,
           comboSelections: item.comboGroups ? combo : [], comboChanged,
         })}>
-          {line ? tr("Update item") : tr("Add to order")} · {money(unit * Math.max(1, qty) * (1 - (Number(disc) || 0) / 100) - promoOff)}
+          {line ? tr("Update item") : tr("Add to order")} · {money(unit * q1 - manualOff - promoOff)}
         </button>
       </>}>
       <ItemThumb item={item} size="lg" tint={(CATEGORIES.find((c) => c.id === item.cat) || {}).tint} />
@@ -2171,8 +2204,19 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
           </label>
         ))}
       </>}
-      {ITEM_DISCOUNT_ENABLED && (
-        <label className="field">{tr("Item discount (%)")}<input className="input num" type="number" min="0" max="100" value={disc} onChange={(e) => setDisc(e.target.value)} /></label>
+      {itemDiscountOn() && !promoDisc && !item.openPrice && (
+        <div className="field">
+          <span>{tr("Item discount")}</span>
+          <div className="disc-row">
+            <input className="input num" type="number" min="0" step="any" value={disc} onChange={(e) => setDisc(e.target.value)} placeholder="0" aria-label={tr("Item discount")} />
+            <div className="seg" role="group" aria-label={tr("Discount type")}>
+              <button type="button" aria-pressed={discMode === "percent"} onClick={() => setDiscMode("percent")}>%</button>
+              <button type="button" aria-pressed={discMode === "fixed"} onClick={() => setDiscMode("fixed")}>{tr("{currency} each", { currency: OUTLET.currency })}</button>
+            </div>
+            {manualOff > 0 && <b className="num disc-amt">−{money(manualOff)}</b>}
+          </div>
+          {discBad && <span className="disc-err" role="alert">{discMode === "percent" ? tr("A percentage cannot be more than 100%.") : tr("Discount cannot be more than the item price.")}</span>}
+        </div>
       )}
       <label className="field">{tr("Unit price with modifiers")}<input className="input num" readOnly value={money(unit)} /></label>
       <label className="field"><span style={{ display: "flex", gap: 6, alignItems: "center" }}><StickyNote size={14} />{tr("Preparation Note")}</span>
@@ -2189,10 +2233,19 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
 //  - card / online can't be more than what is left
 //  - Walk-in Customer must pay in full; a named customer can leave a due balance
 //  - reference is saved on the sale
-function PaymentModal({ due: dueIn, label, busy, allowDue, onClose, onPay }) {
+function PaymentModal({ due: dueIn, totals: totalsIn, adjust, onAdjust, chargeLabel, label, busy, allowDue, onClose, onPay }) {
   const P = OUTLET.precision ?? 2;
   const r2 = (n) => Number((Number(n) || 0).toFixed(P));
-  const due = r2(dueIn);
+  // order discount + service / delivery charge can still be changed here; the server works out the new total
+  const [dueNow, setDueNow] = useState(dueIn);
+  const [tot, setTot] = useState(totalsIn || null);
+  const [odisc, setOdisc] = useState(adjust?.discount || { mode: "fixed", value: 0 });
+  const [ochg, setOchg] = useState(adjust?.charge || { mode: "fixed", value: 0 });
+  const [adjBusy, setAdjBusy] = useState(false);
+  const [adjErr, setAdjErr] = useState("");
+  const adjSeq = useRef(0);
+  const adjFirst = useRef(true);
+  const due = r2(dueNow);
   const [method, setMethod] = useState(PAYMENT_METHODS[0]?.id);
   const [amount, setAmount] = useState("");
   const [counts, setCounts] = useState({});       // denomination -> times tapped (badge)
@@ -2242,22 +2295,62 @@ function PaymentModal({ due: dueIn, label, busy, allowDue, onClose, onPay }) {
   const flDue = r2(Math.max(0, due - flPaid));
   const blocked = flMsg || (flDue > 0 && !allowDue ? tr("Walk-in Customer must pay the full amount. Choose a customer to leave a due balance.") : "");
   const submit = () => {
+    if (adjBlock) return setErr(adjBlock);
     if (blocked) return setErr(blocked);
     const cash = fl.find((l) => l.cash);
-    onPay({ payments: fl.map((l) => ({ payment_method_id: l.id, amount: l.amount })), given: cash ? cash.given : "", reference: reference.trim() });
+    onPay({ payments: fl.map((l) => ({ payment_method_id: l.id, amount: l.amount })), given: cash ? cash.given : "", reference: reference.trim(),
+      ...(onAdjust ? { discount: amountStr(odisc), charge: amountStr(ochg) } : {}) });
   };
+  const adjRow = (lbl, v, setV, amt, sign, aria) => (
+    <div className="adj">
+      <span>{lbl}</span>
+      <input className="input num" type="number" min="0" step="any" value={v.value || ""} placeholder="0" onChange={(e) => { setV((x) => ({ ...x, value: e.target.value })); setErr(""); }} aria-label={aria} />
+      <div className="seg" role="group" aria-label={tr("{name} type", { name: lbl })}>
+        <button type="button" aria-pressed={v.mode !== "percent"} onClick={() => setV((x) => ({ ...x, mode: "fixed" }))}>{OUTLET.currency}</button>
+        <button type="button" aria-pressed={v.mode === "percent"} onClick={() => setV((x) => ({ ...x, mode: "percent" }))}>%</button>
+      </div>
+      <span className="num amt">{tot && Number(amt) > 0 ? `${sign}${money(amt)}` : "—"}</span>
+    </div>
+  );
   const preview = amount !== "" && m?.cash ? r2(Math.max(0, Number(amount) - left)) : 0;
+
+  useEffect(() => {
+    if (adjFirst.current) { adjFirst.current = false; return undefined; }
+    if (!onAdjust) return undefined;
+    const sq = ++adjSeq.current;
+    setAdjBusy(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await onAdjust({ discount: amountStr(odisc), charge: amountStr(ochg) });
+        if (sq !== adjSeq.current) return;
+        setTot(r); setAdjErr("");
+        if (r2(r.total_payable) !== due) { setLines([]); clearInput(); }     // new total: payments start again
+        setDueNow(r.total_payable);
+      } catch (e) { if (sq === adjSeq.current) setAdjErr(firstError(e)); }
+      finally { if (sq === adjSeq.current) setAdjBusy(false); }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [odisc.value, odisc.mode, ochg.value, ochg.mode]); // eslint-disable-line
+  const adjBlock = adjBusy ? tr("Calculating…") : adjErr;
 
   return (
     <Modal title={tr("Finalize Sale")} onClose={onClose} size="lg"
       footer={<>
         <button className="btn" onClick={onClose} disabled={busy}>{tr("Cancel")}</button>
-        <button className="btn ok" disabled={!PAYMENT_METHODS.length || busy || !!blocked} onClick={submit} title={blocked || ""}>
+        <button className="btn ok" disabled={!PAYMENT_METHODS.length || busy || !!blocked || !!adjBlock} onClick={submit} title={adjBlock || blocked || ""}>
           {busy ? <Loader2 size={16} className="spin" /> : <Check size={16} />}{busy ? tr("Saving…") : tr("Complete sale")}
         </button>
       </>}>
-      <div className="pay-due"><span>{tr("Amount due")}</span><span className="num">{OUTLET.currency} {money(due)}</span></div>
+      <div className="pay-due"><span>{tr("Amount due")}</span><span className="num">{adjBusy && <Loader2 size={16} className="spin" style={{ marginInlineEnd: 6 }} />}{OUTLET.currency} {money(due)}</span></div>
       <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>{label}</div>
+      {onAdjust && (
+        <div className="pay-adjust" aria-label={tr("Discount and service charge")}>
+          {adjRow(tr("Discount"), odisc, setOdisc, tot?.sub_total_discount_amount, "−", tr("Order discount"))}
+          {adjRow(chargeLabel || tr("Service charge"), ochg, setOchg, tot?.charge_amount, "+", chargeLabel || tr("Service charge"))}
+          {tot && Number(tot.total_vat) > 0 && <div className="adj"><span>{tr("VAT")}</span><span /><span /><span className="num amt">{money(tot.total_vat)}</span></div>}
+          {adjErr && <div className="disc-err" role="alert">{adjErr}</div>}
+        </div>
+      )}
       {!PAYMENT_METHODS.length && <p className="muted">{tr("No payment methods are set up for this outlet.")}</p>}
       <div className="pay-grid">
         <div>
