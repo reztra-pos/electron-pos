@@ -91,8 +91,14 @@ const PAY_ICON = (name) => (/card|visa|master|mada/i.test(name) ? CreditCard : /
 /** Turn GET /v1/pos/bootstrap (+ GET /v1/customers) into what the screen uses. */
 export function applyCatalog(boot, customers = []) {
   SETTINGS = boot.settings || {};
-  OUTLET = { name: SETTINGS.outlet?.name || "", currency: SETTINGS.currency || "", precision: Number(SETTINGS.precision ?? 2),
-    zatca: !!SETTINGS.zatca_math };    // totals with the ZATCA invoice math: no tips (not on the invoice)
+  OUTLET = { name: SETTINGS.outlet?.name || "", precision: Number(SETTINGS.precision ?? 2),
+    // currency symbol on the whole POS screen: tbl_companies.currency_invoice (e.g. the Saudi Riyal sign), else currency
+    currency: SETTINGS.currency_symbol || SETTINGS.currency || "",
+    curAfter: SETTINGS.currency_position === "After Amount",
+    zatca: !!SETTINGS.zatca_math,      // totals with the ZATCA invoice math: no tips (not on the invoice)
+    // Outlet settings: which order buttons the POS shows, and "printing popup" (ask before printing the invoice)
+    btnPlace: SETTINGS.outlet?.place_order !== false, btnQuick: SETTINGS.outlet?.quick_invoice !== false, btnDraft: SETTINGS.outlet?.draft !== false,
+    printPopup: !!SETTINGS.outlet?.printing_popup };
   CATEGORIES = (boot.categories || []).map((c, i) => ({ id: c.id, name: c.name, name2: c.secondary_name || "", tint: TINTS[i % TINTS.length], art: artFor(c.name) }));
   const catArt = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.art]));
   const mapItem = (it, parent = null) => ({
@@ -142,6 +148,8 @@ export function applyCatalog(boot, customers = []) {
    HELPERS
    ========================================================================== */
 const money = (n) => (Number(n) || 0).toFixed(OUTLET.precision ?? 2);
+// amount with the currency symbol, before or after as the company is set up
+const cur = (n) => (OUTLET.currency ? (OUTLET.curAfter ? `${money(n)} ${OUTLET.currency}` : `${OUTLET.currency} ${money(n)}`) : money(n));
 const ORDER_TYPES = {
   dine: { label: "Dine In", icon: UtensilsCrossed, id: 1 },
   take: { label: "Take Away", icon: ShoppingBag, id: 2 },
@@ -249,10 +257,11 @@ const CSS = `
  --warn-bg:#FFF1D6;--warn-ink:#7A4F00;--warn-line:#F4D38E;--danger-bg:#FDECEA;--danger-ink:#A4262C;--danger-line:#F5C2C0;--ok-bg:#DCF2E3;--info-bg:#E3EEFD;
  --modal-bg:rgba(18,22,34,.5);--tint-mix:100%;
  --ok:#1E9E6A;--danger:#DC3F35;--info:#1E7FD8;--amber:#E8A317;--veg:#1E8E3E;--radius:10px;
- font-family:Manrope,"Noto Sans Arabic","Noto Sans Devanagari",Tahoma,"Nirmala UI",system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg);
+ font-family:SaudiRiyal,Manrope,"Noto Sans Arabic","Noto Sans Devanagari",Tahoma,"Nirmala UI",system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg);
  height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;font-size:14px;-webkit-font-smoothing:antialiased}
 .pos *{box-sizing:border-box}
 .pos button{font-family:inherit;cursor:pointer;color:inherit}
+.pos input,.pos select,.pos textarea{font-family:inherit}
 .pos button:focus-visible,.pos input:focus-visible,.pos select:focus-visible,.pos textarea:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .pos .num{font-variant-numeric:tabular-nums}
 
@@ -336,9 +345,17 @@ const CSS = `
 .seg button[aria-pressed=true]{background:var(--brand);color:#fff}
 .disc-amt{color:#B7791F;min-width:64px;text-align:end}
 .disc-err{color:var(--danger);font-size:12.5px;font-weight:600}
-.pay-adjust{display:grid;gap:8px;margin-bottom:12px;padding:10px;border:1px solid var(--line);border-radius:10px}
-.pay-adjust .adj{display:grid;grid-template-columns:118px minmax(0,1fr) auto 74px;gap:8px;align-items:center;font-size:13px;font-weight:700}
-.pay-adjust .adj .num.amt{text-align:end}
+.pay-adjust{margin-bottom:12px;border:1px solid var(--line);border-radius:10px}
+.pay-adjust{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:8px 10px}
+.pay-adjust .adj{display:flex;align-items:center;gap:6px;flex:1 1 280px;min-width:0;font-size:13px;font-weight:700}
+.pay-adjust .adj>span:first-child{flex:none;white-space:nowrap}
+.pay-adjust .adj>.input{width:0;flex:1 1 60px;min-width:56px;height:36px}
+.pay-adjust .adj .seg button{height:36px;padding:0 10px}
+.pay-adjust .adj .num.amt{flex:none;min-width:62px;text-align:end}
+.pay-adjust .adj.vat{flex:0 0 auto;gap:10px}.pay-adjust .adj.vat .amt{min-width:0}
+.pay-adjust .disc-err{flex-basis:100%}
+@media (max-height:820px){.modal.pay-m .pay-due{padding:10px 12px;font-size:16px;margin-bottom:8px}.modal.pay-m .pay-methods{margin-bottom:8px}.modal.pay-m .pm{min-height:54px}
+ .modal.pay-m .quick-amts{margin-bottom:8px}.modal.pay-m .quick-amts button{padding:6px 10px}.modal.pay-m .pm{padding:8px 6px;gap:4px}.modal.pay-m .pay-adjust{margin-bottom:8px}.modal.pay-m .field{margin-bottom:6px}.modal.pay-m .pay-entry .input,.modal.pay-m .pay-entry .btn{height:40px}.modal.pay-m .pay-lines{min-height:30px}}
 .promo-box{border:1px dashed #E0245E;border-radius:8px;padding:8px 10px;margin-bottom:12px;font-size:13px;display:grid;gap:3px}
 .promo-box b.t{color:#E0245E}
 .promo-box .row{display:flex;justify-content:space-between;gap:10px}
@@ -361,7 +378,7 @@ const CSS = `
 .date-pop{position:absolute;bottom:54px;inset-inline-start:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;box-shadow:0 10px 30px rgba(20,24,40,.18);z-index:5;display:grid;gap:6px;font-size:12px;font-weight:700}
 .act-row{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;padding:8px 10px 10px}
 .act{height:46px;border:0;border-radius:8px;color:#fff !important;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
-.act.cancel{background:var(--danger)}.act.quick{background:#7C4DEB}.act.place{background:var(--info)}
+.act.cancel{background:var(--danger)}.act.quick{background:#7C4DEB}.act.place{background:var(--info)}.act.draft{background:#5E6B7E}
 .act:hover{filter:brightness(1.07)}
 
 /* menu */
@@ -395,6 +412,12 @@ const CSS = `
 .item.has-img .inq{z-index:3}
 .item.has-img .marks{z-index:3;top:6px;inset-inline-start:6px;background:rgba(255,255,255,.92);padding:3px;border-radius:6px}
 .item.has-img .marks:empty{display:none}
+/* items with a real photo: the photo fills the whole card, name and price on a dark band at the bottom */
+.item.photo{min-height:calc(var(--thumb-h,92px) + 74px);border:0}
+.item.photo .thumb{position:absolute;inset:0;height:100%;border-radius:10px}
+.item.photo .body{position:relative;z-index:2;margin-top:auto;flex:0 0 auto;padding:30px 8px 9px;border-radius:0 0 10px 10px;background:linear-gradient(180deg,rgba(0,0,0,0) 0,rgba(0,0,0,.55) 38%,rgba(0,0,0,.78) 100%)}
+.item.photo .nm,.item.photo .pr,.item.photo .pr span{color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.45)}
+.item.photo .nm{min-height:0}
 .thumb{position:relative;width:100%;height:var(--thumb-h,92px);border-radius:9px 9px 0 0;overflow:hidden;display:grid;place-items:center;flex:none}
 .thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .thumb.art{background:radial-gradient(circle at 30% 25%,rgba(255,255,255,.9),rgba(255,255,255,.35) 70%),var(--tint)}
@@ -463,7 +486,17 @@ const CSS = `
 /* modal */
 .modal-wrap{position:fixed;inset:0;z-index:100;background:var(--modal-bg);display:grid;place-items:start center;padding:4vh 12px;overflow-y:auto}
 .modal{background:var(--panel);border-radius:14px;width:100%;max-width:560px;box-shadow:0 24px 60px rgba(10,14,30,.3);display:flex;flex-direction:column;max-height:92vh}
-.modal.lg{max-width:820px}.modal.sm{max-width:420px}
+.modal.lg{max-width:820px}.modal.sm{max-width:420px}.modal.xl{max-width:1000px}
+/* item popup: image + price + note on the left, options on the right; short screens drop the image and tighten up */
+.im-grid.two{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:18px;align-items:start}
+.im-left,.im-right{min-width:0}
+.modal.item-m .thumb.lg{height:clamp(64px,16vh,150px)}
+.modal.item-m .mod-grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
+.modal.item-m .field textarea{min-height:52px}
+@media (max-width:760px){.im-grid.two{grid-template-columns:1fr}}
+@media (max-height:820px){.modal.fit .modal-h{padding:10px 16px}.modal.fit .modal-h h3{font-size:17px}.modal.fit .modal-b{padding:12px 16px}.modal.fit .modal-f{padding:8px 16px}
+ .modal.item-m .field{margin-bottom:8px}.modal.item-m .field textarea{min-height:40px}.modal.item-m .mod{min-height:40px;padding:6px 10px}}
+@media (max-height:780px){.modal.item-m .thumb.lg{display:none}}
 .modal-h{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line)}
 .modal-h h3{margin:0;font-size:19px;font-weight:800}
 .modal-b{padding:18px;overflow-y:auto}
@@ -1123,11 +1156,17 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
       if (m.source === "running" && selectedRunning === m.orderId) setSelectedRunning(null);
       refreshRunning();
       setSales((s) => [invoice, ...s.filter((x) => x.id !== invoice.id)]);
-      // straight on to the next order; ZATCA runs on the server and the invoice prints when it is done
-      setModal(null);
       setTab("menu");
-      notify(tr("Invoice {n} saved — sending to ZATCA…", { n: invoice.sale_no }), 4000);
-      watchZatca(invoice);
+      if (OUTLET.printPopup) {
+        // Outlet "printing popup" = YES: nothing prints by itself; the cashier picks Print invoice or New order
+        setModal({ name: "done", invoice: { ...invoice, print_job: invoice?.zatca?.pending ? null : invoice.print_job }, waiting: !!invoice?.zatca?.pending });
+        watchZatca(invoice, true);
+      } else {
+        // straight on to the next order; ZATCA runs on the server and the invoice prints when it is done
+        setModal(null);
+        notify(tr("Invoice {n} saved — sending to ZATCA…", { n: invoice.sale_no }), 4000);
+        watchZatca(invoice);
+      }
     } catch (e) { onError(e, tr("Payment was not saved.")); }
     finally { setBusy(null); setSubmitting(false); }
   };
@@ -1146,9 +1185,10 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
   }, []);
   const accessLeft = accessUntil && Date.parse(accessUntil) - nowTick <= 3 * 86400000
     ? { ms: Math.max(0, Date.parse(accessUntil) - nowTick), date: new Date(accessUntil).toLocaleString() } : null;
-  const watchZatca = (invoice) => {
+  // popup: the "Payment received" dialog is open - the finished print job goes into it instead of printing by itself
+  const watchZatca = (invoice, popup = false) => {
     if (!invoice?.zatca?.pending) {                          // older server: everything came with the reply
-      if (prefs.printInvoice && invoice?.print_job) printJob(invoice.print_job);
+      if (!popup && prefs.printInvoice && invoice?.print_job) printJob(invoice.print_job);
       return;
     }
     setZatcaQueue((q) => [...q.filter((x) => x.id !== invoice.id), { id: invoice.id, sale_no: invoice.sale_no }]);
@@ -1161,7 +1201,10 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
         const z = st.zatca || {};
         if (z.synced) notify(tr("Invoice {n}: reported to ZATCA", { n: invoice.sale_no }));
         else notify(tr("Invoice {n}: ZATCA — {msg}", { n: invoice.sale_no, msg: z.message || tr("not reported yet") }), 9000);
-        if (prefs.printInvoice && st.print_job) await printJob(st.print_job);
+        if (popup) {
+          setModal((md) => (md?.name === "done" && md.invoice?.id === invoice.id
+            ? { ...md, waiting: false, invoice: { ...md.invoice, print_job: st.print_job || null, zatca: { ...(md.invoice.zatca || {}), ...z, pending: false } } } : md));
+        } else if (prefs.printInvoice && st.print_job) await printJob(st.print_job);
         return;
       }
       if (Date.now() - started > 15 * 60000) {                // give up watching; Recent sales still has it
@@ -1285,7 +1328,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
   // "Clear running orders" (same as the web POS): your open orders; Admin: all open orders of the outlet
   const doClearRunning = async (password) => {
     try {
-      const r = await post("/v1/orders/clear-mine", { password });
+      const r = await post("/v1/orders/clear-mine", { pin: password });
       if (editingId) resetOrder();
       setSelectedRunning(null);
       setModal(null);
@@ -1293,7 +1336,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
       refreshRunning();
       return null;
     } catch (e) {
-      if (e?.code === "WRONG_PASSWORD" || e?.code === "PASSWORD_REQUIRED") return tr("The password is not correct.");
+      if (["WRONG_PIN", "PIN_REQUIRED", "WRONG_PASSWORD", "PASSWORD_REQUIRED"].includes(e?.code)) return tr("The PIN is not correct.");
       onError(e);
       return null;
     }
@@ -1504,7 +1547,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
                   <div className="row"><b className="num">#{o.order_number || o.sale_no}</b><span className={`tag ${tagCls}`}>{tagTxt}</span></div>
                   <div className="row muted"><span style={{ display: "flex", alignItems: "center", gap: 4 }}><TI size={13} />{o.order_type === 1 && o.tables_text ? tr("Table {name}", { name: o.tables_text }) : typeName(o)}{o.order_type === 3 && partnerById(o.delivery_partner_id) ? ` · ${partnerById(o.delivery_partner_id).name}` : ""}</span></div>
                   <div className="row muted"><span>{o.customer?.name}</span><span>{o.waiter?.name}</span></div>
-                  <div className="row"><span className="muted" style={{ display: "flex", alignItems: "center", gap: 4 }}><Clock size={12} />{timeAgo(o.minutes_open ?? o.date_time, o.date_time)}</span><b className="num" style={{ fontSize: 13 }}>{money(o.total_payable)}</b></div>
+                  <div className="row"><span className="muted" style={{ display: "flex", alignItems: "center", gap: 4 }}><Clock size={12} />{timeAgo(o.minutes_open ?? o.date_time, o.date_time)}</span><b className="num" style={{ fontSize: 13 }}>{cur(o.total_payable)}</b></div>
                   {editingId === o.id && <span className="tag" style={{ background: "var(--warn-bg)", color: "var(--warn-ink)", justifySelf: "start" }}>{tr("Editing")}</span>}
                 </button>
               );
@@ -1515,7 +1558,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
             <button className="op-btn" disabled={!sel} onClick={() => setModal({ name: "details", id: sel.id })}><Info size={14} />{tr("Order Details")}</button>
             <button className="op-btn" disabled={!sel || !!spin} onClick={() => inBackground("kot", () => reprintKot(sel.id))}>{spin === "kot" && modal?.name !== "details" ? <Loader2 size={14} className="spin" /> : <Printer size={14} />}{tr("Re-print KOT")}</button>
             {canPay && <button className="op-btn half" disabled={!sel || !!busy} onClick={() => openOrderPayment(sel.id)}><Receipt size={14} />{tr("Invoice")}</button>}
-            <button className={`op-btn ${canPay ? "half" : ""}`} onClick={saveDraft} title={tr("Save the current order as a draft")}><FileText size={14} />{tr("Draft")}</button>
+            <button className={`op-btn ${canPay ? "half" : ""}`} disabled={!sel || !!spin} onClick={() => inBackground("bill", () => printBill(sel.id))} title={tr("Print the bill of the selected order")}>{spin === "bill" && modal?.name !== "details" ? <Loader2 size={14} className="spin" /> : <FileText size={14} />}{tr("Bill")}</button>
             <button className="op-btn" disabled={!sel} onClick={cancelRunning}><Ban size={14} />{tr("Cancel Order")}</button>
           </div>
         </aside>
@@ -1586,7 +1629,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
                     {pd ? <><s className="was">{money(lineUnit(l))}</s>{money(Number(pd.line_total) / Number(pd.qty))}</> : <>{money(lineUnit(l))}{l.priceEdited ? "*" : ""}</>}
                   </span>
                   <Qty value={l.qty} onChange={(q) => setLineQty(l.key, q)} />
-                  <span className="r num" style={{ fontWeight: 800 }}>{pd ? <><s className="was">{money(lineUnit(l) * l.qty)}</s>{money(pd.line_total)}</> : money(lineTotal(l))}</span>
+                  <span className="r num" style={{ fontWeight: 800 }}>{pd ? <><s className="was">{money(lineUnit(l) * l.qty)}</s>{cur(pd.line_total)}</> : cur(lineTotal(l))}</span>
                   <button className="del" onClick={() => removeLine(l.key)} aria-label={tr("Remove {name}", { name: l.name })}><Trash2 size={16} /></button>
                 </div>
                 {(sv?.free || []).map((f, fi) => (
@@ -1609,7 +1652,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
             <button className="icon-btn" style={{ color: "var(--ink2)" }} onClick={() => setDatePop((v) => !v)} title={tr("Order date")} aria-label={tr("Order date")}><CalendarDays size={19} /></button>
             <button className="icon-btn" style={{ color: "var(--ink2)" }} onClick={() => setModal({ name: "summary" })} title={tr("Discount, VAT, charges and tips")} aria-label={tr("Order summary")}><Eye size={19} /></button>
             <span className="lbl">{tr("Total Payable:")}</span>
-            <span className="amount num">{cart.length ? (totals ? money(totals.total_payable) : "—") : money(0)}</span>
+            <span className="amount num">{cart.length ? (totals ? cur(totals.total_payable) : "—") : cur(0)}</span>
             {calcBusy && <Loader2 size={16} className="spin" aria-label={tr("Calculating")} />}
             {datePop && (
               <div className="date-pop">
@@ -1621,8 +1664,9 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
 
           <div className="act-row">
             <button className="act cancel" onClick={async () => { if (!cart.length && !editingId) return resetOrder(); if (await ask(editingId ? tr("Discard changes to this order?") : tr("Clear the current order?"), { confirmLabel: editingId ? tr("Discard") : tr("Clear"), danger: true })) { resetOrder(); notify(editingId ? tr("Changes discarded") : tr("Order cleared")); } }}><X size={17} />{tr("Cancel")}</button>
-            {canPay && <button className="act quick" disabled={!!busy || !!editingId} style={busyCls("calc")} onClick={() => proceed("invoice")} title={!canPay ? tr("Waiters can't take payment") : editingId ? tr("Update the order first") : ""}><Receipt size={17} />{tr("Quick Invoice")}</button>}
-            <button className="act place" disabled={!!busy} style={busyCls("place")} onClick={() => proceed("place")}>{busy === "place" ? <Loader2 size={17} className="spin" /> : <ChefHat size={17} />}{editingId ? tr("Update Order") : tr("Place Order")}</button>
+            {OUTLET.btnDraft && <button className="act draft" disabled={!!busy || !!editingId} onClick={saveDraft} title={editingId ? tr("Update the order first") : tr("Save the current order as a draft")}><FileText size={17} />{tr("Draft")}</button>}
+            {canPay && OUTLET.btnQuick && <button className="act quick" disabled={!!busy || !!editingId} style={busyCls("calc")} onClick={() => proceed("invoice")} title={!canPay ? tr("Waiters can't take payment") : editingId ? tr("Update the order first") : ""}><Receipt size={17} />{tr("Quick Invoice")}</button>}
+            {(OUTLET.btnPlace || editingId) && <button className="act place" disabled={!!busy} style={busyCls("place")} onClick={() => proceed("place")}>{busy === "place" ? <Loader2 size={17} className="spin" /> : <ChefHat size={17} />}{editingId ? tr("Update Order") : tr("Place Order")}</button>}
           </div>
         </section>
 
@@ -1650,9 +1694,9 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
               {visibleItems.length === 0 && <div className="no-items">{ITEMS.length ? tr("No items match. Clear the search or filters to see the full menu.") : tr("No items on the menu for this outlet yet.")}</div>}
               {visibleItems.map((it) => {
                 const tint = catById[it.cat]?.tint;
-                const priceTxt = it.openPrice ? tr("Open price") : it.variations.length ? tr("From {price}", { price: money(shownPrice(it)) }) : money(shownPrice(it));
+                const priceTxt = it.openPrice ? tr("Open price") : it.variations.length ? tr("From {price}", { price: cur(shownPrice(it)) }) : cur(shownPrice(it));
                 return (
-                  <button key={it.id} className={`item ${showImages ? "has-img" : ""}`} style={{ "--tint": tint, opacity: it.unavailable ? 0.5 : 1 }} onClick={() => onItemClick(it)}
+                  <button key={it.id} className={`item ${showImages ? "has-img" : ""} ${showImages && it.image ? "photo" : ""}`} style={{ "--tint": tint, opacity: it.unavailable ? 0.5 : 1 }} onClick={() => onItemClick(it)}
                     onContextMenu={(e) => { e.preventDefault(); if (!orderType || it.variations.length) return onItemClick(it); setModal({ name: "item", item: it }); }} title={`${it.code} · ${tr("right-click or long-press for options")}`}>
                     <span className="marks">{it.veg && <span className="vegmark" title={tr("Vegetarian")} />}{it.combo && <span className="mini c">{tr("COMBO")}</span>}{it.promo && <span className="mini p">{tr("PROMO")}</span>}</span>
                     {qtyById[it.id] > 0 && <span className="inq num">{qtyById[it.id]}</span>}
@@ -1661,13 +1705,13 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
                         <ItemThumb item={it} tint={tint} />
                         <span className="body">
                           <span className="nm">{itemName(it)}</span>
-                          <span className="pr num"><span>{tr("Price:")} </span>{priceTxt}</span>
+                          <span className="pr num">{priceTxt}</span>
                         </span>
                       </>
                     ) : (
                       <>
                         <span className="nm">{itemName(it)}</span>
-                        <span className="pr num"><span>{tr("Price:")} </span>{priceTxt}</span>
+                        <span className="pr num">{priceTxt}</span>
                       </>
                     )}
                   </button>
@@ -1809,17 +1853,17 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
         const z = inv.zatca || {};
         return (
           <Modal title={tr("Payment received")} onClose={() => setModal(null)} size="sm"
-            footer={<><button className="btn" onClick={async () => {
+            footer={<><button className="btn" disabled={!!modal.waiting} onClick={async () => {
               if (!modal.printed && inv.print_job?.print_bytes) { if (await printJob(inv.print_job)) setModal((md) => ({ ...md, printed: true })); }
-              else reprintInvoice(inv.id);
-            }}><Printer size={16} />{modal.printed ? tr("Print copy") : tr("Print invoice")}</button><button className="btn primary" onClick={() => setModal(null)}>{tr("New order")}</button></>}>
+              else { await reprintInvoice(inv.id); setModal((md) => (md ? { ...md, printed: true } : md)); }
+            }}>{modal.waiting ? <Loader2 size={16} className="spin" /> : <Printer size={16} />}{modal.waiting ? tr("Preparing invoice…") : modal.printed ? tr("Print copy") : tr("Print invoice")}</button><button className="btn primary" onClick={() => setModal(null)}>{tr("New order")}</button></>}>
             <div className="done-box">
               <div className="muted">{tr("Invoice")}</div>
               <div className="big num">{inv.sale_no}</div>
-              <div className="sum-row"><span>{tr("Total")}</span><span className="num">{OUTLET.currency} {money(inv.totals?.total_payable)}</span></div>
-              {Number(inv.totals?.change_amount) > 0 && <div className="sum-row"><span>{tr("Change to return")}</span><span className="num" style={{ fontSize: 18 }}>{money(inv.totals.change_amount)}</span></div>}
-              {Number(inv.totals?.due_amount) > 0 && <div className="sum-row"><span>{tr("Due")}</span><span className="num">{money(inv.totals.due_amount)}</span></div>}
-              {z.phase === "2" && (z.synced || z.reported
+              <div className="sum-row"><span>{tr("Total")}</span><span className="num">{cur(inv.totals?.total_payable)}</span></div>
+              {Number(inv.totals?.change_amount) > 0 && <div className="sum-row"><span>{tr("Change to return")}</span><span className="num" style={{ fontSize: 18 }}>{cur(inv.totals.change_amount)}</span></div>}
+              {Number(inv.totals?.due_amount) > 0 && <div className="sum-row"><span>{tr("Due")}</span><span className="num">{cur(inv.totals.due_amount)}</span></div>}
+              {modal.waiting ? <div className="zatca"><Loader2 size={18} className="spin" />{tr("Sending to ZATCA…")}</div> : z.phase === "2" && (z.synced || z.reported
                 ? <div className="zatca ok"><ShieldCheck size={18} />{tr("Reported to ZATCA")}</div>
                 : <div className="zatca warn"><ShieldAlert size={18} />{tr("Not reported to ZATCA yet.")} {z.message || tr("Use “Sync ZATCA” in the web POS.")}</div>)}
               {!inv.print_job?.print_bytes && inv.print_job?.error && <div className="zatca warn"><Printer size={18} />{inv.print_job.error}</div>}
@@ -2124,8 +2168,10 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
   const freeQty = promoFreeQty(promo, q1);
   const freeItem = promo?.free_food_menu_id ? ITEM_BY_ID[promo.free_food_menu_id] : null;
 
+  // two columns when there are options (promotion, combo choices, modifiers): everything fits on one screen
+  const hasRight = !!(promo && (promo.type === 1 || promo.type === 2)) || (item.comboGroups || []).length > 0 || item.modifiers.length > 0;
   return (
-    <Modal title={item.name} onClose={onClose}
+    <Modal title={item.name} onClose={onClose} size={hasRight ? "xl fit item-m" : "fit item-m"}
       footer={<>
         {onRemove && <button className="btn" style={{ marginInlineEnd: "auto", color: "var(--danger)" }} onClick={onRemove}><Trash2 size={16} />{tr("Remove")}</button>}
         <button className="btn" onClick={onClose}>{tr("Cancel")}</button>
@@ -2138,11 +2184,46 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
           {line ? tr("Update item") : tr("Add to order")} · {money(unit * q1 - manualOff - promoOff)}
         </button>
       </>}>
+      <div className={`im-grid ${hasRight ? "two" : ""}`}>
+        <div className="im-left">
       <ItemThumb item={item} size="lg" tint={(CATEGORIES.find((c) => c.id === item.cat) || {}).tint} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <span className="muted">{item.code}{item.openPrice ? "" : ` · ${money(price)} each`}{edited && <b style={{ color: "var(--amber, #9A6400)" }}> {tr("· price changed")}</b>}</span>
         <Qty big value={qty} onChange={(v) => setQty(Math.max(1, v))} />
       </div>
+      {item.openPrice ? (
+        <label className="field">{tr("Price ({currency})", { currency: OUTLET.currency })}
+          <input ref={priceRef} className="input num" type="number" min="0" step="any" autoFocus value={open} onChange={(e) => setOpen(e.target.value)} placeholder={tr("Enter the price")} />
+        </label>
+      ) : (
+        <label className="field">
+          <span style={{ display: "flex", justifyContent: "space-between" }}>{tr("Price for this customer ({currency})", { currency: OUTLET.currency })}
+            {edited && <button type="button" className="link-reset" onClick={() => setEdit("")}>{tr("Use list price {price}", { price: money(listPrice) })}</button>}</span>
+          <input className="input num" type="number" min="0" step="any" value={edit === "" ? money(listPrice) : edit}
+            onFocus={(e) => e.target.select()} onChange={(e) => setEdit(e.target.value)} />
+        </label>
+      )}
+      {itemDiscountOn() && !promoDisc && !item.openPrice && (
+        <div className="field">
+          <span>{tr("Item discount")}</span>
+          <div className="disc-row">
+            <input className="input num" type="number" min="0" step="any" value={disc} onChange={(e) => setDisc(e.target.value)} placeholder="0" aria-label={tr("Item discount")} />
+            <div className="seg" role="group" aria-label={tr("Discount type")}>
+              <button type="button" aria-pressed={discMode === "percent"} onClick={() => setDiscMode("percent")}>%</button>
+              <button type="button" aria-pressed={discMode === "fixed"} onClick={() => setDiscMode("fixed")}>{tr("{currency} each", { currency: OUTLET.currency })}</button>
+            </div>
+            {manualOff > 0 && <b className="num disc-amt">−{money(manualOff)}</b>}
+          </div>
+          {discBad && <span className="disc-err" role="alert">{discMode === "percent" ? tr("A percentage cannot be more than 100%.") : tr("Discount cannot be more than the item price.")}</span>}
+        </div>
+      )}
+      <label className="field">{tr("Unit price with modifiers")}<input className="input num" readOnly value={money(unit)} /></label>
+      <label className="field"><span style={{ display: "flex", gap: 6, alignItems: "center" }}><StickyNote size={14} />{tr("Preparation Note")}</span>
+        <textarea className="input" placeholder={tr("e.g. less spicy, sauce on the side")} value={note} onChange={(e) => setNote(e.target.value)} />
+      </label>
+        </div>
+        {hasRight && (
+          <div className="im-right">
       {promo && (promo.type === 1 || promo.type === 2) && (
         <div className="promo-box" aria-label={tr("Promotion")}>
           <b className="t">{tr("PROMO")}{promo.text ? ` · ${promo.text}` : ""}</b>
@@ -2155,18 +2236,6 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
             <div className="row"><span>{tr("Free with this order")}</span><b className="num">{freeQty}{freeQty === 0 && promo.buy_qty > q1 ? ` · ${tr("add {n} more", { n: promo.buy_qty - q1 })}` : ""}</b></div>
           </>}
         </div>
-      )}
-      {item.openPrice ? (
-        <label className="field">{tr("Price ({currency})", { currency: OUTLET.currency })}
-          <input ref={priceRef} className="input num" type="number" min="0" step="any" autoFocus value={open} onChange={(e) => setOpen(e.target.value)} placeholder={tr("Enter the price")} />
-        </label>
-      ) : (
-        <label className="field">
-          <span style={{ display: "flex", justifyContent: "space-between" }}>{tr("Price for this customer ({currency})", { currency: OUTLET.currency })}
-            {edited && <button type="button" className="link-reset" onClick={() => setEdit("")}>{tr("Use list price {price}", { price: money(listPrice) })}</button>}</span>
-          <input className="input num" type="number" min="0" step="any" value={edit === "" ? money(listPrice) : edit}
-            onFocus={(e) => e.target.select()} onChange={(e) => setEdit(e.target.value)} />
-        </label>
       )}
       {(item.comboGroups || []).map((g) => (
         <div key={g.group_name} className="combo-group">
@@ -2204,24 +2273,9 @@ function ItemModal({ item, line, basePrice, orderType, onClose, onSave, onRemove
           </label>
         ))}
       </>}
-      {itemDiscountOn() && !promoDisc && !item.openPrice && (
-        <div className="field">
-          <span>{tr("Item discount")}</span>
-          <div className="disc-row">
-            <input className="input num" type="number" min="0" step="any" value={disc} onChange={(e) => setDisc(e.target.value)} placeholder="0" aria-label={tr("Item discount")} />
-            <div className="seg" role="group" aria-label={tr("Discount type")}>
-              <button type="button" aria-pressed={discMode === "percent"} onClick={() => setDiscMode("percent")}>%</button>
-              <button type="button" aria-pressed={discMode === "fixed"} onClick={() => setDiscMode("fixed")}>{tr("{currency} each", { currency: OUTLET.currency })}</button>
-            </div>
-            {manualOff > 0 && <b className="num disc-amt">−{money(manualOff)}</b>}
           </div>
-          {discBad && <span className="disc-err" role="alert">{discMode === "percent" ? tr("A percentage cannot be more than 100%.") : tr("Discount cannot be more than the item price.")}</span>}
-        </div>
-      )}
-      <label className="field">{tr("Unit price with modifiers")}<input className="input num" readOnly value={money(unit)} /></label>
-      <label className="field"><span style={{ display: "flex", gap: 6, alignItems: "center" }}><StickyNote size={14} />{tr("Preparation Note")}</span>
-        <textarea className="input" placeholder={tr("e.g. less spicy, sauce on the side")} value={note} onChange={(e) => setNote(e.target.value)} />
-      </label>
+        )}
+      </div>
     </Modal>
   );
 }
@@ -2334,24 +2388,24 @@ function PaymentModal({ due: dueIn, totals: totalsIn, adjust, onAdjust, chargeLa
   const adjBlock = adjBusy ? tr("Calculating…") : adjErr;
 
   return (
-    <Modal title={tr("Finalize Sale")} onClose={onClose} size="lg"
+    <Modal title={tr("Finalize Sale")} onClose={onClose} size="lg fit pay-m"
       footer={<>
         <button className="btn" onClick={onClose} disabled={busy}>{tr("Cancel")}</button>
         <button className="btn ok" disabled={!PAYMENT_METHODS.length || busy || !!blocked || !!adjBlock} onClick={submit} title={adjBlock || blocked || ""}>
           {busy ? <Loader2 size={16} className="spin" /> : <Check size={16} />}{busy ? tr("Saving…") : tr("Complete sale")}
         </button>
       </>}>
-      <div className="pay-due"><span>{tr("Amount due")}</span><span className="num">{adjBusy && <Loader2 size={16} className="spin" style={{ marginInlineEnd: 6 }} />}{OUTLET.currency} {money(due)}</span></div>
+      <div className="pay-due"><span>{tr("Amount due")}</span><span className="num">{adjBusy && <Loader2 size={16} className="spin" style={{ marginInlineEnd: 6 }} />}{cur(due)}</span></div>
       <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>{label}</div>
+      {!PAYMENT_METHODS.length && <p className="muted">{tr("No payment methods are set up for this outlet.")}</p>}
       {onAdjust && (
         <div className="pay-adjust" aria-label={tr("Discount and service charge")}>
           {adjRow(tr("Discount"), odisc, setOdisc, tot?.sub_total_discount_amount, "−", tr("Order discount"))}
           {adjRow(chargeLabel || tr("Service charge"), ochg, setOchg, tot?.charge_amount, "+", chargeLabel || tr("Service charge"))}
-          {tot && Number(tot.total_vat) > 0 && <div className="adj"><span>{tr("VAT")}</span><span /><span /><span className="num amt">{money(tot.total_vat)}</span></div>}
+          {tot && Number(tot.total_vat) > 0 && <div className="adj vat"><span>{tr("VAT")}</span><span className="num amt">{cur(tot.total_vat)}</span></div>}
           {adjErr && <div className="disc-err" role="alert">{adjErr}</div>}
         </div>
       )}
-      {!PAYMENT_METHODS.length && <p className="muted">{tr("No payment methods are set up for this outlet.")}</p>}
       <div className="pay-grid">
         <div>
           <div className="pay-methods">
@@ -2376,7 +2430,7 @@ function PaymentModal({ due: dueIn, totals: totalsIn, adjust, onAdjust, chargeLa
               <button disabled={amount === ""} onClick={clearInput}>{tr("Clear")}</button>
             </div>
           )}
-          {preview > 0 && <div className="change-box" role="status"><span>{tr("Change to return")}</span><b className="num">{OUTLET.currency} {money(preview)}</b></div>}
+          {preview > 0 && <div className="change-box" role="status"><span>{tr("Change to return")}</span><b className="num">{cur(preview)}</b></div>}
           <label className="field">{tr("Reference")}
             <input className="input" value={reference} onChange={(e) => setReference(e.target.value)} placeholder={tr("Card slip / transaction reference")} maxLength={100} />
           </label>
@@ -2392,10 +2446,10 @@ function PaymentModal({ due: dueIn, totals: totalsIn, adjust, onAdjust, chargeLa
                 </div>
               ))}
           </div>
-          <div className="sum-row"><span>{tr("Payable")}</span><span className="num">{money(due)}</span></div>
-          <div className="sum-row"><span>{tr("Paid")}</span><span className="num">{money(paid)}</span></div>
-          <div className="sum-row total"><span>{tr("Due")}</span><span className="num">{money(left)}</span></div>
-          {change > 0 && <div className="change-box" role="status"><span>{tr("Change to return")}</span><b className="num">{OUTLET.currency} {money(change)}</b></div>}
+          <div className="sum-row"><span>{tr("Payable")}</span><span className="num">{cur(due)}</span></div>
+          <div className="sum-row"><span>{tr("Paid")}</span><span className="num">{cur(paid)}</span></div>
+          <div className="sum-row total"><span>{tr("Due")}</span><span className="num">{cur(left)}</span></div>
+          {change > 0 && <div className="change-box" role="status"><span>{tr("Change to return")}</span><b className="num">{cur(change)}</b></div>}
         </div>
       </div>
       {(err || blocked) && <div role="alert" style={{ color: "var(--danger)", fontSize: 13, fontWeight: 600, marginTop: 10 }}>{err || blocked}</div>}
@@ -2549,7 +2603,7 @@ function OrderDetails({ id, canPay, onClose, onError, onKot, onBill, onInvoice, 
           {Number(t.charge_amount) > 0 && <div className="sum-row"><span>{t.charge_type === "delivery" ? tr("Delivery charge") : tr("Service charge")}</span><span className="num">{money(t.charge_amount)}</span></div>}
           {Number(t.tips_amount) > 0 && <div className="sum-row"><span>{tr("Tips")}</span><span className="num">{money(t.tips_amount)}</span></div>}
           {(t.taxes || []).map((x, i) => <div key={i} className="sum-row"><span>{x.tax_field_type}</span><span className="num">{money(x.tax_field_amount)}</span></div>)}
-          <div className="sum-row total"><span>{tr("Total payable")}</span><span className="num">{OUTLET.currency} {money(t.total_payable)}</span></div>
+          <div className="sum-row total"><span>{tr("Total payable")}</span><span className="num">{cur(t.total_payable)}</span></div>
         </div>
       </>}
     </Modal>
@@ -2701,7 +2755,7 @@ function SelfOrdersModal({ onClose, onError, onAccept, onDecline, onModify }) {
             {Number(t.total_discount_amount) > 0 && <div className="sum-row"><span>{tr("Discount")}</span><span className="num">-{money(t.total_discount_amount)}</span></div>}
             {Number(t.charge_amount) > 0 && <div className="sum-row"><span>{tr("Service charge")}</span><span className="num">{money(t.charge_amount)}</span></div>}
             <div className="sum-row"><span>{tr("Tax")}</span><span className="num">{money(t.total_vat)}</span></div>
-            <div className="sum-row total"><span>{tr("Total payable")}</span><span className="num">{OUTLET.currency} {money(t.total_payable)}</span></div>
+            <div className="sum-row total"><span>{tr("Total payable")}</span><span className="num">{cur(t.total_payable)}</span></div>
           </>}
         </div>
       </div>
@@ -2709,13 +2763,13 @@ function SelfOrdersModal({ onClose, onError, onAccept, onDecline, onModify }) {
   );
 }
 
-// "Clear running orders": the user's own login password is checked by the server before anything is removed
+// "Clear running orders": the user's own login PIN is checked by the server before anything is removed
 function ClearRunningModal({ admin, onClose, onConfirm }) {
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const go = async () => {
-    if (!pw) return setErr(tr("Enter your login password."));
+    if (!/^\d{4,6}$/.test(pw)) return setErr(tr("Enter your login PIN."));
     setBusy(true); setErr("");
     try { const e = await onConfirm(pw); if (e) setErr(e); } finally { setBusy(false); }
   };
@@ -2728,9 +2782,10 @@ function ClearRunningModal({ admin, onClose, onConfirm }) {
         ? tr("This removes all open orders of this outlet, from the web POS and the kitchen screen too.")
         : tr("This removes your open orders (orders you placed or are the waiter of) from the web POS and the kitchen screen too. Other staff's orders stay.")}</p>
       <p className="muted">{tr("Paid invoices are not affected. This cannot be undone.")}</p>
-      <label className="field">{tr("Your login password")}
-        <input className="input" type="password" autoFocus value={pw} onChange={(e) => { setPw(e.target.value); setErr(""); }}
-          onKeyDown={(e) => { if (e.key === "Enter") go(); }} autoComplete="current-password" aria-label={tr("Your login password")} />
+      <label className="field">{tr("Your login PIN")}
+        <input className="input num pin-in" type="password" inputMode="numeric" pattern="[0-9]*" maxLength={6} autoFocus value={pw}
+          onChange={(e) => { setPw(e.target.value.replace(/\D/g, "")); setErr(""); }}
+          onKeyDown={(e) => { if (e.key === "Enter") go(); }} autoComplete="off" aria-label={tr("Your login PIN")} />
       </label>
       {err && <div role="alert" style={{ color: "var(--danger)", fontSize: 13, fontWeight: 600 }}>{err}</div>}
     </Modal>
@@ -2834,7 +2889,8 @@ ${list.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td class="r">
   const info = [["Address", o.address], ["Phone", o.phone], ["Email", o.email], ["VAT No (TRN)", o.trn], ["CR No", o.cr_number]].filter(([, v]) => v);
   return `<!doctype html><html><head><meta charset="utf-8"><title>Register report</title><style>
 @page{size:A4;margin:14mm 12mm}
-*{box-sizing:border-box}body{font:11.5px/1.45 "Segoe UI",Tahoma,Arial,"Noto Sans Arabic",sans-serif;color:#1d2433;margin:0}
+@font-face{font-family:SaudiRiyal;src:url(data:font/woff2;base64,d09GMgABAAAAAAT0AA0AAAAAC2QAAASeAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP0ZGVE0cGhgGYACCZhEICocEhXcLGgABNgIkAzAEIAWHLgeBBRvVCSCOwnEvSojJ5ORhKiWep9/bPPc32mdnUaW+wXeJKlVIJCg8CIfcQWViVHSETJeZqNqErgZPp/28VaAy13pTkXvNQZv4IHCbHD9In+dyevP5Cfy7K+slmC3ybGwuLx2T18L1PKA2pnPbFCvQCdbLLSJq0N0AB31thACv29f9APD1k6ZUJ0tAD4aoQDO8bhmyFC1UI+oCuAO15AO2Q8G5MwSqDefwClCi9Be6wX9nQPsMEKAeA1AQUIMaLCGACzQCljAqQE+OwoCjcu0D6kv8/x/sl6sfkIpP/3/9/WpgdgoEQAeYoIR0QACkAlSghuJ31w3LAXyr/P+vAvSAOTCAzAK5B6CBQzRNhcGgGoYLL+dYrlnFKgu9iOcEj646uXaI2W3sJ9lTI4EetCRQAgulmH6SYMZBziQb1xBipCaQaS6l0vWRWr1q1aFDnTA52r1fr8fUTpXKWvLQ4KnSwb0+PppFHxtVC1at2uXrO9JOSIUWTzV+QWdXLT0K2uhG0jpJEiZs6WjSR9KuG9Zv1u+P2q1UujpcsT1L3dNzqhQszNevVtPHSYnHKlXoGEWtDpi6yX/duUgVJGGvzwIypcpt/Ni4Jly1atcq32n6zc+V4+ld7k6gz53h7vgOHLKN10L3KkUS7kouYUcPhGVony1zOi//ctkTdm/3kAqubk+P0MptoSFlXH1d5ZyIwuAyWX7+z+picypWzAjs1xCbVaGJLgqt5qqbqg/Y6ntEjm76aneF9Yjvano5HXrdrjSkllfHmVOk+o/IY8O89mBNc9Lbwcoe28z7DRmFzSmN4wbrT5X+B/E2SdMQn2S1PFaUu1OkJfIXKxVt+w1pFa2xjdll47yrvsvczl7/4ETotcmj56Zkzxs3b+7w0ZMNx9wX7srQ8rIsghhH+yj839cG7rwS/FVUQnWXgYUdjUP+HL5C8fybvBJ6ZQRWMKOhfsi7ZqHZEz4e3TZxMtEqXR8kGN0n/5/a9jk9IKKiFlmPtlWvYKy8rF34efCtxR9snP0uNWnu7Jj8kj9HHV1INdJDNT2jhozoFXwqYPLE+VjfWDBpsq7FUrJmU3brXPVwppI6gm8PCAjcX9RU3FdX8KtcJcczkIBc+4K9C8ZdxNPL/LtD9KcF19fLgOpBtODVPMNO+5d0/C2p2BEBPefddskgYA8Aa9mMABgKQwChUg9RkbGjprcJDW9v0SJ+QccrQRhDkk6Os7mYoEtPTCIZQk6xo9ALyCFMI3lIDtjnGFLlm9EzZJUcNNIoAAUACL10ULSMoCUYAkaUk2BRfgAnwm+QoZJMytlMKIQkH0pUBpAqdhjUMjIGGlTuklr2MTzoI92UJ23+wONVGmQ40WC8UgM5iCwsRBYopXLQcHEwXzrQIVosogW4IRrFwqmv4ZzGEQ2Em8tRFmff4c5x4kDgmpXdKAOJhsMnRWOAIg8/SVZ+YGXZ5ee18vMkZYbYopod2PHxMh22lbggxy4aiTp8UzunkRxGMUliNsQgyayTKk8k+l05RzpGmT7YjNb5FSWKKTxHRVTCPj0ISoRIUaJDEZowhCWctufXnHPwkJG/e0pZDQA=) format("woff2");unicode-range:U+20C1,U+E900}
+*{box-sizing:border-box}body{font:11.5px/1.45 SaudiRiyal,"Segoe UI",Tahoma,Arial,"Noto Sans Arabic",sans-serif;color:#1d2433;margin:0}
 .head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:3px solid #5b3fd1;padding-bottom:10px}
 .head img{max-height:62px;max-width:170px;object-fit:contain}
 .firm h1{margin:0;font-size:20px}.firm .ar{font-size:15px;direction:rtl;text-align:start}.firm .out{color:#5a6478;font-weight:600;margin-top:2px}
@@ -2938,7 +2994,7 @@ function RecentSalesModal({ initial, onClose, onError, onReprint }) {
           {Number(t.charge_amount) > 0 && <div className="sum-row"><span>{t.charge_type === "delivery" ? tr("Delivery charge") : tr("Service charge")}</span><span className="num">{money(t.charge_amount)}</span></div>}
           {Number(t.tips_amount) > 0 && <div className="sum-row"><span>{tr("Tips")}</span><span className="num">{money(t.tips_amount)}</span></div>}
           <div className="sum-row"><span>{tr("Tax")}</span><span className="num">{money(t.total_vat)}</span></div>
-          <div className="sum-row total"><span>{tr("Total payable")}</span><span className="num">{OUTLET.currency} {money(t.total_payable)}</span></div>
+          <div className="sum-row total"><span>{tr("Total payable")}</span><span className="num">{cur(t.total_payable)}</span></div>
           {(open.payments || []).map((p, i) => <div key={i} className="sum-row"><span>{p.name}</span><span className="num">{money(p.amount)}</span></div>)}
           {Number(t.change_amount) > 0 && <div className="sum-row"><span>{tr("Given")} / {tr("Change Amount")}</span><span className="num">{money(t.given_amount)} / {money(t.change_amount)}</span></div>}
           {Number(t.due_amount) > 0 && <div className="sum-row" style={{ color: "var(--danger)" }}><span>{tr("Due")}</span><span className="num">{money(t.due_amount)}</span></div>}
@@ -2961,7 +3017,7 @@ function RecentSalesModal({ initial, onClose, onError, onReprint }) {
             <div key={s.id} className="list-row">
               <span style={{ minWidth: 0 }}><b className="num">{s.sale_no}</b> · {typeName(s)}{s.tables_text ? ` · ${s.tables_text}` : ""} · {s.customer?.name}
                 <div className="muted" style={{ fontSize: 12 }}>{s.cashier ? `${s.cashier} · ` : ""}{s.date_time}{Number(s.due_amount) > 0 ? ` · ${tr("Due")} ${money(s.due_amount)}` : ""}</div></span>
-              <span style={{ display: "flex", gap: 8, alignItems: "center", flex: "none" }}><b className="num">{OUTLET.currency} {money(s.total_payable ?? s.totals?.total_payable)}</b>
+              <span style={{ display: "flex", gap: 8, alignItems: "center", flex: "none" }}><b className="num">{cur(s.total_payable ?? s.totals?.total_payable)}</b>
                 <button className="btn" onClick={() => view(s.id)}><Eye size={16} />{tr("View")}</button>
                 {pbtn(s.id)}</span>
             </div>
@@ -3054,7 +3110,7 @@ function RegisterModal({ onClose, onClosed, onError, printJob, onPrint, onPdf })
           <div className="sum-row"><span>{tr("Sales")}</span><span className="num">{money(t.sale)}</span></div>
           {Number(t.expense) > 0 && <div className="sum-row"><span>{tr("Expense")}</span><span className="num">-{money(t.expense)}</span></div>}
           {Number(t.refund) > 0 && <div className="sum-row"><span>{tr("Refund (not deducted)")}</span><span className="num">{money(t.refund)}</span></div>}
-          <div className="sum-row total"><span>{tr("Closing balance")}</span><span className="num">{OUTLET.currency} {money(t.closing)}</span></div>
+          <div className="sum-row total"><span>{tr("Closing balance")}</span><span className="num">{cur(t.closing)}</span></div>
         </div>
         <SalesTable title={tr("Item Wise Sales")} first={tr("Food Menus")} rows={s.item_sales} />
         <SalesTable title={tr("Modifier Wise Sales")} first={tr("Modifiers")} rows={s.modifier_sales} hideEmpty />

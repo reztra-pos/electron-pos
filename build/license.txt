@@ -1,0 +1,71 @@
+REZTRA POS - SOFTWARE LICENCE AGREEMENT
+
+Please read this agreement carefully before installing Reztra POS ("the Software").
+By clicking "I accept the terms of the License Agreement" and installing the Software,
+you agree to these terms. If you do not agree, click "Cancel" and do not install it.
+
+1. LICENCE
+   Reztra ("we", "us") grants you a non-exclusive, non-transferable licence to install
+   and use the Software on point-of-sale devices of your business that have been
+   activated with a device key issued from your Reztra account
+   (Settings -> POS Devices). Each device key may be used on one device only.
+
+2. ACCESS PERIOD
+   A device key may carry an access period. When it ends, the device is disconnected
+   until a new key is issued. We may disable a device at any time from your account,
+   for example if a key is lost or misused.
+
+3. RESTRICTIONS
+   You may not:
+   a) copy, sell, rent, lend, sublicense or distribute the Software;
+   b) decompile, reverse engineer, disassemble or modify the Software, except where
+      the law expressly allows it;
+   c) remove or change any copyright, trademark or other notices;
+   d) share device keys, or use the Software to bypass the access controls of your
+      Reztra account.
+
+4. YOUR DATA AND TAX COMPLIANCE
+   Sales, invoices and other business data are stored in your Reztra account.
+   You are responsible for the accuracy of the prices, taxes, discounts and customer
+   details you enter, and for your own compliance with tax and e-invoicing rules
+   (including ZATCA requirements), as well as for keeping your account credentials
+   and device keys secure.
+
+5. UPDATES
+   We may provide updates that add, change or remove features. Some features need an
+   up-to-date version of the Software and of your Reztra account.
+
+6. OWNERSHIP
+   The Software is licensed, not sold. We keep all rights, title and interest in the
+   Software, including all copies and updates.
+
+7. NO WARRANTY
+   The Software is provided "as is". To the extent permitted by law, we give no
+   warranty that it will be error-free or uninterrupted, or that it fits a particular
+   purpose.
+
+8. LIMITATION OF LIABILITY
+   To the extent permitted by law, we are not liable for any indirect, incidental or
+   consequential loss, including lost profits, lost data or business interruption,
+   arising from the use of or inability to use the Software.
+
+9. TERMINATION
+   This licence ends automatically if you break any of its terms, or when your Reztra
+   subscription ends. On termination you must stop using the Software and uninstall it.
+
+10. GOVERNING LAW
+    This agreement is governed by the laws of the Kingdom of Saudi Arabia.
+
+Contact: support@reztra.com
+
+------------------------------------------------------------------------------
+
+اتفاقية ترخيص برنامج Reztra POS
+
+بالضغط على "أوافق" وتثبيت البرنامج فإنك توافق على هذه الشروط.
+- يُرخَّص البرنامج للاستخدام على أجهزة نقاط البيع الخاصة بنشاطك التجاري والمفعّلة بمفتاح جهاز من حسابك في Reztra، ولكل مفتاح جهاز واحد فقط.
+- قد يكون لمفتاح الجهاز مدة وصول محددة، وعند انتهائها يتوقف الجهاز حتى يتم إصدار مفتاح جديد.
+- لا يجوز نسخ البرنامج أو بيعه أو توزيعه أو تعديله أو الهندسة العكسية له أو مشاركة مفاتيح الأجهزة.
+- أنت مسؤول عن صحة الأسعار والضرائب والخصومات وبيانات العملاء وعن التزامك بمتطلبات الفوترة الإلكترونية (هيئة الزكاة والضريبة والجمارك).
+- يُقدَّم البرنامج "كما هو" دون أي ضمان، ولا نتحمل أي خسائر غير مباشرة ناتجة عن استخدامه.
+- تخضع هذه الاتفاقية لأنظمة المملكة العربية السعودية.

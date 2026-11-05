@@ -1,3 +1,21 @@
+/* Saudi Riyal sign (U+20C1) - "Saudi Riyal Font" by Emran Alhaddad, SIL Open Font License 1.1 (assets/fonts/SaudiRiyal-OFL.txt).
+   Only this one character comes from it; all other text keeps the normal fonts. */
+@font-face {
+    font-family: SaudiRiyal;
+    src: url("./assets/fonts/saudi_riyal-regular.woff2") format("woff2");
+    font-weight: 100 599;
+    font-display: block;
+    unicode-range: U+20C1, U+E900
+}
+
+@font-face {
+    font-family: SaudiRiyal;
+    src: url("./assets/fonts/saudi_riyal-bold.woff2") format("woff2");
+    font-weight: 600 900;
+    font-display: block;
+    unicode-range: U+20C1, U+E900
+}
+
 /* Global reset — each screen injects its own styles */
 html,
 body,
