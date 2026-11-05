@@ -24,7 +24,7 @@ import {
   Check, CreditCard, Banknote, Smartphone, Clock, ChefHat, StickyNote, FileText, ListOrdered,
   ShoppingCart, Users, Edit3, Sandwich, CupSoda, IceCreamCone, Beef, Drumstick, Citrus, Grape, Milk,
   GlassWater, Cookie, Martini, Flame, Soup, Image as ImageIcon, List, ShoppingBag, WifiOff, Loader2,
-  ShieldCheck, ShieldAlert, Settings2, ChevronDown, Eraser, Languages, Sun, Moon, Keyboard, FileDown, RotateCcw,
+  ShieldCheck, ShieldAlert, Settings2, ChevronDown, Eraser, Languages, Sun, Moon, Keyboard, FileDown, RotateCcw, CalendarClock,
 } from "lucide-react";
 import { useTheme } from "../theme.js";
 import { useOskEnabled, openKeyboard } from "../osk.jsx";
@@ -662,6 +662,24 @@ const CSS_ONLINE = `
 .total-bar .spin{animation:spin .8s linear infinite;color:var(--ink2)}@keyframes spin{to{transform:rotate(360deg)}}
 .tag.new{background:var(--info-bg);color:var(--info)}.tag.bill{background:var(--brand-2);color:var(--brand)}
 .tag.cn{background:var(--warn-bg);color:var(--warn-ink)}
+.tag.po1{background:var(--danger-bg,#fde2e2);color:var(--danger)}.tag.po2{background:var(--warn-bg);color:var(--warn-ink)}.tag.po3{background:var(--ok-bg);color:var(--ok)}
+.po-filters{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.po-row{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto auto;gap:10px;align-items:center}
+.po-row .po-acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.po-late{color:var(--danger);font-weight:700}.po-today{color:var(--warn-ink);font-weight:700}
+.po-form{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:14px;min-height:0}
+.po-pick{display:flex;flex-direction:column;gap:8px;min-height:0}
+.po-items{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;overflow:auto;max-height:46vh;align-content:start}
+.po-items button{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:8px;text-align:start;cursor:pointer;color:inherit;font:inherit}
+.po-items button:hover{border-color:var(--brand)}.po-items button b{display:block;font-size:13px}.po-items button span{font-size:12px;color:var(--ink2)}
+.po-cart{display:flex;flex-direction:column;gap:6px;max-height:30vh;overflow:auto}
+.po-line{border:1px solid var(--line);border-radius:10px;padding:8px;display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:8px;align-items:center}
+.po-line .po-sub{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.po-mod{border:1px solid var(--line);border-radius:14px;padding:3px 9px;font-size:12px;background:var(--card);color:inherit;cursor:pointer}
+.po-mod[aria-pressed=true]{background:var(--brand-2);border-color:var(--brand);color:var(--brand)}
+.po-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.po-fields label{font-size:12px;color:var(--ink2);display:flex;flex-direction:column;gap:4px}
+@media (max-width:900px){.po-form{grid-template-columns:1fr}.po-row{grid-template-columns:1fr}.po-row .po-acts{justify-content:flex-start}}
 .rf-row{display:grid;grid-template-columns:minmax(0,1fr) auto 110px 90px;gap:10px;align-items:center}
 .rf-row .rf-name{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .rf-row .num.rf-tot{text-align:end}
@@ -1433,6 +1451,7 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     { id: "drafts", label: tr("Open drafts"), icon: FolderOpen, cls: "", badge: drafts.length, on: () => { setModal({ name: "drafts" }); refreshDrafts(); } },
     ...(canPay ? [{ id: "print", label: tr("Print last invoice"), icon: Printer, cls: "opt-sm", on: printLast }] : []),
     ...(canPay ? [{ id: "recent", label: tr("Recent sales"), icon: History, cls: "", on: openRecent }] : []),
+    ...(canPay ? [{ id: "preorders", label: tr("Pre-orders"), icon: CalendarClock, cls: "", on: () => setModal({ name: "preorders" }) }] : []),
     ...(canSelf ? [{ id: "self", label: tr("Self / Online orders"), icon: Smartphone, cls: "", badge: selfCount, on: () => setModal({ name: "selfOrders" }) }] : []),
     { id: "notif", label: tr("Kitchen notifications"), icon: Bell, cls: "", badge: unread, on: () => { setModal({ name: "notifications" }); markSeen(); refreshNotifications(); } },
     ...(!isWaiter ? [{ id: "register", label: tr("Register details"), icon: Wallet, cls: "opt-sm", on: () => setModal({ name: "register" }) }] : []),
@@ -1909,6 +1928,22 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
             </div>
           )}
         </Modal>
+      )}
+
+      {modal?.name === "preorders" && (
+        <PreOrdersModal onClose={() => setModal(null)} onError={onError} notify={notify} onPrintJob={printJob}
+          customers={customers} onSearchCustomers={searchCustomers}
+          onCustomerAdded={(row) => setCustomers((cs) => (cs.some((x) => x.id === row.id) ? cs : [...cs, row]))}
+          onDelivered={(invoice) => {
+            setSales((x) => [invoice, ...x.filter((y) => y.id !== invoice.id)]);
+            if (OUTLET.printPopup) {
+              setModal({ name: "done", invoice: { ...invoice, print_job: invoice?.zatca?.pending ? null : invoice.print_job }, waiting: !!invoice?.zatca?.pending });
+              watchZatca(invoice, true);
+            } else {
+              notify(tr("Invoice {n} saved — sending to ZATCA…", { n: invoice.sale_no }), 4000);
+              watchZatca(invoice);
+            }
+          }} />
       )}
 
       {modal?.name === "recent" && (
@@ -3197,6 +3232,275 @@ function RefundModal({ sale, onBack, onClose, onError, onPrintJob, notify, onDon
           {err && <p role="alert" style={{ color: "var(--danger)", fontSize: 13, marginTop: 8 }}>{err}</p>}
         </div>
       </div>
+    </Modal>
+  );
+}
+
+// Pre-orders (the web app's Pre-Order module): list, create / edit, Submitted -> Preparing -> Delivered.
+// Delivered makes the real invoice on the server (same pipeline as Quick Invoice: ZATCA + print).
+const PO_STATUS = { 1: "Submitted", 2: "Preparing", 3: "Delivered" };
+function PreOrdersModal({ onClose, onError, notify, onPrintJob, customers, onSearchCustomers, onCustomerAdded, onDelivered }) {
+  const [view, setView] = useState({ name: "list" });        // list | form (edit: pre-order) | deliver (pre-order)
+  const [status, setStatus] = useState("");
+  const [q, setQ] = useState("");
+  const [list, setList] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const load = useCallback(() => {
+    const qs = new URLSearchParams({ ...(status ? { status } : {}), ...(q.trim() ? { search: q.trim() } : {}) });
+    return get(`/v1/pre-orders?${qs}`).then(setList).catch((e) => { setList([]); onError(e); });
+  }, [status, q]); // eslint-disable-line
+  useEffect(() => { const t = setTimeout(load, q ? 300 : 0); return () => clearTimeout(t); }, [load]); // eslint-disable-line
+
+  const act = async (key, fn) => { setBusy(key); try { await fn(); } catch (e) { onError(e); } finally { setBusy(null); } };
+  const draft = (po) => act(`d${po.id}`, async () => onPrintJob(await get(`/v1/pre-orders/${po.id}/draft`)));
+  const prepare = (po) => act(`s${po.id}`, async () => {
+    if (!(await ask(tr("Move {n} to Preparing?", { n: po.pre_order_no }), { title: tr("Start preparing"), confirmLabel: tr("Start preparing") }))) return;
+    await post(`/v1/pre-orders/${po.id}/status`, { status: 2 }); notify(tr("{n} is now Preparing", { n: po.pre_order_no })); load();
+  });
+  const remove = (po) => act(`x${po.id}`, async () => {
+    if (!(await ask(tr("Delete pre-order {n}?", { n: po.pre_order_no }), { title: tr("Delete"), confirmLabel: tr("Delete"), danger: true }))) return;
+    await del(`/v1/pre-orders/${po.id}`); notify(tr("Pre-order deleted")); load();
+  });
+  const edit = (po) => act(`e${po.id}`, async () => setView({ name: "form", po: await get(`/v1/pre-orders/${po.id}`) }));
+  const remaining = (po) => {
+    if (po.status === 3) return <span className="muted">—</span>;
+    const d = po.days_remaining;
+    if (d > 0) return <span>{tn(d, "Remaining {n} day", "Remaining {n} days")}</span>;
+    if (d === 0) return <span className="po-today">{tr("Today")}</span>;
+    return <span className="po-late">{tn(-d, "Overdue by {n} day", "Overdue by {n} days")}</span>;
+  };
+
+  if (view.name === "form") {
+    return <PreOrderForm po={view.po} customers={customers} onSearchCustomers={onSearchCustomers} onCustomerAdded={onCustomerAdded} notify={notify}
+      onError={onError} onBack={() => setView({ name: "list" })} onClose={onClose}
+      onSaved={(po, isNew) => { notify(isNew ? tr("Pre-order {n} saved", { n: po.pre_order_no }) : tr("Pre-order {n} updated", { n: po.pre_order_no })); setView({ name: "list" }); load(); }} />;
+  }
+  if (view.name === "deliver") {
+    return <PreOrderDeliver po={view.po} onBack={() => setView({ name: "list" })} onClose={onClose} onError={onError}
+      onDone={(invoice) => { onDelivered(invoice); load(); setView({ name: "list" }); }} />;
+  }
+  return (
+    <Modal title={tr("Pre-orders")} onClose={onClose} size="xl"
+      footer={<button className="btn primary" onClick={() => setView({ name: "form", po: null })}><Plus size={16} />{tr("Add Pre-Order")}</button>}>
+      <div className="po-filters" role="group" aria-label={tr("Status")}>
+        {[["", "All"], ["1", "Submitted"], ["2", "Preparing"], ["3", "Delivered"]].map(([v, l]) => (
+          <button key={v} className="btn" aria-pressed={status === v} onClick={() => setStatus(v)}>{tr(l)}</button>
+        ))}
+        <input className="input" style={{ flex: "1 1 200px" }} value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr("Search pre-order no, customer or phone")} aria-label={tr("Search")} />
+      </div>
+      {list === null ? <p className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} className="spin" />{tr("Loading…")}</p>
+        : list.length === 0 ? <p className="muted">{tr("No pre-orders found")}</p> : (
+        <div className="list">
+          {list.map((po) => (
+            <div key={po.id} className="list-row po-row">
+              <span style={{ minWidth: 0 }}><b className="num">{po.pre_order_no}</b> <span className={`tag po${po.status}`}>{tr(PO_STATUS[po.status])}</span>
+                <div className="muted" style={{ fontSize: 12 }}>{po.customer?.name}{po.customer?.phone ? ` · ${po.customer.phone}` : ""} · {po.order_type === "delivery" ? tr("Delivery") : tr("Pickup")}{po.delivery_partner ? ` · ${po.delivery_partner.name}` : ""}
+                  {po.converted_sale_no ? ` · ${tr("Invoice {n}", { n: po.converted_sale_no })}` : ""}</div></span>
+              <span style={{ fontSize: 13 }}>{po.delivery_date}{po.delivery_time ? ` ${po.delivery_time}` : ""}<div style={{ fontSize: 12 }}>{remaining(po)}</div></span>
+              <span className="num" style={{ textAlign: "end" }}><b>{cur(po.total_payable)}</b>
+                {po.status !== 3 && po.due_amount > 0 && <div className="muted" style={{ fontSize: 12 }}>{tr("Due")} {money(po.due_amount)}</div>}</span>
+              <span className="po-acts">
+                {po.status !== 3 && <button className="btn" disabled={!!busy} onClick={() => edit(po)}>{busy === `e${po.id}` ? <Loader2 size={16} className="spin" /> : <Pencil size={16} />}{tr("Edit")}</button>}
+                <button className="btn" disabled={!!busy} onClick={() => draft(po)}>{busy === `d${po.id}` ? <Loader2 size={16} className="spin" /> : <Printer size={16} />}{tr("Draft")}</button>
+                {po.status === 1 && <button className="btn" disabled={!!busy} onClick={() => prepare(po)}><ChefHat size={16} />{tr("Start preparing")}</button>}
+                {po.status === 2 && <button className="btn ok" disabled={!!busy} onClick={() => setView({ name: "deliver", po })}><Check size={16} />{tr("Mark delivered")}</button>}
+                {po.status !== 3 && !po.is_converted && <button className="btn" disabled={!!busy} onClick={() => remove(po)} aria-label={tr("Delete")} title={tr("Delete")}><Trash2 size={16} /></button>}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// "Collect remaining due" of the web list, then the invoice
+function PreOrderDeliver({ po, onBack, onClose, onError, onDone }) {
+  const [method, setMethod] = useState(PAYMENT_METHODS.find((m) => m.id === po.advance_payment_method_id)?.id ?? PAYMENT_METHODS.find((m) => m.cash)?.id ?? PAYMENT_METHODS[0]?.id);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const keyRef = useRef(null);
+  const go = async () => {
+    setBusy(true); setErr("");
+    try {
+      if (!keyRef.current) keyRef.current = await newKey();
+      let r = null;
+      for (let i = 0; ; i++) {          // the previous invoice may still be with ZATCA: try again for a while
+        try { r = await post(`/v1/pre-orders/${po.id}/deliver`, { payment_method_id: method }, { idempotencyKey: keyRef.current }); break; }
+        catch (e) { if (e?.code !== "ZATCA_BUSY" || i >= 40) throw e; await new Promise((res) => setTimeout(res, 1500)); }
+      }
+      onDone(r.invoice);
+    } catch (e) { setErr(e.message); setBusy(false); }
+  };
+  return (
+    <Modal title={tr("Deliver {n}", { n: po.pre_order_no })} onClose={() => !busy && onClose()} closable={!busy}
+      footer={<><button className="btn" disabled={busy} onClick={onBack}>{tr("Back")}</button>
+        <button className="btn ok" disabled={busy || (po.due_amount > 0 && !method)} onClick={go}>
+          {busy ? <Loader2 size={16} className="spin" /> : <Check size={16} />}{busy ? tr("Creating invoice…") : tr("Confirm delivered & create invoice")}</button></>}>
+      <div className="sum-row"><span>{tr("Total payable")}</span><span className="num">{cur(po.total_payable)}</span></div>
+      <div className="sum-row"><span>{tr("Advance paid")}{po.advance_payment_method_name ? ` (${po.advance_payment_method_name})` : ""}</span><span className="num">{money(po.advance_amount)}</span></div>
+      <div className="sum-row total"><span>{tr("Due Amount")}</span><span className="num">{cur(po.due_amount)}</span></div>
+      {po.due_amount > 0 && <>
+        <div className="pay-entry-label" style={{ marginTop: 10 }}>{tr("Payment method for remaining due")}</div>
+        <div className="pay-methods" style={{ marginBottom: 0 }}>
+          {PAYMENT_METHODS.map((x) => <button key={x.id} className="pm" aria-pressed={method === x.id} onClick={() => setMethod(x.id)}><x.icon size={20} />{x.name}</button>)}
+        </div>
+      </>}
+      <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>{tr("The invoice is made from the pre-order's items and prices and sent to ZATCA like any sale. Its total can differ by a few halalas from the pre-order estimate; the remaining due is taken from the invoice total.")}</p>
+      {err && <p role="alert" style={{ color: "var(--danger)", fontSize: 13 }}>{err}</p>}
+    </Modal>
+  );
+}
+
+function PreOrderForm({ po, customers, onSearchCustomers, onCustomerAdded, notify, onError, onBack, onClose, onSaved }) {
+  const [addCust, setAddCust] = useState(false);
+  const tomorrow = () => { const d = new Date(Date.now() + 86400000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  const [customerId, setCustomerId] = useState(po?.customer?.id || DEFAULT_CUSTOMER_ID);
+  const [type, setType] = useState(po?.order_type || "pickup");
+  const [partner, setPartner] = useState(po?.delivery_partner?.id || "");
+  const [date, setDate] = useState(po?.delivery_date || tomorrow());
+  const [time, setTime] = useState(po?.delivery_time || "");
+  const [note, setNote] = useState(po?.preparation_note || "");
+  const [advance, setAdvance] = useState(po ? String(po.advance_amount || "") : "");
+  const [advMethod, setAdvMethod] = useState(po?.advance_payment_method_id || PAYMENT_METHODS.find((m) => m.cash)?.id || PAYMENT_METHODS[0]?.id);
+  const [lines, setLines] = useState(() => (po?.items || []).map((l, k) => {
+    const it = ITEM_BY_ID[l.food_menu_id];
+    return { key: `s${k}`, itemId: l.food_menu_id, name: l.name, qty: l.qty, note: l.note, price: l.unit_price, keep: true,
+      openPrice: !!it?.openPrice, mods: l.modifiers.map((m) => ({ id: m.id, name: m.name, price: m.price, openPrice: !!it?.modifiers.find((x) => x.id === m.id)?.openPrice, entered: String(m.price) })),
+      allMods: it?.modifiers || [] };
+  }));
+  const [search, setSearch] = useState("");
+  const [totals, setTotals] = useState(null);
+  const [calcErr, setCalcErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [errs, setErrs] = useState({});
+  const keyRef = useRef(null);
+
+  const pickable = useMemo(() => {
+    const all = [];
+    ITEMS.forEach((it) => (it.variations.length ? it.variations : [it]).forEach((v) => { if (!v.unavailable && !v.comboGroups) all.push(v); }));
+    return all;
+  }, []);
+  const t = search.trim().toLowerCase();
+  const shown = (t ? pickable.filter((i) => `${i.name} ${i.name2} ${i.code}`.toLowerCase().includes(t)) : pickable).slice(0, 120);
+  const add = (it) => setLines((ls) => [...ls, { key: `n${Date.now()}${Math.random()}`, itemId: it.id, name: it.name, qty: 1, note: "", price: it.openPrice ? 0 : it.prices.dine_in,
+    openPrice: it.openPrice, entered: "", keep: false, mods: [], allMods: it.modifiers }]);
+  const upd = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const toggleMod = (l, m) => upd(l.key, { mods: l.mods.some((x) => x.id === m.id) ? l.mods.filter((x) => x.id !== m.id) : [...l.mods, { ...m, entered: m.openPrice ? "" : String(m.price) }] });
+  const setModPrice = (l, id, v) => upd(l.key, { mods: l.mods.map((x) => (x.id === id ? { ...x, entered: v, price: Number(v) || 0 } : x)) });
+
+  const body = () => ({
+    customer_id: customerId, order_type: type, delivery_partner_id: type === "delivery" ? partner || null : null,
+    delivery_date: date, delivery_time: time, preparation_note: note, advance_amount: Number(advance) || 0, advance_payment_method_id: advMethod,
+    items: lines.map((l) => ({
+      food_menu_id: l.itemId, qty: l.qty, note: l.note,
+      ...(l.keep || l.openPrice ? { custom_price: l.openPrice && !l.keep ? Number(l.entered) || 0 : l.price } : {}),
+      modifier_ids: l.mods.map((m) => (m.openPrice ? { id: m.id, price: Number(m.entered) || 0 } : m.id)),
+    })),
+  });
+  const incomplete = lines.some((l) => (l.openPrice && !l.keep && !(Number(l.entered) > 0)) || l.mods.some((m) => m.openPrice && !(Number(m.entered) > 0)));
+  const sig = JSON.stringify(body());
+  useEffect(() => {
+    if (!lines.length || incomplete) { setTotals(null); setCalcErr(""); return; }
+    let alive = true;
+    const h = setTimeout(() => post("/v1/pre-orders/calculate", body()).then((r) => { if (alive) { setTotals(r.totals); setCalcErr(""); } })
+      .catch((e) => { if (alive) { setTotals(null); setCalcErr(e.message); } }), 300);
+    return () => { alive = false; clearTimeout(h); };
+  }, [sig]); // eslint-disable-line
+
+  const save = async () => {
+    setBusy(true); setErrs({});
+    try {
+      let r;
+      if (po) r = await put(`/v1/pre-orders/${po.id}`, body());
+      else { if (!keyRef.current) keyRef.current = await newKey(); r = await post("/v1/pre-orders", body(), { idempotencyKey: keyRef.current }); }
+      onSaved(r, !po);
+    } catch (e) { setErrs(e.errors || {}); onError(e); setBusy(false); }
+  };
+  const fe = (k) => errs[k] && <small style={{ color: "var(--danger)" }}>{errs[k]}</small>;
+  const due = totals ? totals.due_amount : null;
+
+  return (
+    <Modal title={po ? tr("Edit pre-order {n}", { n: po.pre_order_no }) : tr("Add Pre-Order")} onClose={() => !busy && onClose()} closable={!busy} size="xl"
+      footer={<><span className="num" style={{ marginInlineEnd: "auto", fontWeight: 700 }}>{totals ? <>{tr("Total Payable")}: {cur(totals.total_payable)}{totals.advance_amount > 0 ? <span className="muted" style={{ fontWeight: 400 }}> · {tr("Due Amount")} {money(totals.due_amount)}</span> : null}</> : null}</span>
+        <button className="btn" disabled={busy} onClick={onBack}>{tr("Back")}</button>
+        <button className="btn primary" disabled={busy || !lines.length || incomplete || !date || !totals} onClick={save}>
+          {busy ? <Loader2 size={16} className="spin" /> : <Check size={16} />}{tr("Save Pre-Order")}</button></>}>
+      <div className="po-form">
+        <div className="po-pick">
+          <div className="ss-search" style={{ border: "1px solid var(--line)", borderRadius: 10, padding: "0 10px" }}><Search size={15} />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={tr("Search items")} aria-label={tr("Search items")} /></div>
+          <div className="po-items" aria-label={tr("Items")}>
+            {shown.map((it) => (
+              <button key={it.id} onClick={() => add(it)}><b>{getLang() === "ar" && it.name2 ? it.name2 : it.name}</b><span>{it.openPrice ? tr("Open price") : money(it.prices.dine_in)}</span></button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+          <div className="po-fields">
+            <label>{tr("Customer")}
+              <div style={{ display: "flex", gap: 6 }}><div style={{ flex: 1, minWidth: 0 }}>
+                <SearchSelect label={tr("Customer")} value={customerId} placeholder={tr("Customer")} options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.phone }))}
+                  onChange={(v) => setCustomerId(Number(v))} onSearch={onSearchCustomers} /></div>
+                <button className="sq-btn" type="button" title={tr("Add customer")} aria-label={tr("Add customer")} onClick={() => setAddCust(true)}><UserPlus size={16} /></button></div>
+              {fe("customer_id")}</label>
+            <label>{tr("Order Type")}
+              <div style={{ display: "flex", gap: 6 }}>
+                <button type="button" className="btn" style={{ flex: 1 }} aria-pressed={type === "pickup"} onClick={() => setType("pickup")}><ShoppingBag size={16} />{tr("Pickup")}</button>
+                <button type="button" className="btn" style={{ flex: 1 }} aria-pressed={type === "delivery"} onClick={() => setType("delivery")}><Truck size={16} />{tr("Delivery")}</button>
+              </div></label>
+            <label>{tr("Delivery Date")}<input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label={tr("Delivery Date")} />{fe("delivery_date")}</label>
+            <label>{tr("Delivery Time")}<input className="input" type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label={tr("Delivery Time")} />{fe("delivery_time")}</label>
+            {type === "delivery" && <label style={{ gridColumn: "1/-1" }}>{tr("Delivery Partner")}
+              <select className="input" value={partner} onChange={(e) => setPartner(e.target.value)} aria-label={tr("Delivery Partner")}>
+                <option value="">{tr("None")}</option>{PARTNERS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>{fe("delivery_partner_id")}</label>}
+          </div>
+          <div className="po-cart" aria-label={tr("Pre-order items")}>
+            {!lines.length && <p className="muted" style={{ margin: 0 }}>{tr("Tap items on the left to add them.")}</p>}
+            {lines.map((l) => (
+              <div key={l.key} className="po-line">
+                <span style={{ minWidth: 0 }}><b>{l.name}</b>
+                  <div className="muted" style={{ fontSize: 12 }}>{l.openPrice && !l.keep ? "" : money(l.price)}</div></span>
+                {l.openPrice && !l.keep
+                  ? <input className="input num" style={{ width: 90 }} type="number" min="0" value={l.entered} placeholder={tr("Price")} aria-label={tr("Price for {name}", { name: l.name })} onChange={(e) => upd(l.key, { entered: e.target.value })} />
+                  : <span />}
+                <Qty value={l.qty} onChange={(v) => upd(l.key, { qty: Math.max(1, v) })} />
+                <button className="sq-btn" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} aria-label={tr("Remove {name}", { name: l.name })}><Trash2 size={15} /></button>
+                <div className="po-sub">
+                  {l.allMods.map((m) => {
+                    const on = l.mods.find((x) => x.id === m.id);
+                    return <React.Fragment key={m.id}>
+                      <button type="button" className="po-mod" aria-pressed={!!on} onClick={() => toggleMod(l, m)}>{m.name}{!m.openPrice ? ` +${money(m.price)}` : ""}</button>
+                      {on && m.openPrice && <input className="input num" style={{ width: 80, height: 28 }} type="number" min="0" value={on.entered} placeholder={tr("Price")} aria-label={tr("Price for {name}", { name: m.name })} onChange={(e) => setModPrice(l, m.id, e.target.value)} />}
+                    </React.Fragment>;
+                  })}
+                  <input className="input" style={{ flex: "1 1 140px", height: 30 }} maxLength={150} value={l.note} placeholder={tr("Note")} aria-label={tr("Note for {name}", { name: l.name })} onChange={(e) => upd(l.key, { note: e.target.value })} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="po-fields">
+            <label style={{ gridColumn: "1/-1" }}>{tr("Order-level Preparation Note")}<input className="input" value={note} onChange={(e) => setNote(e.target.value)} aria-label={tr("Order-level Preparation Note")} /></label>
+            <label>{tr("Advance Amount")}<input className="input num" type="number" min="0" step="0.01" value={advance} onChange={(e) => setAdvance(e.target.value)} placeholder="0.00" aria-label={tr("Advance Amount")} /></label>
+            <label>{tr("Advance Payment Method")}
+              <select className="input" value={advMethod || ""} onChange={(e) => setAdvMethod(Number(e.target.value))} aria-label={tr("Advance Payment Method")}>
+                {PAYMENT_METHODS.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>{fe("advance_payment_method_id")}</label>
+          </div>
+          <div>
+            {calcErr && <p style={{ color: "var(--danger)", fontSize: 13, margin: "0 0 6px" }}>{calcErr}</p>}
+            <div className="sum-row"><span>{tr("Sub Total")}</span><span className="num">{totals ? money(totals.sub_total) : "—"}</span></div>
+            <div className="sum-row"><span>{tr("VAT")}</span><span className="num">{totals ? money(totals.total_vat) : "—"}</span></div>
+            <div className="sum-row total"><span>{tr("Total Payable")}</span><span className="num">{totals ? cur(totals.total_payable) : "—"}</span></div>
+            {totals && totals.advance_amount > 0 && <div className="sum-row"><span>{tr("Due Amount")}</span><span className="num">{money(due)}</span></div>}
+          </div>
+        </div>
+      </div>
+      {addCust && <CustomerModal onClose={() => setAddCust(false)} onError={onError} onSave={async (id, b) => {
+        const saved = await post("/v1/customers", b);          // field errors go back to the form
+        const row = { id: saved.id, name: saved.name, phone: saved.phone || "", email: saved.email || "", address: saved.address || "" };
+        onCustomerAdded(row); setCustomerId(row.id); setAddCust(false);
+        notify(tr("{name} added and selected", { name: row.name }));
+      }} />}
     </Modal>
   );
 }
