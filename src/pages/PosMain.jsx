@@ -24,7 +24,7 @@ import {
   Check, CreditCard, Banknote, Smartphone, Clock, ChefHat, StickyNote, FileText, ListOrdered,
   ShoppingCart, Users, Edit3, Sandwich, CupSoda, IceCreamCone, Beef, Drumstick, Citrus, Grape, Milk,
   GlassWater, Cookie, Martini, Flame, Soup, Image as ImageIcon, List, ShoppingBag, WifiOff, Loader2,
-  ShieldCheck, ShieldAlert, Settings2, ChevronDown, Eraser, Languages, Sun, Moon, Keyboard, FileDown,
+  ShieldCheck, ShieldAlert, Settings2, ChevronDown, Eraser, Languages, Sun, Moon, Keyboard, FileDown, RotateCcw,
 } from "lucide-react";
 import { useTheme } from "../theme.js";
 import { useOskEnabled, openKeyboard } from "../osk.jsx";
@@ -661,6 +661,12 @@ const CSS_ONLINE = `
 .calc-msg{margin:6px 10px 0;padding:6px 10px;border-radius:8px;background:var(--warn-bg);color:var(--warn-ink);font-size:12.5px;font-weight:600}
 .total-bar .spin{animation:spin .8s linear infinite;color:var(--ink2)}@keyframes spin{to{transform:rotate(360deg)}}
 .tag.new{background:var(--info-bg);color:var(--info)}.tag.bill{background:var(--brand-2);color:var(--brand)}
+.tag.cn{background:var(--warn-bg);color:var(--warn-ink)}
+.rf-row{display:grid;grid-template-columns:minmax(0,1fr) auto 110px 90px;gap:10px;align-items:center}
+.rf-row .rf-name{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.rf-row .num.rf-tot{text-align:end}
+.rf-opts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+@media (max-width:700px){.rf-opts{grid-template-columns:1fr}.rf-row{grid-template-columns:minmax(0,1fr) 110px 70px}.rf-row .rf-sold{display:none}}
 .var-list{display:grid;gap:8px}
 .var-row{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px 14px;display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:14px}
 .var-row:hover{border-color:var(--brand);background:var(--brand-2)}
@@ -1906,7 +1912,9 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
       )}
 
       {modal?.name === "recent" && (
-        <RecentSalesModal initial={sales} onClose={() => setModal(null)} onError={onError} onReprint={reprintInvoice} />
+        <RecentSalesModal initial={sales} onClose={() => setModal(null)} onError={onError} onReprint={reprintInvoice}
+          canRefund={user?.role === "Admin" || !!user?.permissions?.is_admin || (user?.permissions?.all || []).includes("refund-123")}
+          onPrintJob={printJob} notify={notify} />
       )}
 
       {modal?.name === "notifications" && (
@@ -2951,7 +2959,8 @@ ${sales("Modifier wise sales", "Modifier", s.modifier_sales)}
 // Recent sales (web POS "Recent Sales"): search by invoice no / customer, pick a day, see the invoice, reprint it.
 // Reprint uses the saved sale (GET /v1/invoices/{id}/print): same ZATCA QR, nothing is sent to ZATCA again.
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-function RecentSalesModal({ initial, onClose, onError, onReprint }) {
+function RecentSalesModal({ initial, onClose, onError, onReprint, canRefund, onPrintJob, notify }) {
+  const [refundFor, setRefundFor] = useState(null);   // sale shown in the credit note screen
   const [q, setQ] = useState("");
   const [date, setDate] = useState(today());
   const [list, setList] = useState(null);
@@ -2970,12 +2979,27 @@ function RecentSalesModal({ initial, onClose, onError, onReprint }) {
   const pbtn = (id) => (
     <button className="btn" disabled={printing === id} onClick={() => reprint(id)}>{printing === id ? <Loader2 size={16} className="spin" /> : <Printer size={16} />}{tr("Reprint")}</button>
   );
+  const cnbtn = (s) => canRefund && (
+    <button className="btn" onClick={() => setRefundFor({ id: s.id, sale_no: s.sale_no })} title={s.refund ? tr("Credit note {n}", { n: s.refund.refund_no }) : tr("Make a credit note (refund)")}>
+      <RotateCcw size={16} />{s.refund ? tr("Credit note") : tr("Refund")}</button>
+  );
+  // credit note made: show it in the list / the open invoice right away
+  const refunded = (id, refund) => {
+    setList((l) => (l || []).map((x) => (x.id === id ? { ...x, refund } : x)));
+    setOpen((o) => (o && o.id === id ? { ...o, refund } : o));
+  };
+
+  if (refundFor) {
+    return <RefundModal sale={refundFor} onBack={() => setRefundFor(null)} onClose={onClose} onError={onError}
+      onPrintJob={onPrintJob} notify={notify} onDone={(r) => refunded(refundFor.id, r)} />;
+  }
 
   if (open) {
     const t = open.totals || {};
     return (
       <Modal title={tr("Invoice {n}", { n: open.sale_no })} onClose={onClose} size="lg"
-        footer={<><button className="btn" onClick={() => setOpen(null)}>{tr("Back")}</button>{pbtn(open.id)}</>}>
+        footer={<><button className="btn" onClick={() => setOpen(null)}>{tr("Back")}</button>{cnbtn(open)}{pbtn(open.id)}</>}>
+        {open.refund && <div className="sum-row" style={{ marginBottom: 8 }}><span className="tag cn">{tr("Credit note {n}", { n: open.refund.refund_no })}</span><span className="num">-{cur(open.refund.total)}</span></div>}
         <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
           {typeName(open)}{open.tables_text ? ` · ${tr("Table {name}", { name: open.tables_text })}` : ""} · {open.customer?.name}{open.cashier ? ` · ${open.cashier}` : ""} · {open.date_time}
         </div>
@@ -3016,14 +3040,163 @@ function RecentSalesModal({ initial, onClose, onError, onReprint }) {
           {list.map((s) => (
             <div key={s.id} className="list-row">
               <span style={{ minWidth: 0 }}><b className="num">{s.sale_no}</b> · {typeName(s)}{s.tables_text ? ` · ${s.tables_text}` : ""} · {s.customer?.name}
+                {s.refund && <> <span className="tag cn" title={`-${money(s.refund.total)}`}>{s.refund.refund_no || tr("Credit note")}</span></>}
                 <div className="muted" style={{ fontSize: 12 }}>{s.cashier ? `${s.cashier} · ` : ""}{s.date_time}{Number(s.due_amount) > 0 ? ` · ${tr("Due")} ${money(s.due_amount)}` : ""}</div></span>
               <span style={{ display: "flex", gap: 8, alignItems: "center", flex: "none" }}><b className="num">{cur(s.total_payable ?? s.totals?.total_payable)}</b>
                 <button className="btn" onClick={() => view(s.id)}><Eye size={16} />{tr("View")}</button>
+                {cnbtn(s)}
                 {pbtn(s.id)}</span>
             </div>
           ))}
         </div>
       )}
+    </Modal>
+  );
+}
+
+// Credit note (refund) of an invoice: the web app's Sale/refund, through the API (ZATCA + print on the server side).
+function RefundModal({ sale, onBack, onClose, onError, onPrintJob, notify, onDone }) {
+  const [info, setInfo] = useState(null);
+  const [qty, setQty] = useState({});              // sales_details id -> qty to refund
+  const [prev, setPrev] = useState(null);          // server preview of the credit note
+  const [prevErr, setPrevErr] = useState("");
+  const [method, setMethod] = useState(PAYMENT_METHODS.find((m) => m.cash)?.id ?? PAYMENT_METHODS[0]?.id);
+  const [reason, setReason] = useState("");
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(null);          // "save" | "print"
+  const [err, setErr] = useState("");
+  const [done, setDone] = useState(null);          // { refund, zatca, print_job }
+  const keyRef = useRef(null);                     // one Idempotency-Key per credit note (a retry never makes two)
+
+  useEffect(() => {
+    get(`/v1/invoices/${sale.id}/refund`).then((r) => {
+      setInfo(r);
+      if (r.refund) setDone({ refund: r.refund });
+    }).catch((e) => { onError(e); onBack(); });
+  }, [sale.id]); // eslint-disable-line
+
+  const items = info?.items || [];
+  const chosen = items.filter((i) => Number(qty[i.id]) > 0).map((i) => ({ id: i.id, qty: Number(qty[i.id]) }));
+  const all = items.length > 0 && items.every((i) => Number(qty[i.id] || 0) === Number(i.qty));
+  const sig = JSON.stringify(chosen);
+  useEffect(() => {
+    setConfirm(false); setErr("");
+    if (!chosen.length || done) { setPrev(null); setPrevErr(""); return; }
+    let alive = true;
+    const t = setTimeout(() => {
+      post(`/v1/invoices/${sale.id}/refund/preview`, { items: chosen })
+        .then((r) => { if (alive) { setPrev(r); setPrevErr(""); } })
+        .catch((e) => { if (alive) { setPrev(null); setPrevErr(e.message); } });
+    }, 250);
+    return () => { alive = false; clearTimeout(t); };
+  }, [sig]); // eslint-disable-line
+  const setQ = (id, v, max) => setQty((q) => ({ ...q, [id]: Math.max(0, Math.min(max, v)) }));
+  const toggleAll = () => setQty(all ? {} : Object.fromEntries(items.map((i) => [i.id, Number(i.qty)])));
+  const rowTotal = (id) => prev?.rows?.find((r) => r.id === id)?.total;
+
+  const printCn = async (job) => {
+    setBusy("print");
+    try {
+      await onPrintJob(job || await get(`/v1/invoices/${sale.id}/refund/print`));
+      if (job) setDone((d) => (d ? { ...d, printed: true } : d));       // next press: a copy
+    } catch (e) { onError(e); } finally { setBusy(null); }
+  };
+  const submit = async () => {
+    if (!confirm) { setConfirm(true); return; }
+    setBusy("save"); setErr("");
+    try {
+      if (!keyRef.current) keyRef.current = await newKey();
+      const r = await post(`/v1/invoices/${sale.id}/refund`, { items: chosen, payment_method_id: method, reason: reason.trim() }, { idempotencyKey: keyRef.current });
+      setDone(r); onDone(r.refund);
+      notify(tr("Credit note {n} saved", { n: r.refund.refund_no }) + (r.zatca?.phase === "2" && r.zatca?.synced ? " · " + tr("Reported to ZATCA") : ""), 5000);
+      setBusy(null);
+      if (!OUTLET.printPopup) await printCn(r.print_job);        // print right away, like an invoice
+    } catch (e) {
+      setBusy(null); setConfirm(false);
+      if (e.code === "ALREADY_REFUNDED") { keyRef.current = null; }
+      if (e.code === "ZATCA_REFUSED" || e.code === "ZATCA") keyRef.current = null;   // nothing was saved: a new try is a new request
+      setErr(e.message);
+    }
+  };
+
+  const title = tr("Credit note · {n}", { n: sale.sale_no });
+  if (!info) {
+    return <Modal title={title} onClose={onClose} size="lg"><p className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} className="spin" />{tr("Loading…")}</p></Modal>;
+  }
+  if (done) {
+    const r = done.refund;
+    return (
+      <Modal title={title} onClose={onClose}
+        footer={<><button className="btn" onClick={onBack}>{tr("Back")}</button>
+          <button className="btn primary" disabled={busy === "print"} onClick={() => printCn(done.print_job && !done.printed ? done.print_job : null)}>
+            {busy === "print" ? <Loader2 size={16} className="spin" /> : <Printer size={16} />}{tr("Print credit note")}</button></>}>
+        <div style={{ textAlign: "center", padding: "6px 0 4px" }}>
+          <Check size={34} style={{ color: "var(--ok)" }} />
+          <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{tr("Credit note {n}", { n: r.refund_no })}</div>
+          <div className="muted" style={{ fontSize: 13 }}>{tr("Invoice {n}", { n: sale.sale_no })}{r.date_time ? ` · ${r.date_time}` : ""}</div>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <div className="sum-row"><span>{tr("Tax")}</span><span className="num">{money(r.vat)}</span></div>
+          <div className="sum-row total"><span>{tr("Refund total")}</span><span className="num">{cur(r.total)}</span></div>
+          {r.reported || (done.zatca?.phase === "2" && done.zatca?.synced)
+            ? <div className="sum-row"><span>ZATCA</span><span style={{ color: "var(--ok)", display: "inline-flex", gap: 4, alignItems: "center" }}><ShieldCheck size={15} />{tr("Reported")}</span></div>
+            : null}
+        </div>
+      </Modal>
+    );
+  }
+  return (
+    <Modal title={title} onClose={() => !busy && onClose()} closable={!busy} size="lg"
+      footer={<>
+        <button className="btn" disabled={!!busy} onClick={onBack}>{tr("Back")}</button>
+        <button className={`btn ${confirm ? "danger" : "primary"}`} disabled={!!busy || !prev || !chosen.length || !method} onClick={submit}>
+          {busy === "save" ? <Loader2 size={16} className="spin" /> : <RotateCcw size={16} />}
+          {busy === "save" ? tr("Sending credit note…") : confirm ? tr("Confirm refund of {amount}", { amount: cur(prev?.total) }) : tr("Make credit note")}
+        </button>
+      </>}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <span className="muted" style={{ fontSize: 13 }}>{tr("Choose what the customer returns. Invoice total {amount}", { amount: cur(info.total_payable) })}</span>
+        <button className="btn" onClick={toggleAll} aria-pressed={all}>{all ? tr("Clear") : tr("Refund all")}</button>
+      </div>
+      <div className="list">
+        {items.map((it) => (
+          <div key={it.id} className="list-row rf-row">
+            <span className="rf-name"><b>{it.name}</b>
+              <div className="muted" style={{ fontSize: 12 }}>{money(it.unit_price)}{it.discount && it.discount !== "0" ? ` · ${tr("Discount")} ${it.discount}` : ""}{it.is_free ? ` · ${tr("Free")}` : ""}
+                {it.modifiers?.length > 0 ? ` · + ${it.modifiers.map((m) => m.name).join(", ")}` : ""}</div></span>
+            <span className="muted rf-sold" style={{ fontSize: 12 }}>{tr("Sold {n}", { n: it.qty })}</span>
+            <Qty value={Number(qty[it.id] || 0)} onChange={(v) => setQ(it.id, v, Number(it.qty))} />
+            <span className="num rf-tot">{Number(qty[it.id]) > 0 ? (rowTotal(it.id) != null ? money(rowTotal(it.id)) : "…") : ""}</span>
+          </div>
+        ))}
+      </div>
+      <div className="rf-opts">
+        <div>
+          <div className="pay-entry-label">{tr("Refund by")}</div>
+          <div className="pay-methods" style={{ marginBottom: 0 }}>
+            {PAYMENT_METHODS.map((x) => <button key={x.id} className="pm" aria-pressed={method === x.id} onClick={() => setMethod(x.id)}><x.icon size={20} />{x.name}</button>)}
+          </div>
+          <div className="pay-entry-label" style={{ marginTop: 10 }}>{tr("Reason")}</div>
+          <input className="input" value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} placeholder={tr("e.g. Item returned")} aria-label={tr("Reason")} />
+        </div>
+        <div>
+          {!chosen.length ? <p className="muted">{tr("Nothing chosen yet.")}</p> : !prev ? (
+            prevErr ? <p style={{ color: "var(--danger)" }}>{prevErr}</p> : <p className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} className="spin" />{tr("Calculating…")}</p>
+          ) : (
+            <>
+              {prev.bill_discount > 0 && <div className="sum-row"><span>{tr("Discount")}</span><span className="num">-{money(prev.bill_discount)}</span></div>}
+              {prev.charge > 0 && <div className="sum-row"><span>{tr("Service charge")}</span><span className="num">{money(prev.charge)}</span></div>}
+              <div className="sum-row"><span>{tr("Subtotal")}</span><span className="num">{money(prev.sub_total)}</span></div>
+              <div className="sum-row"><span>{tr("Tax")}</span><span className="num">{money(prev.vat)}</span></div>
+              {Number(prev.rounding) !== 0 && <div className="sum-row"><span>{tr("Rounding")}</span><span className="num">{money(prev.rounding)}</span></div>}
+              <div className="sum-row total"><span>{tr("Refund total")}</span><span className="num">{cur(prev.total)}</span></div>
+              {!prev.full && info.has_charge && <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>{tr("Part refund: the service / delivery charge is only refunded when everything is returned.")}</p>}
+            </>
+          )}
+          {confirm && <p style={{ color: "var(--warn-ink)", fontSize: 13, marginTop: 8 }}>{tr("Only one credit note can be made per invoice and it is sent to ZATCA. Press again to confirm.")}</p>}
+          {err && <p role="alert" style={{ color: "var(--danger)", fontSize: 13, marginTop: 8 }}>{err}</p>}
+        </div>
+      </div>
     </Modal>
   );
 }
