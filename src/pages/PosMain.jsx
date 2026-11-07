@@ -98,7 +98,9 @@ export function applyCatalog(boot, customers = []) {
     zatca: !!SETTINGS.zatca_math,      // totals with the ZATCA invoice math: no tips (not on the invoice)
     // Outlet settings: which order buttons the POS shows, and "printing popup" (ask before printing the invoice)
     btnPlace: SETTINGS.outlet?.place_order !== false, btnQuick: SETTINGS.outlet?.quick_invoice !== false, btnDraft: SETTINGS.outlet?.draft !== false,
-    printPopup: !!SETTINGS.outlet?.printing_popup };
+    printPopup: !!SETTINGS.outlet?.printing_popup,
+    // Outlets -> dine_in_without_table = YES: Dine In does not ask for a table (same as "Continue without table")
+    noTableAsk: !!SETTINGS.outlet?.dine_in_without_table };
   CATEGORIES = (boot.categories || []).map((c, i) => ({ id: c.id, name: c.name, name2: c.secondary_name || "", tint: TINTS[i % TINTS.length], art: artFor(c.name) }));
   const catArt = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.art]));
   const mapItem = (it, parent = null) => ({
@@ -677,7 +679,7 @@ const CSS_ONLINE = `
 .po-line .po-sub{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .po-mod{border:1px solid var(--line);border-radius:14px;padding:3px 9px;font-size:12px;background:var(--card);color:inherit;cursor:pointer}
 .po-mod[aria-pressed=true]{background:var(--brand-2);border-color:var(--brand);color:var(--brand)}
-.po-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.po-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.po-fields>label{min-width:0}.po-fields .btn{min-width:0;padding-inline:8px}
 .po-fields label{font-size:12px;color:var(--ink2);display:flex;flex-direction:column;gap:4px}
 @media (max-width:900px){.po-form{grid-template-columns:1fr}.po-row{grid-template-columns:1fr}.po-row .po-acts{justify-content:flex-start}}
 .rf-row{display:grid;grid-template-columns:minmax(0,1fr) auto 110px 90px;gap:10px;align-items:center}
@@ -1247,12 +1249,12 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
     setModal(null);
     if (type !== "dine") setTable(null);
     if (type !== "delivery") { setPartner(""); setPartnerRef(""); }
-    if (!then) { if (type === "dine" && !hasTables(table)) setModal({ name: "table" }); else if (type === "delivery") setModal({ name: "partner" }); return; }
+    if (!then) { if (type === "dine" && !hasTables(table) && !OUTLET.noTableAsk) setModal({ name: "table" }); else if (type === "delivery") setModal({ name: "partner" }); return; }
     if (then.kind === "add") {
       if (then.item.variations.length) return setModal({ name: "variations", item: then.item });
       if (needsOptions(then.item)) return setModal({ name: "item", item: then.item });
       addToCart(then.item);
-      if (type === "dine" && !hasTables(table)) setModal({ name: "table" });
+      if (type === "dine" && !hasTables(table) && !OUTLET.noTableAsk) setModal({ name: "table" });
       else if (type === "delivery" && !partner) setModal({ name: "partner" });
     } else proceed(then.kind, type, table);
   };
@@ -1878,9 +1880,11 @@ export default function PosMainScreen({ user, onLogout = () => {}, trial = null 
         const z = inv.zatca || {};
         return (
           <Modal title={tr("Payment received")} onClose={() => setModal(null)} size="sm"
-            footer={<><button className="btn" disabled={!!modal.waiting} onClick={async () => {
-              if (!modal.printed && inv.print_job?.print_bytes) { if (await printJob(inv.print_job)) setModal((md) => ({ ...md, printed: true })); }
-              else { await reprintInvoice(inv.id); setModal((md) => (md ? { ...md, printed: true } : md)); }
+            footer={<><button className="btn" disabled={!!modal.waiting} onClick={() => {
+              // print and close straight away (the printer runs in the background; a print error still shows)
+              const first = !modal.printed && inv.print_job?.print_bytes;
+              setModal(null);
+              if (first) printJob(inv.print_job); else reprintInvoice(inv.id);
             }}>{modal.waiting ? <Loader2 size={16} className="spin" /> : <Printer size={16} />}{modal.waiting ? tr("Preparing invoice…") : modal.printed ? tr("Print copy") : tr("Print invoice")}</button><button className="btn primary" onClick={() => setModal(null)}>{tr("New order")}</button></>}>
             <div className="done-box">
               <div className="muted">{tr("Invoice")}</div>
@@ -2970,13 +2974,14 @@ table{width:100%;border-collapse:collapse}
   <div><span>Status</span><b>${s.status === "closed" ? "Closed" : "Open"}</b></div>
 </div>
 <h3>Payment methods</h3>
-<table class="grid"><thead><tr><th>Payment method</th><th class="r">Opening</th><th class="r">Sales</th><th class="r">Due received</th><th class="r">Purchase</th><th class="r">Due paid</th><th class="r">Expense</th><th class="r">Refund</th><th class="r">Closing</th></tr></thead><tbody>
-${methods.map((m) => rows([esc(m.name), m2(m.opening), m2(m.sale), m2(m.due_receive), m2(m.purchase), m2(m.due_payment), m2(m.expense), m2(m.refund), `<b>${m2(m.closing)}</b>`], "pm")).join("")}
-${rows(["Total", m2(t.opening), m2(t.sale), m2(t.due_receive), m2(t.purchase), m2(t.due_payment), m2(t.expense), m2(t.refund), m2(t.closing)], "tot")}
+<table class="grid"><thead><tr><th>Payment method</th><th class="r">Opening</th><th class="r">Sales</th>${Number(t.pre_order) ? `<th class="r">Pre-order payment</th>` : ""}<th class="r">Due received</th><th class="r">Purchase</th><th class="r">Due paid</th><th class="r">Expense</th><th class="r">Refund</th><th class="r">Closing</th></tr></thead><tbody>
+${methods.map((m) => rows([esc(m.name), m2(m.opening), m2(m.sale), ...(Number(t.pre_order) ? [m2(m.pre_order)] : []), m2(m.due_receive), m2(m.purchase), m2(m.due_payment), m2(m.expense), m2(m.refund), `<b>${m2(m.closing)}</b>`], "pm")).join("")}
+${rows(["Total", m2(t.opening), m2(t.sale), ...(Number(t.pre_order) ? [m2(t.pre_order)] : []), m2(t.due_receive), m2(t.purchase), m2(t.due_payment), m2(t.expense), m2(t.refund), m2(t.closing)], "tot")}
 </tbody></table>
 <table class="summary"><tbody>
 <tr><td>Opening balance</td><td class="r">${m2(t.opening)}</td></tr>
 <tr><td>Sales</td><td class="r">${m2(t.sale)}</td></tr>
+${Number(t.pre_order) ? `<tr><td>Pre-order payment</td><td class="r">${m2(t.pre_order)}</td></tr>` : ""}
 ${Number(t.due_receive) ? `<tr><td>Due received</td><td class="r">${m2(t.due_receive)}</td></tr>` : ""}
 ${Number(t.purchase) ? `<tr><td>Purchase</td><td class="r">-${m2(t.purchase)}</td></tr>` : ""}
 ${Number(t.due_payment) ? `<tr><td>Due paid</td><td class="r">-${m2(t.due_payment)}</td></tr>` : ""}
@@ -3383,8 +3388,13 @@ function PreOrderForm({ po, customers, onSearchCustomers, onCustomerAdded, notif
   }, []);
   const t = search.trim().toLowerCase();
   const shown = (t ? pickable.filter((i) => `${i.name} ${i.name2} ${i.code}`.toLowerCase().includes(t)) : pickable).slice(0, 120);
-  const add = (it) => setLines((ls) => [...ls, { key: `n${Date.now()}${Math.random()}`, itemId: it.id, name: it.name, qty: 1, note: "", price: it.openPrice ? 0 : it.prices.dine_in,
-    openPrice: it.openPrice, entered: "", keep: false, mods: [], allMods: it.modifiers }]);
+  // same item again: one more of it on its line (a line with modifiers or its own price stays separate)
+  const add = (it) => setLines((ls) => {
+    const same = !it.openPrice && ls.find((l) => l.itemId === it.id && !l.openPrice && !l.mods.length && Number(l.price) === Number(it.prices.dine_in));
+    if (same) return ls.map((l) => (l === same ? { ...l, qty: l.qty + 1 } : l));
+    return [...ls, { key: `n${Date.now()}${Math.random()}`, itemId: it.id, name: it.name, qty: 1, note: "", price: it.openPrice ? 0 : it.prices.dine_in,
+    openPrice: it.openPrice, entered: "", keep: false, mods: [], allMods: it.modifiers }];
+  });
   const upd = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const toggleMod = (l, m) => upd(l.key, { mods: l.mods.some((x) => x.id === m.id) ? l.mods.filter((x) => x.id !== m.id) : [...l.mods, { ...m, entered: m.openPrice ? "" : String(m.price) }] });
   const setModPrice = (l, id, v) => upd(l.key, { mods: l.mods.map((x) => (x.id === id ? { ...x, entered: v, price: Number(v) || 0 } : x)) });
@@ -3579,12 +3589,13 @@ function RegisterModal({ onClose, onClosed, onError, printJob, onPrint, onPdf })
         <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>{s.user} · opened {s.opened_at}</div>
         <div className="list">
           {(s.methods || []).filter((m) => !isLoyalty(m)).map((m) => (
-            <div key={m.payment_method_id} className="list-row"><span><b>{m.name}</b><div className="muted" style={{ fontSize: 12 }}>{tr("Opening")} {money(m.opening)} · {tr("Sales")} {money(m.sale)}</div></span><b className="num">{money(m.closing)}</b></div>
+            <div key={m.payment_method_id} className="list-row"><span><b>{m.name}</b><div className="muted" style={{ fontSize: 12 }}>{tr("Opening")} {money(m.opening)} · {tr("Sales")} {money(m.sale)}{Number(m.pre_order) > 0 ? ` · ${tr("Pre-order payment")} ${money(m.pre_order)}` : ""}</div></span><b className="num">{money(m.closing)}</b></div>
           ))}
         </div>
         <div style={{ marginTop: 10 }}>
           <div className="sum-row"><span>{tr("Opening")}</span><span className="num">{money(t.opening)}</span></div>
           <div className="sum-row"><span>{tr("Sales")}</span><span className="num">{money(t.sale)}</span></div>
+          {Number(t.pre_order) > 0 && <div className="sum-row"><span>{tr("Pre-order payment")}</span><span className="num">{money(t.pre_order)}</span></div>}
           {Number(t.expense) > 0 && <div className="sum-row"><span>{tr("Expense")}</span><span className="num">-{money(t.expense)}</span></div>}
           {Number(t.refund) > 0 && <div className="sum-row"><span>{tr("Refund (not deducted)")}</span><span className="num">{money(t.refund)}</span></div>}
           <div className="sum-row total"><span>{tr("Closing balance")}</span><span className="num">{cur(t.closing)}</span></div>
