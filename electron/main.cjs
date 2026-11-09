@@ -29,7 +29,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1366, height: 768, minWidth: 800, minHeight: 600, show: false,
     frame: !FRAMELESS, kiosk: KIOSK, autoHideMenuBar: true, backgroundColor: "#EDF0F4", title: windowTitle(),
-    webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true },
+    webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true, devTools: !!DEV_URL },   // no DevTools in the installed app
   });
   win.once("ready-to-show", () => { win.maximize(); win.show(); });
   win.on("page-title-updated", (e) => { e.preventDefault(); win.setTitle(windowTitle()); });   // keep the testing label in the title

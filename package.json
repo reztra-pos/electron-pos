@@ -1,7 +1,7 @@
 {
   "name": "reztra-pos",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.5.0",
   "description": "Reztra POS — Electron + React desktop app for Windows",
   "author": "Reztra",
   "type": "module",
@@ -11,10 +11,10 @@
     "dev:web": "vite",
     "build": "vite build",
     "start": "electron . --ozone-platform=x11",
-    "dist": "node scripts/make-trial.mjs off && vite build && electron-builder --win",
+    "dist": "node scripts/make-trial.mjs off && vite build && node scripts/protect.mjs && electron-builder --win",
     "mock-api": "node scripts/mock-api.mjs",
     "make-key": "node scripts/make-key.mjs",
-    "dist:trial": "node scripts/make-trial.mjs 7 && vite build && electron-builder --win",
+    "dist:trial": "node scripts/make-trial.mjs 7 && vite build && node scripts/protect.mjs && electron-builder --win",
     "trial:on": "node scripts/make-trial.mjs 7",
     "trial:off": "node scripts/make-trial.mjs off"
   },
@@ -26,8 +26,15 @@
     },
     "files": [
       "dist/**/*",
-      "electron/**/*",
-      "package.json"
+      {
+        "from": "build/app-electron",
+        "to": "electron",
+        "filter": [
+          "**/*"
+        ]
+      },
+      "package.json",
+      "!**/*.map"
     ],
     "win": {
       "target": [
@@ -48,6 +55,15 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "license": "build/license.txt"
+    },
+    "asar": true,
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
     }
   },
   "devDependencies": {
@@ -57,6 +73,7 @@
     "cross-env": "^10.1.0",
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3",
+    "javascript-obfuscator": "^4.2.2",
     "lucide-react": "^1.48.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
