@@ -1,28 +1,44 @@
-{
-  "appId": "com.reztra.pos",
-  "productName": "Reztra POS",
-  "directories": {
-    "output": "release"
-  },
-  "files": [
-    "dist/**/*",
-    "electron/**/*",
-    "package.json"
-  ],
-  "win": {
-    "target": [
+  {
+    "appId": "com.reztra.pos",
+    "productName": "Reztra POS",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
       {
-        "target": "nsis",
-        "arch": [
-          "x64"
+        "from": "build/app-electron",
+        "to": "electron",
+        "filter": [
+          "**/*"
         ]
-      }
-    ]
-  },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true,
-    "createDesktopShortcut": true,
-    "license": "build/license.txt"
+      },
+      "package.json",
+      "!**/*.map"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "license": "build/license.txt"
+    },
+    "asar": true,
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    }
   }
-}
