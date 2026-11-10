@@ -6,7 +6,9 @@ import { Minus, Plus, X, Delete } from 'lucide-react-native';
 import { C } from '../lib/catalog';
 import { money } from '../lib/format';
 
-export const COLORS = { brand: '#5B3FD1', brandTint: '#EFEBFF', brandDark: '#3F2A9E', ink: '#141A2A', ink2: '#5A6478', ink3: '#8B93A6', line: '#E3E7EE', ok: '#12A15A', warn: '#B76E00', danger: '#D93545', info: '#2563EB', white: '#FFFFFF', rail: '#AEB6CC' };
+import { COLORS, useTheme } from './theme';
+export { COLORS };
+export { ThemeProvider, useTheme, tintFor } from './theme';
 
 /** tablet = shortest side 600dp or more (9" and up, landscape); phone = portrait */
 export function useLayout() {
@@ -33,7 +35,7 @@ const BTN = {
   primary: ['bg-brand', 'text-white', COLORS.white],
   secondary: ['bg-brand-tint', 'text-brand-dark', COLORS.brandDark],
   neutral: ['bg-chip', 'text-ink', COLORS.ink],
-  outline: ['bg-white border border-line', 'text-ink', COLORS.ink],
+  outline: ['bg-card border border-line', 'text-ink', COLORS.ink],
   danger: ['bg-danger', 'text-white', COLORS.white],
   ok: ['bg-ok', 'text-white', COLORS.white],
   ghost: ['bg-transparent', 'text-ink-2', COLORS.ink2],
@@ -55,7 +57,7 @@ export function Btn({ label, icon: Icon, onPress, variant = 'neutral', disabled,
 export function IconBtn({ icon: Icon, onPress, label, className = '', color = COLORS.ink, badge }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
-      className={`w-11 h-11 rounded-xl bg-white border border-line items-center justify-center active:opacity-70 ${className}`}>
+      className={`w-11 h-11 rounded-xl bg-card border border-line items-center justify-center active:opacity-70 ${className}`}>
       <Icon size={20} color={color} strokeWidth={2} />
       {badge ? <View className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-danger items-center justify-center px-1"><Text className="text-white text-[10px] font-bold">{badge}</Text></View> : null}
     </Pressable>
@@ -72,10 +74,10 @@ export function Tag({ text, tone = 'neutral', className = '' }) {
 export function Pill({ label, active, onPress, count, icon: Icon, className = '' }) {
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: !!active }}
-      className={`h-10 px-4 rounded-xl flex-row items-center mr-2 ${active ? 'bg-ink' : 'bg-white border border-line'} ${className}`}>
+      className={`h-10 px-4 rounded-xl flex-row items-center mr-2 ${active ? 'bg-inverse' : 'bg-card border border-line'} ${className}`}>
       {Icon ? <Icon size={15} color={active ? '#fff' : COLORS.ink2} strokeWidth={2.2} /> : null}
       <Text className={`text-[14px] font-semibold ${Icon ? 'ml-1.5' : ''} ${active ? 'text-white' : 'text-ink-2'}`}>{label}</Text>
-      {count != null ? <Text className={`ml-2 text-[11.5px] font-semibold ${active ? 'text-[#B9C0D3]' : 'text-ink-3'}`}>{count}</Text> : null}
+      {count != null ? <Text className={`ml-2 text-[11.5px] font-semibold ${active ? 'text-ink-3' : 'text-ink-3'}`}>{count}</Text> : null}
     </Pressable>
   );
 }
@@ -89,7 +91,7 @@ export function Segment({ options, value, onChange, className = '' }) {
         const Icon = o.icon;
         return (
           <Pressable key={String(o.value)} onPress={() => onChange(o.value)} accessibilityRole="button" accessibilityState={{ selected: on }}
-            className={`flex-1 h-10 rounded-[9px] flex-row items-center justify-center ${on ? 'bg-white' : ''}`} style={on ? { elevation: 1 } : null}>
+            className={`flex-1 h-10 rounded-[9px] flex-row items-center justify-center ${on ? 'bg-card' : ''}`} style={on ? { elevation: 1 } : null}>
             {Icon ? <Icon size={16} color={on ? COLORS.brand : COLORS.ink2} strokeWidth={2.2} /> : null}
             <Text numberOfLines={1} className={`text-[13.5px] font-bold ${Icon ? 'ml-1.5' : ''} ${on ? 'text-brand' : 'text-ink-2'}`}>{o.label}</Text>
           </Pressable>
@@ -120,7 +122,7 @@ export function Field({ label, children, error, className = '' }) {
   );
 }
 export const Input = React.forwardRef(function Input({ className = '', ...p }, ref) {
-  return <TextInput ref={ref} placeholderTextColor={COLORS.ink3} className={`h-12 rounded-xl border border-line bg-white px-3 text-[15px] text-ink ${className}`} {...p} />;
+  return <TextInput ref={ref} placeholderTextColor={COLORS.ink3} className={`h-12 rounded-xl border border-line bg-card px-3 text-[15px] text-ink ${className}`} {...p} />;
 });
 
 export function Row({ label, value, strong, className = '' }) {
@@ -155,10 +157,10 @@ export function Sheet({ visible = true, title, subtitle, onClose, children, foot
   const maxW = size === 'xl' ? 1100 : size === 'lg' ? 820 : size === 'sm' ? 440 : 600;
   const Body = scroll ? ScrollView : View;
   const card = (
-    <View className="bg-white overflow-hidden" style={isTablet
+    <View className="bg-card overflow-hidden" style={isTablet
       ? { width: '92%', maxWidth: maxW, maxHeight: height * 0.92, borderRadius: 22 }
       : { width: '100%', maxHeight: height - inset.top - 24, borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingBottom: inset.bottom }}>
-      {!isTablet ? <View className="w-11 h-1.5 rounded-full bg-[#D3D8E2] self-center mt-2.5" /> : null}
+      {!isTablet ? <View className="w-11 h-1.5 rounded-full bg-line self-center mt-2.5" /> : null}
       {title ? (
         <View className="flex-row items-center px-5 pt-4 pb-3 border-b border-line">
           <View className="flex-1"><Text className="text-[19px] font-extrabold text-ink" numberOfLines={1}>{title}</Text>
@@ -169,14 +171,14 @@ export function Sheet({ visible = true, title, subtitle, onClose, children, foot
       <Body className={scroll ? '' : 'flex-shrink'} contentContainerStyle={scroll ? { padding: 20 } : undefined} keyboardShouldPersistTaps="handled" style={!scroll ? { padding: 20, flexShrink: 1 } : { flexShrink: 1 }}>
         {children}
       </Body>
-      {footer ? <View className="flex-row px-5 py-3 border-t border-line bg-[#FAFBFC]" style={{ gap: 8 }}>{footer}</View> : null}
+      {footer ? <View className="flex-row px-5 py-3 border-t border-line bg-soft" style={{ gap: 8 }}>{footer}</View> : null}
     </View>
   );
   return (
     <Modal visible={visible} transparent animationType={isTablet ? 'fade' : 'slide'} onRequestClose={() => closable && onClose?.()} statusBarTranslucent>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
         <Pressable className={`flex-1 bg-black/40 ${isTablet ? 'items-center justify-center' : 'justify-end'}`} onPress={() => closable && onClose?.()}>
-          <Pressable onPress={() => {}} style={isTablet ? { width: '100%', alignItems: 'center' } : { width: '100%' }}>{card}</Pressable>
+          <Pressable onPress={() => { }} style={isTablet ? { width: '100%', alignItems: 'center' } : { width: '100%' }}>{card}</Pressable>
         </Pressable>
       </KeyboardAvoidingView>
     </Modal>
@@ -184,10 +186,11 @@ export function Sheet({ visible = true, title, subtitle, onClose, children, foot
 }
 
 /* ---------------- toasts + confirm ---------------- */
-const UiCtx = createContext({ notify: () => {}, confirm: async () => false });
+const UiCtx = createContext({ notify: () => { }, confirm: async () => false });
 export const useUi = () => useContext(UiCtx);
 
 export function UiProvider({ children }) {
+  useTheme();
   const [toast, setToast] = useState(null);
   const [dlg, setDlg] = useState(null);
   const tRef = useRef(null);
@@ -204,7 +207,7 @@ export function UiProvider({ children }) {
       {children}
       {toast ? (
         <View pointerEvents="none" className="absolute left-0 right-0 bottom-24 items-center px-4">
-          <View className={`rounded-2xl px-4 py-3 max-w-[560px] ${toast.tone === 'danger' ? 'bg-danger' : 'bg-ink'}`} style={{ elevation: 6 }}>
+          <View className={`rounded-2xl px-4 py-3 max-w-[560px] ${toast.tone === 'danger' ? 'bg-danger' : 'bg-inverse'}`} style={{ elevation: 6 }}>
             <Text className="text-white text-[14px] font-semibold">{toast.text}</Text>
           </View>
         </View>

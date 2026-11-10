@@ -15,7 +15,7 @@ export function OrderTypeSheet({ pos, onClose }) {
         {TYPE_OPTIONS.map((o) => {
           const Icon = o.icon;
           return (
-            <Pressable key={o.value} onPress={() => pos.pickOrderType(o.value)} className="h-16 rounded-2xl border border-line bg-white flex-row items-center px-4 active:bg-brand-tint">
+            <Pressable key={o.value} onPress={() => pos.pickOrderType(o.value)} className="h-16 rounded-2xl border border-line bg-card flex-row items-center px-4 active:bg-brand-tint">
               <View className="w-10 h-10 rounded-xl bg-brand-tint items-center justify-center"><Icon size={20} color={COLORS.brand} /></View>
               <Text className="ml-3 text-[16px] font-bold text-ink">{o.label}</Text>
             </Pressable>
@@ -68,7 +68,7 @@ export function TableSheet({ pos, onClose }) {
               const on = !!mine(t.id);
               const [label, tone] = ST[t.used === 0 ? 'free' : t.free === 0 ? 'full' : 'partly_booked'];
               return (
-                <View key={t.id} className={`bg-white rounded-2xl p-3 border-l-[5px] ${on ? 'border-2 border-brand' : 'border border-line'}`} style={{ width: colW || '100%', borderLeftColor: tone === 'ok' ? COLORS.ok : tone === 'warn' ? '#F59E0B' : COLORS.brand }}>
+                <View key={t.id} className={`bg-card rounded-2xl p-3 border-l-[5px] ${on ? 'border-2 border-brand' : 'border border-line'}`} style={{ width: colW || '100%', borderLeftColor: tone === 'ok' ? COLORS.ok : tone === 'warn' ? '#F59E0B' : COLORS.brand }}>
                   <View className="flex-row justify-between items-center"><Text className="text-[16px] font-extrabold text-ink">{t.name}</Text><Tag text={`${t.free ?? '∞'}/${t.capacity || '∞'} free`} tone={tone} /></View>
                   <Text className="text-ink-2 text-[12.5px] mt-0.5">{label}</Text>
                   <View className="flex-row items-center mt-2" style={{ gap: 8 }}>
@@ -114,7 +114,7 @@ export function CustomerSheet({ pos, onClose }) {
   }
   return (
     <Sheet title="Customer" onClose={onClose} size="md" footer={<Btn label="New customer" icon={UserPlus} variant="secondary" onPress={() => setAdding(true)} className="flex-1" />}>
-      <View className="h-12 bg-white rounded-xl border border-line flex-row items-center px-3 mb-3"><Search size={18} color={COLORS.ink3} />
+      <View className="h-12 bg-card rounded-xl border border-line flex-row items-center px-3 mb-3"><Search size={18} color={COLORS.ink3} />
         <Input value={q} onChangeText={setQ} placeholder="Name or phone" className="flex-1 border-0 h-11" /></View>
       {list.map((c) => {
         const on = c.id === Number(pos.customerId);

@@ -1,9 +1,8 @@
 // Reztra POS for Android (tablet landscape / phone portrait).
 // Flow: activation (device key) -> PIN login -> load menu & settings -> (open register) -> POS.
 import React, { useCallback, useEffect, useState } from 'react';
-import { StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { UiProvider, Splash } from './ui';
+import { UiProvider, Splash, ThemeProvider, useTheme } from './ui';
 import * as api from './lib/api';
 import { applyCatalog, C } from './lib/catalog';
 import { firstError } from './lib/format';
@@ -14,13 +13,15 @@ import PosScreen from './pos/PosScreen';
 export default function App() {
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle="dark-content" backgroundColor="#EEF0F5" />
-      <UiProvider><Root /></UiProvider>
+      <ThemeProvider>
+        <UiProvider><Root /></UiProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
 
 function Root() {
+  useTheme();      // re-render every screen when light / dark changes (icon colours come from COLORS)
   const [stage, setStage] = useState('boot');     // boot | activate | login | loading | pos | error
   const [notice, setNotice] = useState('');
   const [user, setUser] = useState(null);

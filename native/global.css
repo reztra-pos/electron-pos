@@ -1,3 +1,30 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* light theme defaults; src/ui/theme.js switches them (light / dark) at run time */
+:root {
+  --brand: 91 63 209;
+  --brand-tint: 239 235 255;
+  --brand-soft: 217 208 255;
+  --brand-dark: 63 42 158;
+  --ink: 20 26 42;
+  --ink-2: 90 100 120;
+  --ink-3: 139 147 166;
+  --app: 238 240 245;
+  --card: 255 255 255;
+  --soft: 250 251 252;
+  --line: 227 231 238;
+  --chip: 241 243 247;
+  --rail: 21 27 46;
+  --inverse: 20 26 42;
+  --ok: 18 161 90;
+  --ok-bg: 223 245 232;
+  --warn: 183 110 0;
+  --warn-bg: 255 242 217;
+  --warn-bar: 245 158 11;
+  --danger: 217 53 69;
+  --danger-bg: 253 232 234;
+  --info: 37 99 235;
+  --info-bg: 227 237 255;
+}

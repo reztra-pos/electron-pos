@@ -1,23 +1,29 @@
 /**
  * Reztra POS design tokens (same as the tablet / mobile design boards and the desktop app).
+ * Every colour is a CSS variable, set by src/ui/theme.js for the light or dark theme.
  * @type {import('tailwindcss').Config}
  */
+const v = (name) => `rgb(var(--${name}) / <alpha-value>)`;
+
 module.exports = {
   content: ['./App.{js,jsx,ts,tsx}', './src/**/*.{js,jsx,ts,tsx}'],
   presets: [require('nativewind/preset')],
   theme: {
     extend: {
       colors: {
-        brand: { DEFAULT: '#5B3FD1', tint: '#EFEBFF', soft: '#D9D0FF', dark: '#3F2A9E' },
-        ink: { DEFAULT: '#141A2A', 2: '#5A6478', 3: '#8B93A6' },
-        rail: '#151B2E',
-        app: '#EEF0F5',
-        line: '#E3E7EE',
-        chip: '#F1F3F7',
-        ok: { DEFAULT: '#12A15A', bg: '#DFF5E8' },
-        warn: { DEFAULT: '#B76E00', bg: '#FFF2D9', bar: '#F59E0B' },
-        danger: { DEFAULT: '#D93545', bg: '#FDE8EA' },
-        info: { DEFAULT: '#2563EB', bg: '#E3EDFF' },
+        brand: { DEFAULT: v('brand'), tint: v('brand-tint'), soft: v('brand-soft'), dark: v('brand-dark') },
+        ink: { DEFAULT: v('ink'), 2: v('ink-2'), 3: v('ink-3') },
+        rail: v('rail'),
+        app: v('app'),
+        card: v('card'),         // panels, sheets, cards (was bg-white)
+        soft: v('soft'),         // footers, quiet areas
+        line: v('line'),
+        chip: v('chip'),
+        inverse: v('inverse'),   // dark surfaces with white text (toast, active pill, "View order" bar)
+        ok: { DEFAULT: v('ok'), bg: v('ok-bg') },
+        warn: { DEFAULT: v('warn'), bg: v('warn-bg'), bar: v('warn-bar') },
+        danger: { DEFAULT: v('danger'), bg: v('danger-bg') },
+        info: { DEFAULT: v('info'), bg: v('info-bg') },
       },
       borderRadius: { card: '16px', btn: '13px' },
     },

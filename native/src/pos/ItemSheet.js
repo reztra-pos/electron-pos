@@ -63,8 +63,8 @@ export function ItemSheet({ pos, item, line, onClose }) {
   const right = (item.comboGroups?.length || item.modifiers.length || item.promotion) ? (
     <View style={{ flex: 1 }}>
       {item.promotion ? (
-        <View className="bg-[#FDE7F3] rounded-xl p-3 mb-3">
-          <Text className="text-[#BE185D] font-extrabold">PROMO{item.promotion.text ? ` · ${item.promotion.text}` : ''}</Text>
+        <View className="bg-[#DB2777]/15 rounded-xl p-3 mb-3">
+          <Text className="text-[#DB2777] font-extrabold">PROMO{item.promotion.text ? ` · ${item.promotion.text}` : ''}</Text>
           {item.promotion.type === 2 ? <Text className="text-ink-2 text-[13px] mt-1">Buy {item.promotion.buy_qty}, get {item.promotion.free_qty} free — added by the server.</Text>
             : <Text className="text-ink-2 text-[13px] mt-1">Discount {item.promotion.discount} applied by the server.</Text>}
         </View>
@@ -75,7 +75,7 @@ export function ItemSheet({ pos, item, line, onClose }) {
           <View className="flex-row flex-wrap" style={{ gap: 8 }}>
             {g.options.map((o) => {
               const on = combo.includes(o.food_menu_id);
-              return <Pressable key={o.food_menu_id} onPress={() => pickCombo(g, o.food_menu_id)} className={`px-3 h-10 rounded-xl flex-row items-center border ${on ? 'bg-brand-tint border-brand' : 'bg-white border-line'}`}>
+              return <Pressable key={o.food_menu_id} onPress={() => pickCombo(g, o.food_menu_id)} className={`px-3 h-10 rounded-xl flex-row items-center border ${on ? 'bg-brand-tint border-brand' : 'bg-card border-line'}`}>
                 {on ? <Check size={15} color={COLORS.brand} /> : null}<Text className={`ml-1 font-semibold ${on ? 'text-brand-dark' : 'text-ink'}`}>{o.name}</Text></Pressable>;
             })}
           </View>
@@ -87,7 +87,7 @@ export function ItemSheet({ pos, item, line, onClose }) {
           const sel = mods.find((x) => x.id === m.id);
           return (
             <View key={m.id} className="flex-row items-center">
-              <Pressable onPress={() => toggle(m)} className={`px-3 h-11 rounded-xl flex-row items-center border ${sel ? 'bg-brand-tint border-brand' : 'bg-white border-line'}`}>
+              <Pressable onPress={() => toggle(m)} className={`px-3 h-11 rounded-xl flex-row items-center border ${sel ? 'bg-brand-tint border-brand' : 'bg-card border-line'}`}>
                 {sel ? <Check size={15} color={COLORS.brand} /> : null}
                 <Text className={`ml-1 font-semibold ${sel ? 'text-brand-dark' : 'text-ink'}`}>{m.name}{m.openPrice ? '' : ` +${money(m.price)}`}</Text>
               </Pressable>
@@ -118,7 +118,7 @@ export function VariationSheet({ pos, item, onClose }) {
       <View className="flex-row flex-wrap" style={{ gap: 10 }}>
         {item.variations.map((v) => (
           <Pressable key={v.id} onPress={() => { onClose(); setTimeout(() => pos.onItemPress({ ...v, variations: [] }), 50); }} disabled={v.unavailable}
-            className={`bg-white border border-line rounded-2xl p-3 min-w-[150px] ${v.unavailable ? 'opacity-40' : ''}`}>
+            className={`bg-card border border-line rounded-2xl p-3 min-w-[150px] ${v.unavailable ? 'opacity-40' : ''}`}>
             <Text className="font-bold text-ink text-[15px]">{v.shortName}</Text>
             <Money value={priceFor(v, pos.orderType, pos.partner)} bold className="text-[15px] font-extrabold text-brand mt-1" />
           </Pressable>

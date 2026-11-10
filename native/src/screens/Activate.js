@@ -29,7 +29,7 @@ export default function ActivateScreen({ onActivated, notice = '' }) {
 
   return (
     <ScrollView className="flex-1 bg-app" contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }} keyboardShouldPersistTaps="handled">
-      <View className="w-full bg-white rounded-3xl border border-line p-6" style={{ maxWidth: isTablet ? 560 : 520, elevation: 2 }}>
+      <View className="w-full bg-card rounded-3xl border border-line p-6" style={{ maxWidth: isTablet ? 560 : 520, elevation: 2 }}>
         <View className="flex-row items-center mb-1">
           <View className="w-12 h-12 rounded-xl bg-brand items-center justify-center mr-3"><KeyRound size={24} color="#fff" /></View>
           <View className="flex-1"><Text className="text-[22px] font-extrabold text-ink">Activate this POS</Text>
@@ -61,7 +61,7 @@ export default function ActivateScreen({ onActivated, notice = '' }) {
 
 function InfoRow({ icon: Icon, label, value }) {
   return (
-    <View className="flex-row items-center px-3 py-2.5 border-b border-[#EEF1F5]">
+    <View className="flex-row items-center px-3 py-2.5 border-b border-line">
       <Icon size={16} color={COLORS.ink2} /><Text className="text-ink-2 w-28 ml-2">{label}</Text><Text className="font-bold text-ink flex-1">{value}</Text>
     </View>
   );

@@ -3,9 +3,9 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Store, LayoutGrid, Clock3, History, Wallet, Settings, ShieldCheck, WifiOff, ChevronRight, CircleUserRound, Loader2 } from 'lucide-react-native';
+import { Store, LayoutGrid, Clock3, History, Wallet, Settings, ShieldCheck, WifiOff, ChevronRight, CircleUserRound, Loader2, Sun, Moon } from 'lucide-react-native';
 import { C } from '../lib/catalog';
-import { COLORS, Money, Sheet, useLayout, useUi } from '../ui';
+import { COLORS, Money, Sheet, useLayout, useTheme, useUi } from '../ui';
 import { usePos } from './usePos';
 import { CategoryBar, ItemGrid, SearchBox, useMenuFilter } from './Menu';
 import { CartActions, CartHeader, CartLines, CartPanel, CartTotals, OrderMeta, TYPE_OPTIONS } from './Cart';
@@ -25,6 +25,7 @@ const NAV = [
 
 export default function PosScreen({ user, device, onLogout, registerOpen: regInitial }) {
   const pos = usePos(user);
+  const theme = useTheme();
   const { isTablet, width, wide } = useLayout();
   const inset = useSafeAreaInsets();
   const [view, setView] = useState('order');
@@ -87,13 +88,17 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
             const badge = n.id === 'running' ? pos.running.length : 0;
             return (
               <Pressable key={n.id} onPress={() => setView(n.id)} accessibilityLabel={n.label} className={`w-[68px] h-[62px] rounded-2xl items-center justify-center ${on ? 'bg-[#7B5CFF38]' : ''}`}>
-                <Icon size={22} color={on ? '#fff' : COLORS.rail} strokeWidth={1.9} />
+                <Icon size={22} color={on ? '#fff' : COLORS.railText} strokeWidth={1.9} />
                 <Text className={`text-[11px] font-semibold mt-1 ${on ? 'text-white' : 'text-[#AEB6CC]'}`}>{n.label}</Text>
                 {badge ? <View className="absolute top-1.5 right-2 min-w-[18px] h-[18px] rounded-full bg-[#FF5A5F] items-center justify-center px-1"><Text className="text-white text-[10px] font-bold">{badge}</Text></View> : null}
               </Pressable>
             );
           })}
           <View className="flex-1" />
+          <Pressable onPress={() => theme.setMode(theme.scheme === 'dark' ? 'light' : 'dark')} accessibilityLabel={theme.scheme === 'dark' ? 'Light mode' : 'Dark mode'}
+            className="w-[52px] h-[44px] rounded-xl items-center justify-center mb-1 active:opacity-70">
+            {theme.scheme === 'dark' ? <Sun size={21} color={COLORS.railText} strokeWidth={1.9} /> : <Moon size={21} color={COLORS.railText} strokeWidth={1.9} />}
+          </Pressable>
           <View className="w-10 h-10 rounded-full bg-[#2A3350] items-center justify-center"><Text className="text-white font-bold text-[13px]">{(user?.name || '?').split(' ').map((x) => x[0]).join('').slice(0, 2).toUpperCase()}</Text></View>
         </View>
         {view === 'order' ? (
@@ -134,16 +139,16 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
             <ItemGrid items={menu.items} columns={2} width={width - 24} qtyById={qtyById} orderType={pos.orderType} partner={pos.partner} onPress={pos.onItemPress} footerSpace={pos.cart.length ? 80 : 0} />
           </View>
           {pos.cart.length ? (
-            <Pressable onPress={() => setCartOpen(true)} className="absolute left-3.5 right-3.5 bottom-3 h-[62px] rounded-[18px] bg-ink flex-row items-center px-3" style={{ elevation: 8 }}>
+            <Pressable onPress={() => setCartOpen(true)} className="absolute left-3.5 right-3.5 bottom-3 h-[62px] rounded-[18px] bg-inverse flex-row items-center px-3" style={{ elevation: 8 }}>
               <View className="w-[38px] h-[38px] rounded-xl bg-brand items-center justify-center"><Text className="text-white font-extrabold">{pos.itemCount}</Text></View>
               <View className="ml-3 flex-1"><Text className="text-[#AEB6CC] text-[11.5px] font-semibold">{TYPE_OPTIONS.find((o) => o.value === pos.orderType)?.label || 'Choose order type'}{pos.table ? ` · ${pos.table.map((t) => t.name).join(', ')}` : ''}</Text>
                 <Money value={total} bold className="text-white text-[17px] font-extrabold" /></View>
-              <View className="h-11 rounded-xl bg-white flex-row items-center pl-4 pr-3"><Text className="text-ink font-extrabold">View order</Text><ChevronRight size={18} color={COLORS.ink} /></View>
+              <View className="h-11 rounded-xl bg-card flex-row items-center pl-4 pr-3"><Text className="text-ink font-extrabold">View order</Text><ChevronRight size={18} color={COLORS.ink} /></View>
             </Pressable>
           ) : null}
         </View>
       ) : <View className="flex-1 px-[18px] pt-2">{content}</View>}
-      <View className="flex-row bg-white border-t border-line" style={{ paddingBottom: Math.max(inset.bottom, 8), paddingTop: 8 }}>
+      <View className="flex-row bg-card border-t border-line" style={{ paddingBottom: Math.max(inset.bottom, 8), paddingTop: 8 }}>
         {NAV.map((n) => {
           const on = view === n.id;
           const Icon = n.id === 'more' ? CircleUserRound : n.icon;

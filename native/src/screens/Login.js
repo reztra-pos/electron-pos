@@ -44,7 +44,7 @@ export default function LoginScreen({ onLogin, notice = '', device, onReset }) {
   };
 
   const card = (
-    <View className="w-full bg-white rounded-3xl border border-line px-6 pt-6 pb-4 items-center" style={{ maxWidth: 420, elevation: 2 }}>
+    <View className="w-full bg-card rounded-3xl border border-line px-6 pt-6 pb-4 items-center" style={{ maxWidth: 420, elevation: 2 }}>
       <View className="flex-row items-center mb-1"><View className="w-11 h-11 rounded-xl bg-brand items-center justify-center mr-2"><Text className="text-white text-xl font-extrabold">R</Text></View><Text className="text-[26px] font-extrabold text-brand-dark">Reztra</Text></View>
       <Text className="text-[18px] font-bold text-ink mt-1">{mode === 'pin' ? 'Enter your PIN' : 'Log in with email'}</Text>
       <Text className="text-[13px] text-ink-2 mb-4">{device?.outlet_name || ''}{device?.device_name ? ` · ${device.device_name}` : ''}</Text>
@@ -52,7 +52,7 @@ export default function LoginScreen({ onLogin, notice = '', device, onReset }) {
         <>
           <View className="flex-row mb-3" style={{ gap: 12 }}>
             {Array.from({ length: PIN_LEN }).map((_, i) => (
-              <View key={i} className={`w-14 h-16 rounded-xl border-2 items-center justify-center ${err ? 'border-danger bg-danger-bg' : i < pin.length ? 'border-brand bg-white' : i === pin.length ? 'border-brand bg-brand-tint' : 'border-line bg-[#F7F8FB]'}`}>
+              <View key={i} className={`w-14 h-16 rounded-xl border-2 items-center justify-center ${err ? 'border-danger bg-danger-bg' : i < pin.length ? 'border-brand bg-card' : i === pin.length ? 'border-brand bg-brand-tint' : 'border-line bg-soft'}`}>
                 {i < pin.length ? <View className="w-3 h-3 rounded-full bg-ink" /> : null}
               </View>
             ))}
@@ -85,7 +85,7 @@ export default function LoginScreen({ onLogin, notice = '', device, onReset }) {
             <Text className="text-ink-2 font-semibold text-[16px] mb-5">{now.toDateString()}</Text>
             <Text className="text-ink-2 text-[15px] leading-6">Take orders, send them to the kitchen, collect payments and print ZATCA invoices — all from this tablet.</Text>
             <View className="flex-row flex-wrap mt-4" style={{ gap: 8 }}>
-              {['Dine in · Take away · Delivery', 'KOT printing', 'ZATCA invoices'].map((f) => <View key={f} className="bg-white border border-line rounded-full px-3 py-1.5"><Text className="text-ink-2 font-bold text-[12.5px]">{f}</Text></View>)}
+              {['Dine in · Take away · Delivery', 'KOT printing', 'ZATCA invoices'].map((f) => <View key={f} className="bg-card border border-line rounded-full px-3 py-1.5"><Text className="text-ink-2 font-bold text-[12.5px]">{f}</Text></View>)}
             </View>
           </View>
           {card}

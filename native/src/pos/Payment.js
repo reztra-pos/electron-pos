@@ -94,7 +94,7 @@ export function PaymentSheet({ pos, m, onClose }) {
   const quick = [...new Set([due, ...C.denominations.filter((d) => d > due).slice(0, 3)])].slice(0, 4);
 
   const header = (
-    <View className="flex-row items-center bg-white rounded-2xl border border-line p-4 mb-3">
+    <View className="flex-row items-center bg-card rounded-2xl border border-line p-4 mb-3">
       <View className="flex-1"><Text className="text-ink-2 text-[12.5px] font-semibold">Amount due</Text><Money value={due} bold className="text-[34px] font-extrabold text-ink" /></View>
       <View className="flex-1 border-l border-line pl-3"><Text className="text-ink-2 text-[12.5px] font-semibold">Received</Text><Money value={received} bold className="text-[20px] font-extrabold text-ink" /></View>
       <View className="flex-1 border-l border-line pl-3"><Text className="text-ink-2 text-[12.5px] font-semibold">{flDue > 0 ? 'Due' : 'Change'}</Text><Money value={flDue > 0 ? flDue : change} bold className={`text-[20px] font-extrabold ${flDue > 0 ? 'text-danger' : 'text-ok'}`} /></View>
@@ -109,7 +109,7 @@ export function PaymentSheet({ pos, m, onClose }) {
         return (
           <View key={x.id} className={isTablet ? 'w-1/5 p-1' : 'w-1/4 p-1'}>
             <Pressable disabled={used} onPress={() => { setMethod(x.id); setErr(''); }}
-              className={`h-[72px] rounded-2xl items-center justify-center border ${on ? 'border-2 border-brand bg-brand-tint' : 'border-line bg-white'} ${used ? 'opacity-40' : ''}`}>
+              className={`h-[72px] rounded-2xl items-center justify-center border ${on ? 'border-2 border-brand bg-brand-tint' : 'border-line bg-card'} ${used ? 'opacity-40' : ''}`}>
               <Icon size={22} color={on ? COLORS.brandDark : COLORS.ink2} />
               <Text numberOfLines={1} className={`mt-1 text-[12.5px] font-bold ${on ? 'text-brand-dark' : 'text-ink-2'}`}>{x.name}</Text>
             </Pressable>
@@ -121,20 +121,20 @@ export function PaymentSheet({ pos, m, onClose }) {
   const payList = (
     <View>
       {lines.map((l) => (
-        <View key={l.id} className="flex-row items-center h-12 rounded-xl bg-[#F7F8FA] px-3 mb-2">
+        <View key={l.id} className="flex-row items-center h-12 rounded-xl bg-soft px-3 mb-2">
           <Text className="font-bold text-ink flex-1">{l.name}</Text>
           <Money value={l.amount} bold className="font-extrabold text-ink text-[16px]" />
           <Pressable onPress={() => setLines((ls) => ls.filter((x) => x.id !== l.id))} className="ml-3" accessibilityLabel={`Remove ${l.name}`}><X size={18} color={COLORS.ink3} /></Pressable>
         </View>
       ))}
-      <View className="flex-row items-center h-14 rounded-xl border border-line bg-white px-3 mb-2">
+      <View className="flex-row items-center h-14 rounded-xl border border-line bg-card px-3 mb-2">
         <Text className="text-ink-2 font-semibold flex-1">{mt?.name || 'Amount'}</Text>
         <Text className="text-[24px] font-extrabold text-ink">{amount || money(left)}</Text>
       </View>
       {left > 0 && C.paymentMethods.length > 1 ? <Btn label="Add as split payment" icon={Plus} size="sm" variant="outline" onPress={add} className="mb-2" /> : null}
       <View className="flex-row flex-wrap -m-1">
         {quick.map((v) => (
-          <View key={v} className="w-1/4 p-1"><Pressable onPress={() => setAmount(String(v))} className={`h-11 rounded-xl items-center justify-center ${Number(amount) === v ? 'bg-ink' : 'bg-white border border-line'}`}>
+          <View key={v} className="w-1/4 p-1"><Pressable onPress={() => setAmount(String(v))} className={`h-11 rounded-xl items-center justify-center ${Number(amount) === v ? 'bg-inverse' : 'bg-card border border-line'}`}>
             {v === due ? <Text className={`font-bold ${Number(amount) === v ? 'text-white' : 'text-ink'}`}>Exact</Text>
               : <Money value={v} bold className={`font-bold ${Number(amount) === v ? 'text-white' : 'text-ink'}`} />}
           </Pressable></View>
@@ -183,7 +183,7 @@ export function PaymentSheet({ pos, m, onClose }) {
         <View>
           {header}{methods}{payList}
           <Keypad onKey={onKey} className="mt-2" />
-          <View className="mt-4 bg-white rounded-2xl border border-line p-3">{adjust}</View>
+          <View className="mt-4 bg-card rounded-2xl border border-line p-3">{adjust}</View>
         </View>
       )}
       {err ? <Text className="text-danger font-semibold mt-3">{err}</Text> : null}

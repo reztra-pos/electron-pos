@@ -1,12 +1,12 @@
 // Running orders, tables overview, recent sales, register and settings (printers).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Switch, Text, View } from 'react-native';
-import { Armchair, ShoppingBag, Truck, Clock3, ChefHat, Receipt, Banknote, Pencil, Printer, Ban, Eye, LayoutGrid, Users, Wallet, LogOut, Bluetooth, Usb, Wifi, Cpu, RefreshCw, Check, Monitor } from 'lucide-react-native';
+import { Armchair, ShoppingBag, Truck, Clock3, ChefHat, Receipt, Banknote, Pencil, Printer, Ban, Eye, LayoutGrid, Users, Wallet, LogOut, Bluetooth, Usb, Wifi, Cpu, RefreshCw, Check, Monitor, Sun, Moon, Smartphone } from 'lucide-react-native';
 import { get, post } from '../lib/api';
 import { C, TYPE_KEY, isLoyaltyMethod } from '../lib/catalog';
 import { firstError, minutesAgo, today } from '../lib/format';
 import { listBluetooth, listUsb, getRoutes, setRoute, sendTo, testPage, MODES, printerKey } from '../lib/printer';
-import { Btn, COLORS, Field, Input, Money, Pill, Row, Sheet, Tag, useLayout, useUi } from '../ui';
+import { Btn, COLORS, Field, Input, Money, Pill, Row, Segment, Sheet, Tag, useLayout, useTheme, useUi } from '../ui';
 
 const TYPE_ICON = { dine: Armchair, take: ShoppingBag, delivery: Truck };
 const KITCHEN = { new: ['New', 'brand'], cooking: ['Preparing', 'warn'], ready: ['Ready', 'ok'] };
@@ -41,7 +41,7 @@ export function RunningView({ pos }) {
           const Icon = TYPE_ICON[k] || Receipt;
           const [kl, kt] = o.bill_printed ? ['Bill printed', 'warn'] : KITCHEN[o.kitchen?.status] || ['New', 'brand'];
           return (
-            <Pressable onPress={() => pos.setModal({ name: 'order', id: o.id })} className="bg-white rounded-2xl border border-line p-4" style={cols > 1 ? { width: (width - 84 - 36 - 24) / cols } : null}>
+            <Pressable onPress={() => pos.setModal({ name: 'order', id: o.id })} className="bg-card rounded-2xl border border-line p-4" style={cols > 1 ? { width: (width - 84 - 36 - 24) / cols } : null}>
               <View className="flex-row justify-between items-center"><Text className="text-[16px] font-extrabold text-ink">#{o.order_number || o.sale_no}</Text><Tag text={kl} tone={kt} /></View>
               <View className="flex-row items-center mt-1.5"><Icon size={14} color={COLORS.ink2} /><Text className="text-ink-2 text-[13px] ml-1.5 flex-1" numberOfLines={1}>{o.order_type_name}{o.tables_text ? ` · ${o.tables_text}` : ''}{o.customer?.name ? ` · ${o.customer.name}` : ''}</Text></View>
               <View className="flex-row items-center mt-1"><Clock3 size={14} color={COLORS.ink2} /><Text className="text-ink-2 text-[13px] ml-1.5">{minutesAgo(o.minutes_open ?? o.date_time)}</Text>
@@ -124,8 +124,8 @@ export function TablesView({ pos, onStartOrder }) {
         <Pressable onPress={load} className="flex-row items-center"><RefreshCw size={15} color={COLORS.ink2} /><Text className="ml-1 text-ink-2 font-semibold">Refresh</Text></Pressable>
       </View>
       <View className="flex-row mb-3" style={{ gap: 12 }}>
-        <View className="flex-1 bg-white rounded-2xl border border-line p-3"><Text className="text-ink-2 text-[12.5px] font-semibold">Occupied</Text><Text className="text-[22px] font-extrabold text-ink">{busy} <Text className="text-ink-3 text-[14px]">/ {(data.tables || []).length}</Text></Text></View>
-        <View className="flex-1 bg-white rounded-2xl border border-line p-3"><Text className="text-ink-2 text-[12.5px] font-semibold">Guests seated</Text><Text className="text-[22px] font-extrabold text-ink">{guests}</Text></View>
+        <View className="flex-1 bg-card rounded-2xl border border-line p-3"><Text className="text-ink-2 text-[12.5px] font-semibold">Occupied</Text><Text className="text-[22px] font-extrabold text-ink">{busy} <Text className="text-ink-3 text-[14px]">/ {(data.tables || []).length}</Text></Text></View>
+        <View className="flex-1 bg-card rounded-2xl border border-line p-3"><Text className="text-ink-2 text-[12.5px] font-semibold">Guests seated</Text><Text className="text-[22px] font-extrabold text-ink">{guests}</Text></View>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-grow-0 mb-3">
         <Pill label="All" active={area === 'all'} onPress={() => setArea('all')} />
@@ -139,7 +139,7 @@ export function TablesView({ pos, onStartOrder }) {
           const orders = t.orders || [];
           return (
             <Pressable key={t.id} onPress={() => (orders.length === 1 ? pos.setModal({ name: 'order', id: orders[0].order_id }) : orders.length > 1 ? pos.setModal({ name: 'tableOrders', table: t }) : onStartOrder(t))}
-              className="bg-white rounded-2xl border border-line p-3.5 overflow-hidden" style={{ width: w, minHeight: 120, borderLeftWidth: 5, borderLeftColor: color }}>
+              className="bg-card rounded-2xl border border-line p-3.5 overflow-hidden" style={{ width: w, minHeight: 120, borderLeftWidth: 5, borderLeftColor: color }}>
               <View className="flex-row justify-between items-center"><Text className="text-[16px] font-extrabold text-ink">{t.name}</Text>
                 <Tag text={free ? 'Free' : t.status === 'full' ? 'Occupied' : 'Partly booked'} tone={free ? 'ok' : t.status === 'full' ? 'brand' : 'warn'} /></View>
               <View className="flex-row items-center mt-1.5"><Users size={14} color={COLORS.ink2} /><Text className="text-ink-2 text-[12.5px] ml-1.5 font-semibold">{used ? `${used}/` : ''}{t.capacity} seats</Text></View>
@@ -184,7 +184,7 @@ export function SalesView({ pos }) {
         <FlatList data={list} keyExtractor={(s) => String(s.id)} contentContainerStyle={{ paddingBottom: 100, gap: 8 }}
           ListEmptyComponent={<Text className="text-ink-3 text-center mt-10">No sales today</Text>}
           renderItem={({ item: s }) => (
-            <View className={`bg-white rounded-2xl border border-line p-3.5 ${isTablet ? 'flex-row items-center' : ''}`}>
+            <View className={`bg-card rounded-2xl border border-line p-3.5 ${isTablet ? 'flex-row items-center' : ''}`}>
               <View className="flex-1">
                 <View className="flex-row items-center"><Text className="font-extrabold text-ink text-[15px]">{s.sale_no}</Text>{s.refund ? <Tag text={s.refund.refund_no || 'Credit note'} tone="warn" className="ml-2" /> : null}</View>
                 <Text className="text-ink-2 text-[12.5px]" numberOfLines={1}>{s.order_type_name} · {s.customer?.name}{s.tables_text ? ` · ${s.tables_text}` : ''} · {String(s.date_time || '').slice(11, 16)}</Text>
@@ -264,8 +264,11 @@ export function RegisterSheet({ pos, onClose, onClosed }) {
 }
 
 /* ---------------- settings: printers ---------------- */
+const THEMES = [{ value: 'light', label: 'Light', icon: Sun }, { value: 'dark', label: 'Dark', icon: Moon }, { value: 'system', label: 'Auto', icon: Smartphone }];
+
 export function SettingsView({ pos, user, device, onLogout, onOpenRegister }) {
   const { notify } = useUi();
+  const theme = useTheme();
   const [routes, setRoutes] = useState({});
   const [printers, setPrinters] = useState(null);
   const [edit, setEdit] = useState(null);       // { key, title, server }
@@ -276,7 +279,7 @@ export function SettingsView({ pos, user, device, onLogout, onOpenRegister }) {
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
       <Text className="text-[22px] font-extrabold text-ink mb-3">Settings</Text>
-      <View className="bg-white rounded-2xl border border-line p-4 mb-4">
+      <View className="bg-card rounded-2xl border border-line p-4 mb-4">
         <View className="flex-row items-center"><Monitor size={18} color={COLORS.ink2} /><Text className="ml-2 font-bold text-ink flex-1">{device?.device_name} · {device?.outlet_name}</Text></View>
         <Text className="text-ink-2 mt-1">Logged in as {user?.name}{user?.role ? ` (${user.role})` : ''}</Text>
         <View className="flex-row mt-3" style={{ gap: 8 }}>
@@ -284,12 +287,17 @@ export function SettingsView({ pos, user, device, onLogout, onOpenRegister }) {
           <Btn icon={LogOut} label="Log out" onPress={onLogout} className="flex-1" />
         </View>
       </View>
-      <View className="bg-white rounded-2xl border border-line p-4 mb-4">
+      <View className="bg-card rounded-2xl border border-line p-4 mb-4">
+        <Text className="font-extrabold text-ink text-[16px]">Appearance</Text>
+        <Text className="text-ink-2 text-[13px] mb-3">Auto follows the light / dark setting of this device.</Text>
+        <Segment options={THEMES} value={theme.mode} onChange={theme.setMode} />
+      </View>
+      <View className="bg-card rounded-2xl border border-line p-4 mb-4">
         <Text className="font-extrabold text-ink text-[16px] mb-2">Printing</Text>
         <View className="flex-row items-center justify-between py-2"><Text className="text-ink">Print KOT when an order is placed</Text><Switch value={pos.prefs.printKot} onValueChange={(v) => pos.savePrefs({ ...pos.prefs, printKot: v })} trackColor={{ true: COLORS.brand }} /></View>
         <View className="flex-row items-center justify-between py-2"><Text className="text-ink">Print the invoice after payment</Text><Switch value={pos.prefs.printInvoice} onValueChange={(v) => pos.savePrefs({ ...pos.prefs, printInvoice: v })} trackColor={{ true: COLORS.brand }} /></View>
       </View>
-      <View className="bg-white rounded-2xl border border-line p-4">
+      <View className="bg-card rounded-2xl border border-line p-4">
         <Text className="font-extrabold text-ink text-[16px]">Printers</Text>
         <Text className="text-ink-2 text-[13px] mb-2">Where each printer from the web app prints on this device (network, Bluetooth, USB or the built-in printer).</Text>
         {!printers ? <ActivityIndicator color={COLORS.brand} /> : rows.map((r) => (

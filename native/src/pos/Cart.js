@@ -14,7 +14,7 @@ export const TYPE_OPTIONS = [
 
 function Chip({ icon: Icon, text, onPress, active, className = '' }) {
   return (
-    <Pressable onPress={onPress} className={`h-10 rounded-xl px-3 flex-row items-center border ${active ? 'bg-brand-tint border-brand-soft' : 'bg-white border-line'} ${className}`}>
+    <Pressable onPress={onPress} className={`h-10 rounded-xl px-3 flex-row items-center border ${active ? 'bg-brand-tint border-brand-soft' : 'bg-card border-line'} ${className}`}>
       <Icon size={16} color={active ? COLORS.brandDark : COLORS.ink2} strokeWidth={2.2} />
       <Text numberOfLines={1} className={`ml-1.5 text-[13px] font-semibold flex-shrink ${active ? 'text-brand-dark' : 'text-ink'}`}>{text}</Text>
     </Pressable>
@@ -71,10 +71,12 @@ export function CartLines({ pos, footer }) {
 
 export function CartTotals({ pos }) {
   const t = pos.totals;
+  // shown at once while the server works out the totals (VAT, promotions, rounding)
+  const localSub = pos.cart.reduce((s, l) => s + (l.price + l.mods.reduce((a, m) => a + Number(m.price || 0), 0)) * l.qty, 0);
   return (
-    <View className="px-4 py-3 border-t border-line bg-[#FAFBFC]">
+    <View className="px-4 py-3 border-t border-line bg-soft">
       {pos.calcErr ? <Text className="text-danger text-[13px] mb-1">{pos.calcErr}</Text> : null}
-      <Row label={`Items (${pos.itemCount})`} value={<Money value={t?.sub_total ?? 0} className="text-[13.5px] font-bold text-ink" />} />
+      <Row label={`Items (${pos.itemCount})`} value={<Money value={pos.calcBusy || !t ? localSub : t.sub_total} className="text-[13.5px] font-bold text-ink" />} />
       {Number(t?.total_discount_amount) > 0 ? <Row label="Discount" value={<Money sign="−" value={t.total_discount_amount} className="text-[13.5px] font-bold text-ok" />} /> : null}
       {Number(t?.charge_amount) > 0 ? <Row label={pos.orderType === 'delivery' ? 'Delivery charge' : 'Service charge'} value={<Money value={t.charge_amount} className="text-[13.5px] font-bold text-ink" />} /> : null}
       <Row label="VAT" value={<Money value={t?.total_vat ?? 0} className="text-[13.5px] font-bold text-ink" />} />
@@ -122,7 +124,7 @@ export function CartHeader({ pos }) {
 
 export function CartPanel({ pos }) {
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1 bg-card">
       <View className="px-4 pt-4 pb-3 border-b border-line"><CartHeader pos={pos} /><OrderMeta pos={pos} /></View>
       <View className="flex-1 px-2"><CartLines pos={pos} /></View>
       <CartTotals pos={pos} />
