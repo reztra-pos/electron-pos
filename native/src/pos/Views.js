@@ -5,7 +5,7 @@ import { Armchair, ShoppingBag, Truck, Clock3, ChefHat, Receipt, Banknote, Penci
 import { get, post } from '../lib/api';
 import { C, TYPE_KEY, isLoyaltyMethod } from '../lib/catalog';
 import { firstError, minutesAgo, today } from '../lib/format';
-import { listBluetooth, listUsb, getRoutes, setRoute, sendTo, testPage, MODES, printerKey } from '../lib/printer';
+import { listBluetooth, listUsb, getRoutes, setRoute, sendTo, testPage, MODES, ROLE } from '../lib/printer';
 import { Btn, COLORS, Field, Input, Money, Pill, Row, Segment, Sheet, Tag, useLayout, useTheme, useUi } from '../ui';
 
 const TYPE_ICON = { dine: Armchair, take: ShoppingBag, delivery: Truck };
@@ -274,13 +274,27 @@ const THEMES = [{ value: 'light', label: 'Light', icon: Sun }, { value: 'dark', 
 export function SettingsView({ pos, user, device, onLogout, onOpenRegister, onOpenPreOrders }) {
     const { notify } = useUi();
     const theme = useTheme();
-    const [routes, setRoutes] = useState({});
-    const [printers, setPrinters] = useState(null);
-    const [edit, setEdit] = useState(null);       // { key, title, server }
-    useEffect(() => { getRoutes().then(setRoutes); get('/v1/printers').then(setPrinters).catch(() => setPrinters([])); }, []);
-    const label = (r) => !r || r.mode === 'auto' ? 'Automatic' : r.mode === 'network' ? `Network ${r.ip || ''}` : r.mode === 'bluetooth' ? `Bluetooth · ${r.name || r.address}` : r.mode === 'usb' ? `USB · ${r.name || 'first printer'}` : 'Built-in printer';
-    const rows = [{ key: '*', title: 'Default printer of this device', sub: 'Used by receipts whose printer has no network address' },
-    ...(printers || []).map((p) => ({ key: printerKey(p), title: p.title, sub: `${p.type || ''}${p.printer_ip_address ? ` · ${p.printer_ip_address}:${p.printer_port || 9100}` : ''}`, server: p }))];
+    const [routes, setRoutes] = useState(null);
+    const [edit, setEdit] = useState(null);       // a row of the printer list
+    useEffect(() => { getRoutes().then(setRoutes); }, []);
+    const label = (r) => r.mode === 'auto' ? 'Web app printer' : r.mode === 'network' ? `Network ${r.ip || ''}` : r.mode === 'bluetooth' ? `Bluetooth · ${r.name || r.address}` : r.mode === 'usb' ? `USB · ${r.name || 'first printer'}` : 'Built-in printer';
+    const web = (p) => (p ? { ...p, printer_ip_address: p.printer_ip_address ?? p.ip_address, printer_port: p.printer_port ?? p.port } : null);
+    const kitchens = C.kitchens.length ? C.kitchens : [{ id: null, name: 'Kitchen', printer: null }];
+    const rows = [
+        { key: '*', title: 'Default printer of this device', sub: 'Used by everything below that has no printer of its own', isDefault: true },
+        { key: ROLE.invoice, title: 'Invoice', sub: 'Invoices, credit notes, pre-order drafts, register report' },
+        { key: ROLE.bill, title: 'Bill', sub: 'Draft bills of running orders' },
+        ...kitchens.map((k) => ({
+            key: k.id == null ? 'role:kot' : ROLE.kot(k.id), title: `KOT · ${k.name}`, server: web(k.printer),
+            sub: k.printer ? `Web app printer: ${k.printer.title}${k.printer.ip_address ? ` (${k.printer.ip_address})` : ''}` : 'Kitchen order tickets'
+        })),
+    ];
+    const shown = (r) => {
+        const own = routes?.[r.key];
+        if (own) return label(own);
+        if (r.isDefault) return 'Not set';
+        return routes?.['*'] ? `Default (${label(routes['*'])})` : 'Web app printer';
+    };
     return (
         <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
             <Text className="text-[22px] font-extrabold text-ink mb-3">Settings</Text>
@@ -311,11 +325,11 @@ export function SettingsView({ pos, user, device, onLogout, onOpenRegister, onOp
             </View>
             <View className="bg-card rounded-2xl border border-line p-4">
                 <Text className="font-extrabold text-ink text-[16px]">Printers</Text>
-                <Text className="text-ink-2 text-[13px] mb-2">Where each printer from the web app prints on this device (network, Bluetooth, USB or the built-in printer).</Text>
-                {!printers ? <ActivityIndicator color={COLORS.brand} /> : rows.map((r) => (
-                    <Pressable key={r.key} onPress={() => setEdit(r)} className="flex-row items-center py-3 border-t border-line">
-                        <View className="flex-1"><Text className="font-bold text-ink">{r.title}</Text><Text className="text-ink-3 text-[12px]">{r.sub}</Text></View>
-                        <Text className="text-brand font-semibold text-[13px]">{label(routes[r.key])}</Text>
+                <Text className="text-ink-2 text-[13px] mb-2">Choose where each receipt prints on this device. Anything without its own printer uses the default printer; with no default, the printer set in the web app.</Text>
+                {!routes ? <ActivityIndicator color={COLORS.brand} /> : rows.map((r) => (
+                    <Pressable key={r.key} onPress={() => setEdit(r)} accessibilityLabel={r.title} className="flex-row items-center py-3 border-t border-line active:opacity-70">
+                        <View className="flex-1 pr-2"><Text className="font-bold text-ink">{r.title}</Text><Text className="text-ink-3 text-[12px]">{r.sub}</Text></View>
+                        <Text className={`font-semibold text-[13px] text-right max-w-[45%] ${routes[r.key] ? 'text-brand' : 'text-ink-3'}`} numberOfLines={2}>{shown(r)}</Text>
                     </Pressable>
                 ))}
             </View>
@@ -326,7 +340,7 @@ export function SettingsView({ pos, user, device, onLogout, onOpenRegister, onOp
 }
 
 function PrinterSheet({ row, route, onClose, onSave }) {
-    const [mode, setMode] = useState(route?.mode || (row.key === '*' ? 'builtin' : 'auto'));
+    const [mode, setMode] = useState(route?.mode || (row.isDefault ? 'builtin' : 'default'));
     const [ip, setIp] = useState(route?.ip || row.server?.printer_ip_address || '');
     const [port, setPort] = useState(String(route?.port || row.server?.printer_port || 9100));
     const [bt, setBt] = useState(null);
@@ -339,25 +353,31 @@ function PrinterSheet({ row, route, onClose, onSave }) {
         if (mode === 'bluetooth' && !bt) listBluetooth().then(setBt).catch((e) => { setBt([]); setErr(e.message); });
         if (mode === 'usb' && !usb) listUsb().then(setUsb).catch((e) => { setUsb([]); setErr(e.message); });
     }, [mode]); // eslint-disable-line
-    const current = () => mode === 'auto' ? { mode: 'auto' } : mode === 'network' ? { mode, ip: ip.trim(), port: Number(port) || 9100 }
+    const current = () => mode === 'default' ? 'default' : mode === 'auto' ? { mode: 'auto' } : mode === 'network' ? { mode, ip: ip.trim(), port: Number(port) || 9100 }
         : mode === 'bluetooth' ? (sel?.mode === 'bluetooth' ? sel : null) : mode === 'usb' ? (sel?.mode === 'usb' ? sel : { mode: 'usb', deviceName: '', name: 'first USB printer' }) : { mode: 'builtin' };
     const test = async () => {
         const r = current();
-        if (!r || r.mode === 'auto') return setErr('Choose a printer first.');
+        if (!r) return setErr('Choose a printer first.');
+        let target = r;
+        if (r === 'default') { target = (await getRoutes())['*']; if (!target) return setErr('No default printer is set on this device yet.'); }
+        if (target.mode === 'auto') {
+            if (!row.server?.printer_ip_address) return setErr('The web app printer is used when a receipt prints. Print a receipt to test it.');
+            target = { mode: 'network', ip: row.server.printer_ip_address, port: row.server.printer_port };
+        }
         setTesting(true); setErr('');
-        try { await sendTo(r, testPage(row.title), row.server); } catch (e) { setErr(e.message); }
+        try { await sendTo(target, testPage(row.title), row.server); } catch (e) { setErr(e.message); }
         setTesting(false);
     };
-    const modes = [...(row.key === '*' ? [] : [{ id: 'auto', label: 'Automatic (network address from the web app)' }]), ...MODES];
-    const ModeIcon = { auto: RefreshCw, network: Wifi, bluetooth: Bluetooth, usb: Usb, builtin: Cpu };
+    const modes = [...(row.isDefault ? [] : [{ id: 'default', label: 'Use the default printer of this device' }, { id: 'auto', label: 'Printer from the web app (network address)' }]), ...MODES];
+    const ModeIcon = { default: Printer, auto: RefreshCw, network: Wifi, bluetooth: Bluetooth, usb: Usb, builtin: Cpu };
     return (
         <Sheet title={row.title} subtitle="Where it prints on this device" onClose={onClose} size="md"
-            footer={<><Btn label="Test print" icon={Printer} busy={testing} onPress={test} className="flex-1" /><Btn label="Save" variant="primary" disabled={!current()} onPress={() => onSave(current())} className="flex-1" /></>}>
+            footer={<><Btn label="Test print" icon={Printer} busy={testing} onPress={test} className="flex-1" /><Btn label="Save" variant="primary" disabled={!current()} onPress={() => onSave(current() === 'default' ? null : current())} className="flex-1" /></>}>
             {modes.map((m) => {
                 const Icon = ModeIcon[m.id];
                 const on = mode === m.id;
                 return (
-                    <Pressable key={m.id} onPress={() => setMode(m.id)} className={`flex-row items-center px-3 h-12 rounded-xl mb-1.5 border ${on ? 'border-brand bg-brand-tint' : 'border-line'}`}>
+                    <Pressable key={m.id} onPress={() => setMode(m.id)} accessibilityLabel={m.label} className={`flex-row items-center px-3 h-12 rounded-xl mb-1.5 border ${on ? 'border-brand bg-brand-tint' : 'border-line'}`}>
                         <Icon size={18} color={on ? COLORS.brand : COLORS.ink2} /><Text className={`ml-2 font-semibold flex-1 ${on ? 'text-brand-dark' : 'text-ink'}`}>{m.label}</Text>{on ? <Check size={18} color={COLORS.brand} /> : null}
                     </Pressable>
                 );

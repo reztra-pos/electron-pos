@@ -104,7 +104,14 @@ const openCart = () => {
     // ---- pre-order: add, start preparing, deliver -> invoice ----
     const phone = !!screen.queryByLabelText('More') || process.env.REZTRA_TEST_SCREEN === 'phone';
     if (screen.queryByLabelText('Pre-orders')) tap(screen.getByLabelText('Pre-orders'));
-    else { tap(screen.getByLabelText('Settings')); tap(await screen.findByText('Pre-orders', {}, { timeout: 5000 })); }
+    else {
+        tap(screen.getByLabelText('Settings'));
+        // printers: Default, Invoice, Bill and a KOT row per kitchen of the outlet
+        await screen.findByText('Default printer of this device', {}, { timeout: 5000 });
+        expect(screen.getByText('Invoice')).toBeTruthy();
+        expect(screen.getAllByText(/^KOT · /).length).toBeGreaterThan(0);
+        tap(await screen.findByText('Pre-orders', {}, { timeout: 5000 }));
+    }
     await screen.findByLabelText('Add pre-order', {}, { timeout: 10000 });
     tap(screen.getByLabelText('Add pre-order'));
     const item = process.env.REZTRA_TEST_ITEM || 'Pepsi';
