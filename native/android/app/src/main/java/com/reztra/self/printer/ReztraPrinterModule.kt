@@ -1,4 +1,4 @@
-package com.reztra.pos.printer
+package com.reztra.self.printer
 
 import android.annotation.SuppressLint
 import android.app.PendingIntent
@@ -41,7 +41,7 @@ class ReztraPrinterModule(private val ctx: ReactApplicationContext) : ReactConte
 
   companion object {
     private val SPP: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
-    private const val ACTION_USB_PERMISSION = "com.reztra.pos.USB_PERMISSION"
+    private const val ACTION_USB_PERMISSION = "com.reztra.self.USB_PERMISSION"
     private const val CHUNK_BT = 1024
     private const val CHUNK_USB = 16 * 1024
   }

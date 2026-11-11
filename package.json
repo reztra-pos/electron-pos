@@ -19,7 +19,7 @@
     "trial:off": "node scripts/make-trial.mjs off"
   },
   "build": {
-    "appId": "com.reztra.pos",
+    "appId": "com.reztra.self",
     "productName": "Reztra POS",
     "directories": {
       "output": "release"

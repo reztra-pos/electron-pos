@@ -10,4 +10,4 @@
 # Add any project specific keep options here:
 
 # Reztra POS printer module (called from JavaScript by name)
--keep class com.reztra.pos.printer.** { *; }
+-keep class com.reztra.self.printer.** { *; }

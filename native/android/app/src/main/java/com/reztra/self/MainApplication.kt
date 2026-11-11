@@ -1,4 +1,4 @@
-package com.reztra.pos
+package com.reztra.self
 
 import android.app.Application
 import com.facebook.react.PackageList
@@ -6,7 +6,7 @@ import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
-import com.reztra.pos.printer.ReztraPrinterPackage
+import com.reztra.self.printer.ReztraPrinterPackage
 
 class MainApplication : Application(), ReactApplication {
 

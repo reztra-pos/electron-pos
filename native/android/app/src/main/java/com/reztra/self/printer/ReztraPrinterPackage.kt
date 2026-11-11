@@ -1,4 +1,4 @@
-package com.reztra.pos.printer
+package com.reztra.self.printer
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

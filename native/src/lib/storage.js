@@ -3,7 +3,7 @@
 import * as Keychain from 'react-native-keychain';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const SERVICE = 'com.reztra.pos.device';
+const SERVICE = 'com.reztra.self.device';
 
 export async function loadDevice() {
   try {

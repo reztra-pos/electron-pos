@@ -1,4 +1,4 @@
-package com.reztra.pos
+package com.reztra.self
 
 import android.content.pm.ActivityInfo
 import android.os.Bundle
