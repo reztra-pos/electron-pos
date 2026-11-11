@@ -279,6 +279,52 @@ export function RegisterSheet({ pos, onClose, onClosed }) {
     );
 }
 
+/* ---------------- log out / close the app while the register is open ---------------- */
+// Same choices as the desktop app: close the register first (prints the report), leave it open, or stay.
+// Print / PDF give the register report without closing the register.
+export function LeaveSheet({ pos, exit, onClose, onLeave }) {
+    const [busy, setBusy] = useState(null);
+    const go = async (closeRegister) => {
+        setBusy(closeRegister ? 'close' : 'keep');
+        if (closeRegister) {
+            try {
+                const r = await post('/v1/register/close');
+                pos.setRegisterOpen(false);
+                await pos.printJob(r.print_job);              // web: Escposbuilder::buildRegister on the receipt printer
+            } catch (e) {
+                if (e?.code !== 'REGISTER_CLOSED') { pos.onError(e, 'The register was not closed.'); setBusy(null); return; }
+            }
+        }
+        onLeave();
+    };
+    const printIt = async () => { setBusy('print'); try { await pos.printJob(await get('/v1/register/print')); } catch (e) { pos.onError(e); } setBusy(null); };
+    const pdfIt = async () => {
+        setBusy('pdf');
+        try { const s2 = await get('/v1/register/summary'); await printDocument(registerA4Html(s2), `register-report-${String(s2.opened_at || '').slice(0, 10) || today()}`); }
+        catch (e) { pos.onError(e); }
+        setBusy(null);
+    };
+    return (
+        <Sheet title={exit ? 'Close the app' : 'Log out'} onClose={() => !busy && onClose()} closable={!busy} size="md"
+            footer={<View className="flex-1" style={{ gap: 8 }}>
+                <View className="flex-row" style={{ gap: 8 }}>
+                    <Btn icon={Printer} label="Print report" busy={busy === 'print'} disabled={!!busy} onPress={printIt} className="flex-1" />
+                    <Btn icon={FileDown} label="PDF" busy={busy === 'pdf'} disabled={!!busy} onPress={pdfIt} className="flex-1" />
+                </View>
+                <Btn icon={LogOut} label={exit ? 'Exit without closing' : 'Log out without closing'} busy={busy === 'keep'} disabled={!!busy} onPress={() => go(false)} />
+                <Btn icon={Ban} variant="danger" label={exit ? 'Close register & exit' : 'Close register & log out'} busy={busy === 'close'} disabled={!!busy} onPress={() => go(true)} />
+            </View>}>
+            <View className="flex-row items-start">
+                <View className="w-11 h-11 rounded-xl bg-warn-bg items-center justify-center"><Wallet size={22} color={COLORS.warn} /></View>
+                <View className="flex-1 ml-3">
+                    <Text className="text-ink text-[15px] font-semibold">Your register is still open. Do you want to close the register before you {exit ? 'close the app' : 'log out'}?</Text>
+                    <Text className="text-ink-3 text-[13px] mt-1.5">Print or save the register report without closing the register. Closing the register prints it too.</Text>
+                </View>
+            </View>
+        </Sheet>
+    );
+}
+
 /* ---------------- clear running orders (confirmed with the user's login PIN) ---------------- */
 export function ClearRunningSheet({ pos, onClose }) {
     const [pin, setPin] = useState('');

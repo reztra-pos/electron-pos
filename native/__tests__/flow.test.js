@@ -194,6 +194,16 @@ const openCart = () => {
     await waitFor(() => expect((global.__docs || []).length).toBe(docs + 1), { timeout: 15000 });
     expect(global.__docs[docs].html).toContain('Register Report');
     expect(global.__docs[docs].name).toMatch(/^register-report-/);
+    tap(screen.getAllByLabelText('Close')[0]);
+
+    // ---- log out with the register open: asks first (here: keep it open), then back to the PIN screen ----
+    tap(await screen.findByLabelText('Log out', {}, { timeout: 5000 }));
+    await screen.findByText(/Your register is still open/, {}, { timeout: 5000 });
+    const regPrints = global.__prints.length;
+    tap(screen.getByLabelText('Print report'));
+    await waitFor(() => expect(global.__prints.length).toBe(regPrints + 1), { timeout: 15000 });
+    tap(screen.getByLabelText('Log out without closing'));
+    await screen.findByText('Enter your PIN', {}, { timeout: 15000 });
     await act(async () => { await new Promise((r) => setTimeout(r, 3000)); });
     global.__done = true;
 });

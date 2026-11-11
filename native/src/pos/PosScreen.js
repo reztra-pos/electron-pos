@@ -1,7 +1,7 @@
 // POS shell. Tablet (landscape, >= 600dp): navigation rail + menu + docked order panel (392dp).
 // Phone (portrait): header, menu, floating order bar -> order sheet, bottom tab bar.
-import React, { useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { BackHandler, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Store, LayoutGrid, Clock3, History, Wallet, Settings, ShieldCheck, WifiOff, ChevronRight, CircleUserRound, Loader2, Sun, Moon, CalendarClock } from 'lucide-react-native';
 import { C } from '../lib/catalog';
@@ -12,7 +12,7 @@ import { CartActions, CartHeader, CartLines, CartPanel, CartTotals, OrderMeta, T
 import { ItemSheet, VariationSheet } from './ItemSheet';
 import { CustomerSheet, OrderTypeSheet, PartnerSheet, TableSheet, WaiterSheet } from './Pickers';
 import { DoneSheet, PaymentSheet } from './Payment';
-import { ClearRunningSheet, OpenRegisterSheet, OrderSheet, RegisterSheet, RunningView, SalesView, SettingsView, TableOrdersSheet, TablesView } from './Views';
+import { ClearRunningSheet, LeaveSheet, OpenRegisterSheet, OrderSheet, RegisterSheet, RunningView, SalesView, SettingsView, TableOrdersSheet, TablesView } from './Views';
 import { Segment } from '../ui';
 import { InvoiceSheet, RefundSheet } from './Refund';
 import { PreOrderDeliverSheet, PreOrderFormSheet, PreOrdersView } from './PreOrders';
@@ -42,6 +42,21 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
     const closeModal = () => pos.setModal(null);
     const m = pos.modal;
 
+    // log out: with the register still open, ask first (close it, keep it open, or stay) - same as the desktop app
+    const registerIsOpen = !pos.isWaiter && !!pos.registerOpen;
+    const requestLogout = () => (registerIsOpen ? pos.setModal({ name: 'leave', exit: false }) : onLogout());
+    // Android back button on the main screen: back to the menu, then "Close the app" (with the register question)
+    useEffect(() => {
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+            if (pos.modal) { pos.setModal(null); return true; }
+            if (cartOpen) { setCartOpen(false); return true; }
+            if (view !== 'order') { setView('order'); return true; }
+            if (registerIsOpen) { pos.setModal({ name: 'leave', exit: true }); return true; }
+            return false;                                   // Android closes the app
+        });
+        return () => sub.remove();
+    }, [pos.modal, cartOpen, view, registerIsOpen]); // eslint-disable-line
+
     const startOrderAt = (t) => { pos.resetOrder(); pos.setOrderType('dine'); pos.setTable([{ id: t.id, name: t.name, persons: Math.max(1, t.capacity || 1) }]); setView('order'); };
 
     const modals = (
@@ -58,6 +73,7 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
             {m?.name === 'order' ? <OrderSheet pos={pos} id={m.id} onClose={closeModal} /> : null}
             {m?.name === 'tableOrders' ? <TableOrdersSheet pos={pos} table={m.table} onClose={closeModal} /> : null}
             {m?.name === 'register' ? <RegisterSheet pos={pos} onClose={closeModal} onClosed={() => { closeModal(); onLogout(); }} /> : null}
+            {m?.name === 'leave' ? <LeaveSheet pos={pos} exit={m.exit} onClose={closeModal} onLeave={() => { closeModal(); if (m.exit) BackHandler.exitApp(); else onLogout(); }} /> : null}
             {m?.name === 'clearRunning' ? <ClearRunningSheet pos={pos} onClose={closeModal} /> : null}
             {m?.name === 'invoice' ? <InvoiceSheet pos={pos} id={m.id} onClose={closeModal} onRefund={(sale) => pos.setModal({ name: 'refund', sale })} /> : null}
             {m?.name === 'refund' ? <RefundSheet pos={pos} sale={m.sale} onClose={closeModal} onDone={(id, refund) => pos.setSales((s) => s.map((x) => (x.id === id ? { ...x, refund } : x)))} /> : null}
@@ -71,7 +87,7 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
         : view === 'running' ? <RunningView pos={pos} />
             : view === 'sales' ? <SalesView pos={pos} />
                 : view === 'preorders' ? <PreOrdersView pos={pos} />
-                    : view === 'more' ? <SettingsView pos={pos} user={user} device={device} onLogout={onLogout} onOpenRegister={() => pos.setModal({ name: 'register' })} onOpenPreOrders={() => setView('preorders')} />
+                    : view === 'more' ? <SettingsView pos={pos} user={user} device={device} onLogout={requestLogout} onOpenRegister={() => pos.setModal({ name: 'register' })} onOpenPreOrders={() => setView('preorders')} />
                         : null;
 
     const status = (
