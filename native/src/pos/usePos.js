@@ -235,6 +235,22 @@ export function usePos(user) {
         else notify(`${okNames.length ? `KOT sent to ${okNames.join(', ')}. ` : ''}Not printed: ${bad.map((r) => `${r.title.replace(/^KOT /, '')} (${r.error})`).join('; ')}`, 8000, 'danger');
     };
     const reprintInvoice = async (saleId) => { try { await printJob(await get(`/v1/invoices/${saleId}/print`)); } catch (e) { onError(e); } };
+    // "Clear running orders" (same as the web POS): the user's own open orders; Admin: all open orders of the outlet.
+    // Returns an error text for the PIN field, or null when done.
+    const clearRunning = async (pin) => {
+        try {
+            const r = await post('/v1/orders/clear-mine', { pin });
+            if (editingId) resetOrder();
+            setModal(null);
+            notify(r.cleared ? `${r.cleared} running order${r.cleared > 1 ? 's' : ''} cleared` : 'No running orders to clear');
+            refreshRunning();
+            return null;
+        } catch (e) {
+            if (['WRONG_PIN', 'PIN_REQUIRED', 'WRONG_PASSWORD', 'PASSWORD_REQUIRED'].includes(e?.code)) return 'The PIN is not correct.';
+            onError(e);
+            return null;
+        }
+    };
     const reprintKot = async (id) => { try { await printKot(await get(`/v1/orders/${id}/kot?full=1`)); } catch (e) { onError(e); } };
     const printBill = async (id) => {
         try { const r = await post(`/v1/orders/${id}/bill`); refreshRunning(); await printJob(r.print_job); } catch (e) { onError(e); }
@@ -425,6 +441,6 @@ export function usePos(user) {
         discount, charge, editingId, calc, calcErr, calcBusy, totals, srvFor, itemCount, running, sales, setSales, registerOpen, setRegisterOpen, online, busy, modal, setModal,
         prefs, savePrefs, zatcaQueue, preOrderTick, bumpPreOrders,
         onError, refreshRunning, searchCustomers, addCustomer, saveCustomer, addToCart, updateLine, setLineQty, removeLine, onItemPress, resetOrder, pickOrderType, pickTables, setOrderType, setTable,
-        printJob, printKot, reprintInvoice, reprintKot, printBill, proceed, saveDraft, openOrderPayment, adjustTotals, completePayment, showInvoice, modifyOrder, cancelOrder,
+        printJob, printKot, reprintInvoice, reprintKot, printBill, proceed, saveDraft, openOrderPayment, adjustTotals, completePayment, showInvoice, modifyOrder, cancelOrder, clearRunning,
     };
 }

@@ -161,6 +161,29 @@ const openCart = () => {
     tap(await screen.findByLabelText('Delivered & invoice', {}, { timeout: 5000 }));
     await screen.findByText('Payment received', {}, { timeout: 60000 });
     global.__phone = phone;
+    tap(screen.getByLabelText('New order'));
+
+    // ---- clear running orders: confirmed with the user's own login PIN ----
+    const item2 = process.env.REZTRA_TEST_ITEM || 'Pepsi';
+    tap(screen.getByLabelText('Order'));
+    tap(screen.getAllByText('Take Away')[0]);
+    tap(await screen.findByLabelText(item2, {}, { timeout: 10000 }));
+    openCart();
+    await waitFor(() => expect(screen.getByLabelText('Place order').props.accessibilityState?.disabled).toBeFalsy(), { timeout: 15000 });
+    tap(screen.getByLabelText('Place order'));
+    await screen.findByText(/placed — sent to the kitchen|KOT sent to/, {}, { timeout: 20000 });
+    tap(screen.getByLabelText('Running'));
+    await waitFor(() => expect(screen.getAllByLabelText('Pay').length).toBeGreaterThan(0), { timeout: 20000 });
+    tap(screen.getByLabelText('Clear running orders'));
+    await screen.findByText('Your login PIN', {}, { timeout: 5000 });
+    const key = (d) => tap(screen.getAllByLabelText(d).pop());
+    for (const d of '9898') key(d);
+    tap(screen.getByLabelText('Clear orders'));
+    await screen.findByText('The PIN is not correct.', {}, { timeout: 15000 });
+    for (const d of PIN) key(d);
+    tap(screen.getByLabelText('Clear orders'));
+    await screen.findByText(/running orders? cleared$/, {}, { timeout: 15000 });
+    await waitFor(() => expect(screen.queryAllByLabelText('Pay').length).toBe(0), { timeout: 20000 });
     await act(async () => { await new Promise((r) => setTimeout(r, 3000)); });
     global.__done = true;
 });

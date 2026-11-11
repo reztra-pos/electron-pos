@@ -1,12 +1,12 @@
 // Running orders, tables overview, recent sales, register and settings (printers).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Switch, Text, View } from 'react-native';
-import { Armchair, ShoppingBag, Truck, Clock3, ChefHat, Receipt, Banknote, Pencil, Printer, Ban, Eye, LayoutGrid, Users, Wallet, LogOut, Bluetooth, Usb, Wifi, Cpu, RefreshCw, Check, Monitor, Sun, Moon, Smartphone, RotateCcw, CalendarClock, ChevronRight } from 'lucide-react-native';
+import { Armchair, ShoppingBag, Truck, Clock3, ChefHat, Receipt, Banknote, Pencil, Printer, Ban, Eye, LayoutGrid, Users, Wallet, LogOut, Bluetooth, Usb, Wifi, Cpu, RefreshCw, Check, Monitor, Sun, Moon, Smartphone, RotateCcw, CalendarClock, ChevronRight, Eraser } from 'lucide-react-native';
 import { get, post } from '../lib/api';
 import { C, TYPE_KEY, isLoyaltyMethod } from '../lib/catalog';
 import { firstError, minutesAgo, today } from '../lib/format';
 import { listBluetooth, listUsb, getRoutes, setRoute, sendTo, testPage, MODES, ROLE } from '../lib/printer';
-import { Btn, COLORS, Field, Input, Money, Pill, Row, Segment, Sheet, Tag, useLayout, useTheme, useUi } from '../ui';
+import { Btn, COLORS, Field, Input, Keypad, Money, Pill, Row, Segment, Sheet, Tag, useLayout, useTheme, useUi } from '../ui';
 
 const TYPE_ICON = { dine: Armchair, take: ShoppingBag, delivery: Truck };
 const KITCHEN = { new: ['New', 'brand'], cooking: ['Preparing', 'warn'], ready: ['Ready', 'ok'] };
@@ -25,6 +25,7 @@ export function RunningView({ pos }) {
             <View className="flex-row items-end justify-between mb-3">
                 <View><Text className="text-[22px] font-extrabold text-ink">Running orders</Text>
                     <View className="flex-row items-center"><Text className="text-ink-2">{pos.running.length} open · </Text><Money value={total} className="text-ink-2" /></View></View>
+                <Btn size="sm" icon={Eraser} label="Clear running orders" onPress={() => pos.setModal({ name: 'clearRunning' })} />
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-grow-0 mb-3">
                 <Pill label="All" count={pos.running.length} active={type === 'all'} onPress={() => setType('all')} />
@@ -264,6 +265,41 @@ export function RegisterSheet({ pos, onClose, onClosed }) {
                     </View>
                 </View>
             )}
+        </Sheet>
+    );
+}
+
+/* ---------------- clear running orders (confirmed with the user's login PIN) ---------------- */
+export function ClearRunningSheet({ pos, onClose }) {
+    const [pin, setPin] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [err, setErr] = useState('');
+    const admin = pos.user?.role === 'Admin';
+    const onKey = (k) => { setErr(''); setPin((p) => (k === 'del' ? p.slice(0, -1) : k === 'clr' ? '' : (p + k).slice(0, 6))); };
+    const go = async () => {
+        if (!/^\d{4,6}$/.test(pin)) return setErr('Enter your login PIN.');
+        setBusy(true); setErr('');
+        const e = await pos.clearRunning(pin);
+        if (e) { setErr(e); setPin(''); setBusy(false); }
+    };
+    return (
+        <Sheet title="Clear running orders" onClose={() => !busy && onClose()} closable={!busy} size="sm"
+            footer={<><Btn label="Cancel" disabled={busy} onPress={onClose} className="flex-1" />
+                <Btn icon={Eraser} label="Clear orders" variant="danger" busy={busy} disabled={busy || pin.length < 4} onPress={go} className="flex-1" /></>}>
+            <Text className="text-ink">{admin
+                ? 'This removes all open orders of this outlet, from the web POS and the kitchen screen too.'
+                : "This removes your open orders (orders you placed or are the waiter of) from the web POS and the kitchen screen too. Other staff's orders stay."}</Text>
+            <Text className="text-ink-3 text-[13px] mt-1.5">Paid invoices are not affected. This cannot be undone.</Text>
+            <Text className="text-[12.5px] font-semibold text-ink-2 mt-4 text-center">Your login PIN</Text>
+            <View className="flex-row justify-center my-3" style={{ gap: 12 }} accessibilityLabel={`${pin.length} digits entered`}>
+                {Array.from({ length: Math.max(4, pin.length) }).map((_, i) => (
+                    <View key={i} className={`w-3.5 h-3.5 rounded-full ${i < pin.length ? 'bg-ink' : 'border-2 border-line'}`} />
+                ))}
+            </View>
+            {err ? <Text className="text-danger font-semibold text-center mb-2">{err}</Text> : null}
+            <View className="self-center" style={{ width: 252 }}>
+                <Keypad onKey={onKey} keys={['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clr', '0', 'del']} keyClass="h-[54px]" />
+            </View>
         </Sheet>
     );
 }
