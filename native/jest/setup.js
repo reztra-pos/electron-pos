@@ -32,6 +32,7 @@ NativeModules.ReztraPrinter = {
     printUsb: async (d, b64) => { global.__prints.push({ kind: 'usb', d, len: b64.length }); return true; },
     listBluetooth: async () => [{ name: 'InnerPrinter', address: '00:11:22:33:44:55' }],
     listUsb: async () => [],
+    printHtml: async (html, name) => { global.__docs = [...(global.__docs || []), { name, html }]; return true; },
 };
 
 // REZTRA_TEST_SCREEN=phone|tablet picks the window size (default: jest's 750x1334 -> tablet layout)

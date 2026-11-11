@@ -1,11 +1,12 @@
 // Running orders, tables overview, recent sales, register and settings (printers).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Switch, Text, View } from 'react-native';
-import { Armchair, ShoppingBag, Truck, Clock3, ChefHat, Receipt, Banknote, Pencil, Printer, Ban, Eye, LayoutGrid, Users, Wallet, LogOut, Bluetooth, Usb, Wifi, Cpu, RefreshCw, Check, Monitor, Sun, Moon, Smartphone, RotateCcw, CalendarClock, ChevronRight, Eraser } from 'lucide-react-native';
+import { Armchair, ShoppingBag, Truck, Clock3, ChefHat, Receipt, Banknote, Pencil, Printer, Ban, Eye, LayoutGrid, Users, Wallet, LogOut, Bluetooth, Usb, Wifi, Cpu, RefreshCw, Check, Monitor, Sun, Moon, Smartphone, RotateCcw, CalendarClock, ChevronRight, Eraser, FileDown } from 'lucide-react-native';
 import { get, post } from '../lib/api';
 import { C, TYPE_KEY, isLoyaltyMethod } from '../lib/catalog';
 import { firstError, minutesAgo, today } from '../lib/format';
-import { listBluetooth, listUsb, getRoutes, setRoute, sendTo, testPage, MODES, ROLE } from '../lib/printer';
+import { listBluetooth, listUsb, getRoutes, setRoute, sendTo, testPage, MODES, ROLE, printDocument } from '../lib/printer';
+import { registerA4Html } from '../lib/reports';
 import { Btn, COLORS, Field, Input, Keypad, Money, Pill, Row, Segment, Sheet, Tag, useLayout, useTheme, useUi } from '../ui';
 
 const TYPE_ICON = { dine: Armchair, take: ShoppingBag, delivery: Truck };
@@ -237,6 +238,15 @@ export function RegisterSheet({ pos, onClose, onClosed }) {
     const [busy, setBusy] = useState(null);
     useEffect(() => { get('/v1/register/summary').then(setS).catch((e) => { pos.onError(e); onClose(); }); }, []); // eslint-disable-line
     const print = async () => { setBusy('print'); try { await pos.printJob(await get('/v1/register/print')); } catch (e) { pos.onError(e); } setBusy(null); };
+    // A4 report -> Android's print screen: "Save as PDF" (then share it from Files), a printer, or Google Drive
+    const pdf = async () => {
+        setBusy('pdf');
+        try {
+            const s2 = await get('/v1/register/summary');
+            await printDocument(registerA4Html(s2), `register-report-${String(s2.opened_at || '').slice(0, 10) || today()}`);
+        } catch (e) { pos.onError(e); }
+        setBusy(null);
+    };
     const close = async () => {
         if (!(await confirm('Close the register and log out? The register report is printed.', { confirmLabel: 'Close register', danger: true }))) return;
         setBusy('close');
@@ -246,7 +256,7 @@ export function RegisterSheet({ pos, onClose, onClosed }) {
     const t = s?.totals || {};
     return (
         <Sheet title="Register" subtitle={s ? `${s.user} · opened ${s.opened_at}` : ''} onClose={onClose} size="md"
-            footer={s ? <><Btn icon={Printer} label="Print report" busy={busy === 'print'} onPress={print} className="flex-1" /><Btn icon={Ban} label="Close register" variant="danger" busy={busy === 'close'} onPress={close} className="flex-1" /></> : null}>
+            footer={s ? <><Btn icon={Printer} label="Print report" busy={busy === 'print'} onPress={print} className="flex-1" /><Btn icon={FileDown} label="PDF" busy={busy === 'pdf'} disabled={!!busy} onPress={pdf} className="flex-1" /><Btn icon={Ban} label="Close register" variant="danger" busy={busy === 'close'} onPress={close} className="flex-1" /></> : null}>
             {!s ? <ActivityIndicator color={COLORS.brand} /> : (
                 <View>
                     {(s.methods || []).filter((m) => !isLoyaltyMethod(m)).map((m) => (

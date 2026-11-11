@@ -158,4 +158,13 @@ function btoaSafe(bin) {
     return out;
 }
 
+/**
+ * A4 document (HTML) -> Android's print screen, where the user picks "Save as PDF", a printer, or Google Drive.
+ * Needs the app built with ReztraPrinter.printHtml (native code); an older build says so.
+ */
+export async function printDocument(html, name) {
+    if (!P?.printHtml) throw new Error('Saving PDFs needs the new app build. Rebuild and install the app (npx react-native run-android).');
+    return P.printHtml(html, name || 'Reztra POS');
+}
+
 export const deviceInfo = () => (P ? P.deviceInfo() : Promise.resolve({}));

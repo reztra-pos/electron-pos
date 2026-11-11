@@ -17,6 +17,12 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.util.Base64
 import androidx.core.content.ContextCompat
+import android.os.Handler
+import android.os.Looper
+import android.print.PrintAttributes
+import android.print.PrintManager
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -67,7 +73,49 @@ class ReztraPrinterModule(private val ctx: ReactApplicationContext) : ReactConte
   }
 
   /* ------------------------------------------------------------------ network */
+  /* ------------------------------------------------------------------ documents (A4 / PDF) */
 
+  // the page being printed: kept until Android's print screen has taken the document
+  private var docView: WebView? = null
+
+  /**
+   * Opens Android's print screen for an HTML document (e.g. the A4 register report). There the user picks
+   * "Save as PDF" (then shares it from Files), a printer, or Google Drive. Android's own PDF, no extra library.
+   */
+  @ReactMethod
+  fun printHtml(html: String, jobName: String, promise: Promise) {
+    val activity = ctx.currentActivity
+    if (activity == null) {
+      promise.reject("NO_SCREEN", "Open the app and try again.")
+      return
+    }
+    Handler(Looper.getMainLooper()).post {
+      try {
+        val view = WebView(activity)
+        var done = false
+        view.settings.javaScriptEnabled = false
+        view.webViewClient = object : WebViewClient() {
+          override fun onPageFinished(v: WebView, url: String?) {
+            if (done) return
+            done = true
+            try {
+              val pm = activity.getSystemService(Context.PRINT_SERVICE) as PrintManager
+              val attrs = PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build()
+              pm.print(jobName, v.createPrintDocumentAdapter(jobName), attrs)
+              promise.resolve(true)
+            } catch (e: Exception) {
+              promise.reject("PRINT", reason(e))
+            }
+          }
+        }
+        docView = view
+        view.loadDataWithBaseURL("https://localhost/", html, "text/html", "UTF-8", null)
+      } catch (e: Exception) {
+        promise.reject("PRINT", reason(e))
+      }
+    }
+  }
+  
   @ReactMethod
   fun printTcp(host: String, port: Int, base64: String, timeoutMs: Int, promise: Promise) {
     io.execute {

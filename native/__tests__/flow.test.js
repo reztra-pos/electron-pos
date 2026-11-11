@@ -184,6 +184,16 @@ const openCart = () => {
     tap(screen.getByLabelText('Clear orders'));
     await screen.findByText(/running orders? cleared$/, {}, { timeout: 15000 });
     await waitFor(() => expect(screen.queryAllByLabelText('Pay').length).toBe(0), { timeout: 20000 });
+
+    // ---- register report as A4 PDF (Android's print screen) ----
+    tap(screen.getByLabelText('Settings'));
+    tap(await screen.findByLabelText('Register', {}, { timeout: 5000 }));
+    await screen.findByText('Closing balance', {}, { timeout: 15000 });
+    const docs = (global.__docs || []).length;
+    tap(screen.getByLabelText('PDF'));
+    await waitFor(() => expect((global.__docs || []).length).toBe(docs + 1), { timeout: 15000 });
+    expect(global.__docs[docs].html).toContain('Register Report');
+    expect(global.__docs[docs].name).toMatch(/^register-report-/);
     await act(async () => { await new Promise((r) => setTimeout(r, 3000)); });
     global.__done = true;
 });
