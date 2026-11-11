@@ -1,12 +1,12 @@
 // Order type, tables, customer, waiter and delivery partner pickers.
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
-import { Check, UserPlus, Users, Search, Truck } from 'lucide-react-native';
+import { Check, Pencil, UserPlus, Users, Search, Truck } from 'lucide-react-native';
 import { get } from '../lib/api';
 import { C } from '../lib/catalog';
-import { firstError } from '../lib/format';
-import { Btn, COLORS, Field, Input, Pill, Sheet, Stepper, Tag, useLayout } from '../ui';
+import { Btn, COLORS, Field, Input, Pill, Sheet, Stepper, Tag, useLayout, useUi } from '../ui';
 import { TYPE_OPTIONS } from './Cart';
+import { CustomerFormSheet } from './CustomerForm';
 
 export function OrderTypeSheet({ pos, onClose }) {
     return (
@@ -89,43 +89,46 @@ export function TableSheet({ pos, onClose }) {
 export function CustomerSheet({ pos, onClose, value, onPick }) {
     const current = value !== undefined ? value : pos.customerId;
     const pick = (id) => { if (onPick) onPick(id); else pos.setCustomerId(id); onClose(); };
+    const { notify } = useUi();
     const [q, setQ] = useState('');
-    const [adding, setAdding] = useState(false);
-    const [form, setForm] = useState({ name: '', phone: '', email: '' });
-    const [busy, setBusy] = useState(false);
-    const [err, setErr] = useState('');
+    const [form, setForm] = useState(null);          // { edit: row | null } -> the customer form
     useEffect(() => { if (q.trim().length >= 2) { const t = setTimeout(() => pos.searchCustomers(q.trim()), 350); return () => clearTimeout(t); } return undefined; }, [q]); // eslint-disable-line
     const list = useMemo(() => {
         const s = q.trim().toLowerCase();
-        return pos.customers.filter((c) => !s || c.name.toLowerCase().includes(s) || (c.phone || '').includes(s)).slice(0, 80);
+        return pos.customers.filter((c) => !s || c.name.toLowerCase().includes(s) || (c.phone || '').includes(s) || (c.trn || '').includes(s)).slice(0, 80);
     }, [q, pos.customers]);
-    const save = async () => {
-        setBusy(true); setErr('');
-        try { const row = await pos.addCustomer({ name: form.name.trim(), phone: form.phone.trim(), email: form.email.trim() }, !onPick); pick(row.id); }
-        catch (e) { setErr(firstError(e)); setBusy(false); }
-    };
-    if (adding) {
+    if (form) {
         return (
-            <Sheet title="New customer" onClose={onClose} size="sm"
-                footer={<><Btn label="Back" onPress={() => setAdding(false)} className="flex-1" /><Btn label="Save customer" variant="primary" busy={busy} disabled={!form.name.trim()} onPress={save} className="flex-1" /></>}>
-                <Field label="Name"><Input value={form.name} onChangeText={(v) => setForm((f) => ({ ...f, name: v }))} autoFocus /></Field>
-                <Field label="Phone"><Input value={form.phone} onChangeText={(v) => setForm((f) => ({ ...f, phone: v }))} keyboardType="phone-pad" /></Field>
-                <Field label="Email"><Input value={form.email} onChangeText={(v) => setForm((f) => ({ ...f, email: v }))} keyboardType="email-address" autoCapitalize="none" /></Field>
-                {err ? <Text className="text-danger font-semibold">{err}</Text> : null}
-            </Sheet>
+            <CustomerFormSheet edit={form.edit} onClose={() => setForm(null)} onError={pos.onError}
+                onSave={async (id, body) => {
+                    const row = await pos.saveCustomer(id, body, !onPick && !id);
+                    notify(id ? 'Customer updated' : `${row.name} added and selected`);
+                    if (id) setForm(null); else pick(row.id);
+                }} />
         );
     }
     return (
-        <Sheet title="Customer" onClose={onClose} size="md" footer={<Btn label="New customer" icon={UserPlus} variant="secondary" onPress={() => setAdding(true)} className="flex-1" />}>
+        <Sheet title="Customer" onClose={onClose} size="md" footer={<Btn label="New customer" icon={UserPlus} variant="secondary" onPress={() => setForm({ edit: null })} className="flex-1" />}>
             <View className="h-12 bg-card rounded-xl border border-line flex-row items-center px-3 mb-3"><Search size={18} color={COLORS.ink3} />
-                <Input value={q} onChangeText={setQ} placeholder="Name or phone" className="flex-1 border-0 h-11" /></View>
+                <Input value={q} onChangeText={setQ} placeholder="Name, phone or TRN" className="flex-1 border-0 h-11" /></View>
             {list.map((c) => {
                 const on = c.id === Number(current);
+                const walkIn = c.id === C.defaultCustomerId;
                 return (
-                    <Pressable key={c.id} onPress={() => pick(c.id)} className={`flex-row items-center justify-between px-3 py-3 rounded-xl mb-1 ${on ? 'bg-brand-tint' : ''}`}>
-                        <View><Text className="font-bold text-ink text-[15px]">{c.name}</Text>{c.phone ? <Text className="text-ink-2 text-[12.5px]">{c.phone}</Text> : null}</View>
-                        {on ? <Check size={18} color={COLORS.brand} /> : null}
-                    </Pressable>
+                    <View key={c.id} className={`flex-row items-center rounded-xl mb-1 ${on ? 'bg-brand-tint' : ''}`}>
+                        <Pressable onPress={() => pick(c.id)} accessibilityLabel={c.name} className="flex-1 flex-row items-center justify-between px-3 py-3">
+                            <View className="flex-1 pr-2">
+                                <View className="flex-row items-center"><Text className="font-bold text-ink text-[15px]" numberOfLines={1}>{c.name}</Text>{c.trn ? <Tag text="B2B" tone="info" className="ml-2" /> : null}</View>
+                                {c.phone || c.trn ? <Text className="text-ink-2 text-[12.5px]">{[c.phone, c.trn ? `TRN ${c.trn}` : ''].filter(Boolean).join(' · ')}</Text> : null}
+                            </View>
+                            {on ? <Check size={18} color={COLORS.brand} /> : null}
+                        </Pressable>
+                        {!walkIn ? (
+                            <Pressable onPress={() => setForm({ edit: c })} accessibilityLabel={`Edit ${c.name}`} className="w-11 h-11 items-center justify-center mr-1 active:opacity-60">
+                                <Pencil size={17} color={COLORS.ink2} />
+                            </Pressable>
+                        ) : null}
+                    </View>
                 );
             })}
         </Sheet>

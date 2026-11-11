@@ -20,6 +20,9 @@ export const artFor = (name) => (ART.find(([re]) => re.test(name || '')) || [nul
 const isLoyalty = (m) => !!m?.is_loyalty || /loyal/i.test(m?.name || '');
 const plain = (html) => String(html || '').split(/<br\s*\/?>/i)[0].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 
+/** customer list row (trn: has a VAT number -> can get a ZATCA standard / B2B invoice) */
+export const customerRow = (c) => ({ id: c.id, name: c.name, phone: c.phone || '', trn: c.trn_number || '' });
+
 export function applyCatalog(boot, customers = []) {
     const S = boot.settings || {};
     C.settings = S;
@@ -59,7 +62,7 @@ export function applyCatalog(boot, customers = []) {
     C.waiters = (boot.waiters || []).map((w) => ({ id: w.id, name: w.name }));
     const dc = boot.default_customer;
     C.defaultCustomerId = dc?.id || Number(S.default_customer_id) || 1;
-    const list = (Array.isArray(customers) ? customers : []).map((c) => ({ id: c.id, name: c.name, phone: c.phone || '' }));
+    const list = (Array.isArray(customers) ? customers : []).map(customerRow);
     if (dc && !list.some((c) => c.id === dc.id)) list.unshift({ id: dc.id, name: dc.name, phone: dc.phone || '' });
     C.customers = list.sort((a, b) => (a.id === C.defaultCustomerId ? -1 : b.id === C.defaultCustomerId ? 1 : 0));
     C.partners = (boot.delivery_partners || []).map((p) => ({ id: p.id, name: p.name }));

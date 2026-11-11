@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { get, post, put, newKey } from '../lib/api';
-import { C, ORDER_TYPES, TYPE_KEY, defaultTypeKey, priceFor, comboExtra, needsOptions, isOpenMod } from '../lib/catalog';
+import { C, customerRow, ORDER_TYPES, TYPE_KEY, defaultTypeKey, priceFor, comboExtra, needsOptions, isOpenMod } from '../lib/catalog';
 import { amountStr, parseAmount, firstError, today } from '../lib/format';
 import { runJob } from '../lib/printer';
 import { getPref, setPref } from '../lib/storage';
@@ -81,18 +81,20 @@ export function usePos(user) {
             const found = await get(`/v1/customers?search=${encodeURIComponent(q)}&limit=30`);
             setCustomers((cs) => {
                 const have = new Set(cs.map((c) => c.id));
-                const add = (found || []).filter((c) => !have.has(c.id)).map((c) => ({ id: c.id, name: c.name, phone: c.phone || '' }));
+                const add = (found || []).filter((c) => !have.has(c.id)).map(customerRow);
                 return add.length ? [...cs, ...add] : cs;
             });
         } catch { /* keep the local matches */ }
     }, []);
-    const addCustomer = async (body, select = true) => {
-        const saved = await post('/v1/customers', body);
-        const row = { id: saved.id, name: saved.name, phone: saved.phone || '' };
-        setCustomers((cs) => [...cs, row]);
+    // add (id = null) or edit a customer; field errors are thrown back to the form
+    const saveCustomer = async (id, body, select = true) => {
+        const saved = id ? await put(`/v1/customers/${id}`, body) : await post('/v1/customers', body);
+        const row = customerRow(saved);
+        setCustomers((cs) => (cs.some((x) => x.id === row.id) ? cs.map((x) => (x.id === row.id ? row : x)) : [...cs, row]));
         if (select) setCustomerId(row.id);
         return row;
     };
+    const addCustomer = (body, select = true) => saveCustomer(null, body, select);
 
     /* ---------- order body ---------- */
     const orderBody = (type = orderType, tbl = table) => {
@@ -422,7 +424,7 @@ export function usePos(user) {
         user, isWaiter, canPay, canRefund, cart, orderType, table, waiter, setWaiter, customers, customer, customerId, setCustomerId, partner, setPartner, partnerRef, setPartnerRef,
         discount, charge, editingId, calc, calcErr, calcBusy, totals, srvFor, itemCount, running, sales, setSales, registerOpen, setRegisterOpen, online, busy, modal, setModal,
         prefs, savePrefs, zatcaQueue, preOrderTick, bumpPreOrders,
-        onError, refreshRunning, searchCustomers, addCustomer, addToCart, updateLine, setLineQty, removeLine, onItemPress, resetOrder, pickOrderType, pickTables, setOrderType, setTable,
+        onError, refreshRunning, searchCustomers, addCustomer, saveCustomer, addToCart, updateLine, setLineQty, removeLine, onItemPress, resetOrder, pickOrderType, pickTables, setOrderType, setTable,
         printJob, printKot, reprintInvoice, reprintKot, printBill, proceed, saveDraft, openOrderPayment, adjustTotals, completePayment, showInvoice, modifyOrder, cancelOrder,
     };
 }

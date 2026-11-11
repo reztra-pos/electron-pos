@@ -46,6 +46,33 @@ const openCart = () => {
     tap(byLabel(process.env.REZTRA_TEST_ITEM || 'Pepsi'));
     tap(byLabel(process.env.REZTRA_TEST_ITEM || 'Pepsi'));
     openCart();
+
+    // ---- B2B customer (TRN + national address for a ZATCA standard invoice) ----
+    const b2b = `B2B Test ${Date.now() % 100000}`;
+    tap(screen.getAllByText('Walk-in Customer')[0]);
+    tap(await screen.findByLabelText('New customer', {}, { timeout: 5000 }));
+    await screen.findByText('National address', {}, { timeout: 5000 });
+    const type = (label, v) => fireEvent.changeText(screen.getByLabelText(label), v);
+    type('Name *', b2b);
+    type('TRN (VAT number)', '310123456700003');
+    await screen.findByText(/also fill: Postal code, Street, Building no, Secondary no, District, City/);
+    type('Building no', '1234'); type('Secondary no', '5678'); type('Street - English', 'King Fahd Rd');
+    type('District - English', 'Al Olaya'); type('City - English', 'Riyadh'); type('Postal code', '12211');
+    type('Street - Arabic', 'طريق الملك فهد');
+    await screen.findByText('Complete for a ZATCA standard (B2B) invoice');
+    tap(screen.getByLabelText('Add customer'));
+    await screen.findByText(`${b2b} added and selected`, {}, { timeout: 15000 });
+    if (screen.queryByText('View order')) tap(screen.getByText('View order'));
+    await screen.findByText(`${b2b} · B2B`, {}, { timeout: 5000 });
+    global.__b2b = b2b;
+    // edit loads the saved national address back
+    tap(screen.getByText(`${b2b} · B2B`));
+    tap(await screen.findByLabelText(`Edit ${b2b}`, {}, { timeout: 5000 }));
+    await waitFor(() => expect(screen.getByLabelText('City - English').props.value).toBe('Riyadh'), { timeout: 15000 });
+    expect(screen.getByLabelText('Street - Arabic').props.value).toBe('طريق الملك فهد');
+    tap(screen.getByLabelText('Cancel'));
+    tap(screen.getAllByLabelText('Close')[0]);
+    if (screen.queryByText('View order')) tap(screen.getByText('View order'));
     await waitFor(() => expect(screen.getByLabelText('Pay now').props.accessibilityState?.disabled).toBeFalsy(), { timeout: 15000 });
     tap(screen.getByLabelText('Pay now'));
     await screen.findByText('Amount due', {}, { timeout: 15000 });
