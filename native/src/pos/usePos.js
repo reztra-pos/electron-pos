@@ -17,12 +17,16 @@ export const tblText = (t) => (t || []).map((x) => x.name).join(', ');
 export function usePos(user) {
     const { notify, confirm } = useUi();
     const isWaiter = !!user?.permissions?.is_waiter;
+    // Self / Online orders (customer QR / online ordering): Admin, or the web app's "pos_17" permission (same as the desktop app)
+    const canSelf = !isWaiter && (user?.role === 'Admin' || !!user?.permissions?.pos?.pos_17);
     const canPay = !isWaiter || !!user?.permissions?.pos?.pos_1;
     // credit notes: same rule as the desktop app (Admin, or the "refund" permission of the web app)
     const canRefund = user?.role === 'Admin' || !!user?.permissions?.is_admin || (user?.permissions?.all || []).includes('refund-123');
     const firstWaiter = () => (isWaiter && C.waiters.some((w) => w.id === user.id) ? user.id : Number(C.settings.default_waiter_id) || C.waiters[0]?.id || '');
 
     const [cart, setCart] = useState([]);
+    const [selfCount, setSelfCount] = useState(0);                // waiting self + online orders (badge)
+    const [editingSelf, setEditingSelf] = useState(false);        // editing a self / online order: whole KOT after the update
     const [preOrderTick, setPreOrderTick] = useState(0);         // pre-order list reloads when it changes
     const bumpPreOrders = () => setPreOrderTick((n) => n + 1);
     const [orderType, setOrderType] = useState(defaultTypeKey);
@@ -192,7 +196,7 @@ export function usePos(user) {
     const resetOrder = () => {
         setCart([]); setOrderType(defaultTypeKey()); setTable(null); setWaiter(firstWaiter()); setCustomerId(C.defaultCustomerId);
         setPartner(''); setPartnerRef(''); setDiscount({ mode: 'fixed', value: 0 }); setCharge({ mode: 'percent', value: 0 }); setChargeTouched(false);
-        setEditingId(null); setCalc(null); setCalcErr('');
+        setEditingId(null); setEditingSelf(false); setCalc(null); setCalcErr('');
     };
 
     const pickOrderType = (type, then = modal?.then) => {
@@ -251,6 +255,34 @@ export function usePos(user) {
             return null;
         }
     };
+    // ---- self / online orders ----
+    const refreshSelf = useCallback(async () => {
+        if (!canSelf) return;
+        try { const r = await get('/v1/orders/self'); setSelfCount((r.self_orders?.length || 0) + (r.online_orders?.length || 0)); } catch { /* next time */ }
+    }, [canSelf]);
+    useEffect(() => { refreshSelf(); const t = setInterval(refreshSelf, RUNNING_POLL_MS); return () => clearInterval(t); }, [refreshSelf]);
+    const acceptSelf = async (o) => {
+        const r = await post(`/v1/orders/${o.id}/accept`);
+        if (prefsRef.current.printKot && r.kot?.prints?.length) printKot(r.kot);
+        notify(`Order ${r.order.order_number || r.order.sale_no} accepted — sent to the kitchen`);
+        refreshSelf(); refreshRunning();
+    };
+    const declineSelf = async (o) => {
+        await post(`/v1/orders/${o.id}/decline`);
+        notify(`Order ${o.order_number || o.sale_no} declined`);
+        refreshSelf();
+    };
+    /** accept it as a running order and open it for changes; false = the user kept the current order */
+    const modifySelf = async (o) => {
+        if (cart.length && !(await confirm('Replace the items in the current order with this order?', { confirmLabel: 'Replace' }))) return false;
+        const full = await post(`/v1/orders/${o.id}/accept-edit`);
+        setModal(null);
+        loadOrder(full);
+        setEditingSelf(true);
+        refreshSelf(); refreshRunning();
+        return true;
+    };
+
     const reprintKot = async (id) => { try { await printKot(await get(`/v1/orders/${id}/kot?full=1`)); } catch (e) { onError(e); } };
     const printBill = async (id) => {
         try { const r = await post(`/v1/orders/${id}/bill`); refreshRunning(); await printJob(r.print_job); } catch (e) { onError(e); }
@@ -274,7 +306,10 @@ export function usePos(user) {
             const r = editingId ? await put(`/v1/orders/${editingId}`, body) : await post('/v1/orders', body, { idempotencyKey: newKey() });
             ok();
             notify(`Order ${r.order.order_number || r.order.sale_no} ${editingId ? 'updated' : 'placed'} — sent to the kitchen`);
-            if (prefsRef.current.printKot && r.kot?.prints?.length) printKot(r.kot);
+            let kot = r.kot;
+            // a self / online order changed before it went to the kitchen: the kitchen gets the whole order now
+            if (editingId && editingSelf) kot = await get(`/v1/orders/${editingId}/kot?all=1`).catch(() => r.kot);
+            if (prefsRef.current.printKot && kot?.prints?.length) printKot(kot);
             resetOrder();
             setModal(null);
             refreshRunning();
@@ -441,6 +476,6 @@ export function usePos(user) {
         discount, charge, editingId, calc, calcErr, calcBusy, totals, srvFor, itemCount, running, sales, setSales, registerOpen, setRegisterOpen, online, busy, modal, setModal,
         prefs, savePrefs, zatcaQueue, preOrderTick, bumpPreOrders,
         onError, refreshRunning, searchCustomers, addCustomer, saveCustomer, addToCart, updateLine, setLineQty, removeLine, onItemPress, resetOrder, pickOrderType, pickTables, setOrderType, setTable,
-        printJob, printKot, reprintInvoice, reprintKot, printBill, proceed, saveDraft, openOrderPayment, adjustTotals, completePayment, showInvoice, modifyOrder, cancelOrder, clearRunning,
+        printJob, printKot, reprintInvoice, reprintKot, printBill, proceed, saveDraft, openOrderPayment, adjustTotals, completePayment, showInvoice, modifyOrder, cancelOrder, clearRunning, canSelf, selfCount, refreshSelf, acceptSelf, declineSelf, modifySelf,
     };
 }

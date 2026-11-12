@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BackHandler, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Store, LayoutGrid, Clock3, History, Wallet, Settings, ShieldCheck, WifiOff, ChevronRight, CircleUserRound, Loader2, Sun, Moon, CalendarClock } from 'lucide-react-native';
+import { Store, LayoutGrid, Clock3, History, Wallet, Settings, ShieldCheck, WifiOff, ChevronRight, CircleUserRound, Loader2, Sun, Moon, CalendarClock, Smartphone } from 'lucide-react-native';
 import { C } from '../lib/catalog';
 import { COLORS, Money, Sheet, useLayout, useTheme, useUi } from '../ui';
 import { usePos } from './usePos';
@@ -15,6 +15,7 @@ import { DoneSheet, PaymentSheet } from './Payment';
 import { ClearRunningSheet, LeaveSheet, OpenRegisterSheet, OrderSheet, RegisterSheet, RunningView, SalesView, SettingsView, TableOrdersSheet, TablesView } from './Views';
 import { Segment } from '../ui';
 import { InvoiceSheet, RefundSheet } from './Refund';
+import { SelfOrdersSheet } from './SelfOrders';
 import { PreOrderDeliverSheet, PreOrderFormSheet, PreOrdersView } from './PreOrders';
 
 const NAV = [
@@ -73,6 +74,7 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
             {m?.name === 'order' ? <OrderSheet pos={pos} id={m.id} onClose={closeModal} /> : null}
             {m?.name === 'tableOrders' ? <TableOrdersSheet pos={pos} table={m.table} onClose={closeModal} /> : null}
             {m?.name === 'register' ? <RegisterSheet pos={pos} onClose={closeModal} onClosed={() => { closeModal(); onLogout(); }} /> : null}
+            {m?.name === 'selfOrders' ? <SelfOrdersSheet pos={pos} onClose={closeModal} /> : null}
             {m?.name === 'leave' ? <LeaveSheet pos={pos} exit={m.exit} onClose={closeModal} onLeave={() => { closeModal(); if (m.exit) BackHandler.exitApp(); else onLogout(); }} /> : null}
             {m?.name === 'clearRunning' ? <ClearRunningSheet pos={pos} onClose={closeModal} /> : null}
             {m?.name === 'invoice' ? <InvoiceSheet pos={pos} id={m.id} onClose={closeModal} onRefund={(sale) => pos.setModal({ name: 'refund', sale })} /> : null}
@@ -119,6 +121,13 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
                             </Pressable>
                         );
                     })}
+                    {pos.canSelf ? (
+                        <Pressable onPress={() => pos.setModal({ name: 'selfOrders' })} accessibilityLabel="Self / Online orders" className={`w-[68px] h-[62px] rounded-2xl items-center justify-center ${m?.name === 'selfOrders' ? 'bg-[#7B5CFF38]' : ''}`}>
+                            <Smartphone size={22} color={COLORS.railText} strokeWidth={1.9} />
+                            <Text className="text-[11px] font-semibold mt-1 text-[#AEB6CC]">Online</Text>
+                            {pos.selfCount ? <View className="absolute top-1.5 right-2 min-w-[18px] h-[18px] rounded-full bg-[#FF5A5F] items-center justify-center px-1"><Text className="text-white text-[10px] font-bold">{pos.selfCount}</Text></View> : null}
+                        </Pressable>
+                    ) : null}
                     <View className="flex-1" />
                     <Pressable onPress={() => theme.setMode(theme.scheme === 'dark' ? 'light' : 'dark')} accessibilityLabel={theme.scheme === 'dark' ? 'Light mode' : 'Dark mode'}
                         className="w-[52px] h-[44px] rounded-xl items-center justify-center mb-1 active:opacity-70">
@@ -155,6 +164,12 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
                 <View className="flex-1">
                     <View className="flex-row items-center px-[18px] pt-1.5 pb-2.5">
                         <View className="flex-1"><Text className="text-[20px] font-extrabold text-ink" numberOfLines={1}>{C.outlet.name || device?.outlet_name}</Text><Text className="text-ink-2 text-[12.5px]">{user?.name}</Text></View>
+                        {pos.canSelf ? (
+                            <Pressable onPress={() => pos.setModal({ name: 'selfOrders' })} accessibilityLabel="Self / Online orders" className="w-10 h-10 rounded-xl bg-card border border-line items-center justify-center mr-2 active:opacity-70">
+                                <Smartphone size={20} color={COLORS.ink2} />
+                                {pos.selfCount ? <View className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-[#FF5A5F] items-center justify-center px-1"><Text className="text-white text-[10px] font-bold">{pos.selfCount}</Text></View> : null}
+                            </Pressable>
+                        ) : null}
                         {status}
                     </View>
                     <View className="px-[18px]"><Segment options={TYPE_OPTIONS} value={pos.orderType} onChange={(t) => pos.pickOrderType(t, null)} /></View>
