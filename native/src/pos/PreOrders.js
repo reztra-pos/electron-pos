@@ -9,6 +9,7 @@ import { firstError, money, today } from '../lib/format';
 import { Btn, COLORS, Field, Input, Money, Pill, Row, Segment, Sheet, Stepper, Tag, useLayout, useUi } from '../ui';
 import { CustomerSheet } from './Pickers';
 import { MethodPicker } from './Refund';
+import { DateField, TimeField } from './DateTime';
 
 const STATUS = { 1: ['Submitted', 'info'], 2: ['Preparing', 'warn'], 3: ['Delivered', 'ok'] };
 const FILTERS = [['', 'All'], ['1', 'Submitted'], ['2', 'Preparing'], ['3', 'Delivered']];
@@ -257,11 +258,8 @@ export function PreOrderFormSheet({ pos, po, onClose }) {
                 </Field>
             ) : null}
             <View className="flex-row" style={{ gap: 10 }}>
-                <Field label="Delivery date (YYYY-MM-DD)" className="flex-1"><Input value={date} onChangeText={setDate} placeholder={dayPlus(1)} keyboardType="numbers-and-punctuation" />{fe('delivery_date')}</Field>
-                <Field label="Time (HH:MM)" className="w-[130px]"><Input value={time} onChangeText={setTime} placeholder="14:30" keyboardType="numbers-and-punctuation" />{fe('delivery_time')}</Field>
-            </View>
-            <View className="flex-row -mt-1 mb-3" style={{ gap: 8 }}>
-                {[[today(), 'Today'], [dayPlus(1), 'Tomorrow'], [dayPlus(2), 'In 2 days']].map(([d, l]) => <Pill key={l} label={l} active={date === d} onPress={() => setDate(d)} className="mr-0 h-9" />)}
+                <Field label="Delivery date" className="flex-1"><DateField value={date} onChange={setDate} min={today()} />{fe('delivery_date')}</Field>
+                <Field label="Time" className="w-[150px]"><TimeField value={time} onChange={setTime} />{fe('delivery_time')}</Field>
             </View>
 
             <View className="flex-row items-center justify-between mb-1.5">
