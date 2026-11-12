@@ -12,7 +12,7 @@ import { CartActions, CartHeader, CartLines, CartPanel, CartTotals, OrderMeta, T
 import { ItemSheet, VariationSheet } from './ItemSheet';
 import { CustomerSheet, OrderTypeSheet, PartnerSheet, TableSheet, WaiterSheet } from './Pickers';
 import { DoneSheet, PaymentSheet } from './Payment';
-import { ClearRunningSheet, LeaveSheet, OpenRegisterSheet, OrderSheet, RegisterSheet, RunningView, SalesView, SettingsView, TableOrdersSheet, TablesView } from './Views';
+import { ClearRunningSheet, DraftsSheet, LeaveSheet, OpenRegisterSheet, OrderSheet, RegisterSheet, RunningView, SalesView, SettingsView, TableOrdersSheet, TablesView } from './Views';
 import { Segment } from '../ui';
 import { InvoiceSheet, RefundSheet } from './Refund';
 import { SelfOrdersSheet } from './SelfOrders';
@@ -74,7 +74,7 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
             {m?.name === 'order' ? <OrderSheet pos={pos} id={m.id} onClose={closeModal} /> : null}
             {m?.name === 'tableOrders' ? <TableOrdersSheet pos={pos} table={m.table} onClose={closeModal} /> : null}
             {m?.name === 'register' ? <RegisterSheet pos={pos} onClose={closeModal} onClosed={() => { closeModal(); onLogout(); }} /> : null}
-            {m?.name === 'selfOrders' ? <SelfOrdersSheet pos={pos} onClose={closeModal} /> : null}
+            {m?.name === 'drafts' ? <DraftsSheet pos={pos} onClose={closeModal} /> : null}
             {m?.name === 'leave' ? <LeaveSheet pos={pos} exit={m.exit} onClose={closeModal} onLeave={() => { closeModal(); if (m.exit) BackHandler.exitApp(); else onLogout(); }} /> : null}
             {m?.name === 'clearRunning' ? <ClearRunningSheet pos={pos} onClose={closeModal} /> : null}
             {m?.name === 'invoice' ? <InvoiceSheet pos={pos} id={m.id} onClose={closeModal} onRefund={(sale) => pos.setModal({ name: 'refund', sale })} /> : null}

@@ -1,7 +1,7 @@
 // Running orders, tables overview, recent sales, register and settings (printers).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Switch, Text, View } from 'react-native';
-import { Armchair, ShoppingBag, Truck, Clock3, ChefHat, Receipt, Banknote, Pencil, Printer, Ban, Eye, LayoutGrid, Users, Wallet, LogOut, Bluetooth, Usb, Wifi, Cpu, RefreshCw, Check, Monitor, Sun, Moon, Smartphone, RotateCcw, CalendarClock, ChevronRight, Eraser, FileDown } from 'lucide-react-native';
+import { Armchair, ShoppingBag, Truck, Clock3, ChefHat, Receipt, Banknote, Pencil, Printer, Ban, Eye, LayoutGrid, Users, Wallet, LogOut, Bluetooth, Usb, Wifi, Cpu, RefreshCw, Check, Monitor, Sun, Moon, Smartphone, RotateCcw, CalendarClock, ChevronRight, Eraser, FileDown, FileClock, Trash2 } from 'lucide-react-native';
 import { get, post } from '../lib/api';
 import { C, TYPE_KEY, isLoyaltyMethod } from '../lib/catalog';
 import { firstError, minutesAgo, today } from '../lib/format';
@@ -26,7 +26,10 @@ export function RunningView({ pos }) {
             <View className="flex-row items-end justify-between mb-3">
                 <View><Text className="text-[22px] font-extrabold text-ink">Running orders</Text>
                     <View className="flex-row items-center"><Text className="text-ink-2">{pos.running.length} open · </Text><Money value={total} className="text-ink-2" /></View></View>
-                <Btn size="sm" icon={Eraser} label="Clear running orders" onPress={() => pos.setModal({ name: 'clearRunning' })} />
+                <View className="flex-row" style={{ gap: 8 }}>
+                    <Btn size="sm" icon={FileClock} label={`Drafts (${pos.drafts.length})`} accessibilityLabel="Drafts" onPress={() => pos.setModal({ name: 'drafts' })} />
+                    <Btn size="sm" icon={Eraser} label="Clear running orders" onPress={() => pos.setModal({ name: 'clearRunning' })} />
+                </View>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-grow-0 mb-3">
                 <Pill label="All" count={pos.running.length} active={type === 'all'} onPress={() => setType('all')} />
@@ -321,6 +324,31 @@ export function LeaveSheet({ pos, exit, onClose, onLeave }) {
                     <Text className="text-ink-3 text-[13px] mt-1.5">Print or save the register report without closing the register. Closing the register prints it too.</Text>
                 </View>
             </View>
+        </Sheet>
+    );
+}
+
+/* ---------------- drafts (orders parked with "Draft") ---------------- */
+export function DraftsSheet({ pos, onClose }) {
+    const [busy, setBusy] = useState(null);
+    useEffect(() => { pos.refreshDrafts(); }, []); // eslint-disable-line
+    const restore = async (d) => { setBusy(`r${d.id}`); const ok = await pos.restoreDraft(d); if (!ok) setBusy(null); };
+    const remove = async (d) => { setBusy(`d${d.id}`); await pos.deleteDraft(d); setBusy(null); };
+    return (
+        <Sheet title="Drafts" subtitle={pos.drafts.length ? `${pos.drafts.length} saved` : ''} onClose={onClose} size="md">
+            {!pos.drafts.length ? <Text className="text-ink-3">No drafts yet. Use Draft on an order to park it and come back to it.</Text> : pos.drafts.map((d) => (
+                <View key={d.id} className="flex-row items-center py-3 border-b border-line">
+                    <View className="flex-1 pr-2">
+                        <Text className="font-bold text-ink" numberOfLines={1}>{d.customer?.name || 'Customer'}</Text>
+                        <Text className="text-ink-3 text-[12.5px]" numberOfLines={2}>{d.total_items} item{Number(d.total_items) === 1 ? '' : 's'}{d.name ? ` · ${d.name}` : ''}{d.saved_at ? ` · ${d.saved_at}` : ''}</Text>
+                    </View>
+                    <Money value={d.total_payable} bold className="font-extrabold text-ink mr-2" />
+                    <Btn size="sm" label="Restore" variant="primary" busy={busy === `r${d.id}`} disabled={!!busy} onPress={() => restore(d)} accessibilityLabel={`Restore draft ${d.id}`} />
+                    <Pressable onPress={() => remove(d)} disabled={!!busy} accessibilityLabel={`Delete draft ${d.id}`} className="w-10 h-10 items-center justify-center ml-1 active:opacity-60">
+                        {busy === `d${d.id}` ? <ActivityIndicator color={COLORS.danger} /> : <Trash2 size={18} color={COLORS.danger} />}
+                    </Pressable>
+                </View>
+            ))}
         </Sheet>
     );
 }

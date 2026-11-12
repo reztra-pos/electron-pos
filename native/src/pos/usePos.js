@@ -3,13 +3,13 @@
 // running orders, reprints. Every amount comes from the server; the app only shows it.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
-import { get, post, put, newKey } from '../lib/api';
 import { C, customerRow, ORDER_TYPES, TYPE_KEY, defaultTypeKey, priceFor, comboExtra, needsOptions, isOpenMod } from '../lib/catalog';
 import { amountStr, parseAmount, firstError, today } from '../lib/format';
 import { runJob } from '../lib/printer';
 import { getPref, setPref } from '../lib/storage';
 import { RUNNING_POLL_MS } from '../lib/config';
 import { useUi } from '../ui';
+import { del, get, post, put, newKey } from '../lib/api';
 
 const hasTables = (t) => Array.isArray(t) && t.length > 0;
 export const tblText = (t) => (t || []).map((x) => x.name).join(', ');
@@ -25,6 +25,7 @@ export function usePos(user) {
     const firstWaiter = () => (isWaiter && C.waiters.some((w) => w.id === user.id) ? user.id : Number(C.settings.default_waiter_id) || C.waiters[0]?.id || '');
 
     const [cart, setCart] = useState([]);
+    const [drafts, setDrafts] = useState([]);                     // saved drafts of this outlet (web "Draft Sales")
     const [selfCount, setSelfCount] = useState(0);                // waiting self + online orders (badge)
     const [editingSelf, setEditingSelf] = useState(false);        // editing a self / online order: whole KOT after the update
     const [preOrderTick, setPreOrderTick] = useState(0);         // pre-order list reloads when it changes
@@ -317,11 +318,57 @@ export function usePos(user) {
         finally { setBusy(null); }
     };
 
+    const refreshDrafts = useCallback(async () => { try { setDrafts(await get('/v1/drafts')); } catch { /* shown when opened */ } }, []);
+    useEffect(() => { refreshDrafts(); }, [refreshDrafts]);
     const saveDraft = async () => {
         if (!cart.length) return notify('Nothing to save — the order is empty');
         if (editingId) return notify('This is a running order. Use Update order to save changes.');
-        try { await post('/v1/drafts', orderBody(), { idempotencyKey: newKey() }); resetOrder(); notify('Order saved as draft'); }
+        try { await post('/v1/drafts', orderBody(), { idempotencyKey: newKey() }); resetOrder(); refreshDrafts(); notify('Order saved as draft'); }
         catch (e) { onError(e); }
+    };
+    // a draft back into the cart (the draft is removed, same as the desktop app / web POS)
+    const restoreDraft = async (d) => {
+        if (cart.length && !(await confirm('Replace the current order with this draft?', { confirmLabel: 'Replace' }))) return false;
+        try {
+            const o = (await get(`/v1/drafts/${d.id}`)).order;
+            const lines = [];
+            (o.items || []).forEach((l) => {
+                const it = C.byId[l.food_menu_id];
+                if (!it) return;                                  // item deleted since the draft was saved
+                const dd = parseAmount(l.discount);
+                lines.push({
+                    key: `draft-${l.food_menu_id}-${lines.length}-${Date.now()}`, itemId: it.id, name: it.name,
+                    price: Number(l.unit_price) || priceFor(it, TYPE_KEY[o.order_type], o.delivery_partner_id), qty: Number(l.qty) || 1,
+                    mods: (l.modifier_ids || []).map((x) => {
+                        const id = typeof x === 'object' && x ? x.id : x;
+                        const base = it.modifiers.find((m) => m.id === id);
+                        return base && (typeof x === 'object' && x && x.price != null ? { ...base, price: Number(x.price) || 0 } : base);
+                    }).filter(Boolean),
+                    note: l.note || '', disc: dd.mode === 'percent' ? dd.value : 0, discRaw: dd.mode === 'fixed' && dd.value ? String(dd.value) : null,
+                    openPrice: it.openPrice, comboSelections: (l.combo_selections || []).map(Number), priceEdited: !!l.unit_price && it.openPrice, lineId: null,
+                });
+            });
+            setEditingId(null); setEditingSelf(false);
+            setCart(lines);
+            setOrderType(TYPE_KEY[o.order_type] || 'take');
+            setTable(o.tables?.length ? o.tables.map((t) => ({ id: t.table_id, name: t.name || `#${t.table_id}`, persons: Number(t.persons) || 1 })) : null);
+            setWaiter(o.waiter_id || firstWaiter());
+            setCustomerId(o.customer_id || C.defaultCustomerId);
+            setPartner(o.delivery_partner_id ? String(o.delivery_partner_id) : '');
+            setPartnerRef(o.delivery_partner_ref_no || '');
+            setDiscount(parseAmount(o.discount));
+            if (o.charge) { setCharge(parseAmount(o.charge)); setChargeTouched(true); }
+            await del(`/v1/drafts/${d.id}`);
+            refreshDrafts();
+            setModal(null);
+            notify(lines.length < (o.items || []).length ? 'Draft restored (items no longer on the menu were left out)' : 'Draft restored');
+            return true;
+        } catch (e) { onError(e); return false; }
+    };
+    const deleteDraft = async (d) => {
+        if (!(await confirm('Delete this draft?', { title: 'Delete draft', confirmLabel: 'Delete', danger: true }))) return;
+        try { await del(`/v1/drafts/${d.id}`); notify('Draft deleted'); } catch (e) { onError(e); }
+        refreshDrafts();
     };
 
     const openQuickPayment = async (type, tbl) => {
@@ -476,6 +523,6 @@ export function usePos(user) {
         discount, charge, editingId, calc, calcErr, calcBusy, totals, srvFor, itemCount, running, sales, setSales, registerOpen, setRegisterOpen, online, busy, modal, setModal,
         prefs, savePrefs, zatcaQueue, preOrderTick, bumpPreOrders,
         onError, refreshRunning, searchCustomers, addCustomer, saveCustomer, addToCart, updateLine, setLineQty, removeLine, onItemPress, resetOrder, pickOrderType, pickTables, setOrderType, setTable,
-        printJob, printKot, reprintInvoice, reprintKot, printBill, proceed, saveDraft, openOrderPayment, adjustTotals, completePayment, showInvoice, modifyOrder, cancelOrder, clearRunning, canSelf, selfCount, refreshSelf, acceptSelf, declineSelf, modifySelf,
+        printJob, printKot, reprintInvoice, reprintKot, printBill, proceed, saveDraft, openOrderPayment, adjustTotals, completePayment, showInvoice, modifyOrder, cancelOrder, clearRunning, canSelf, selfCount, refreshSelf, drafts, refreshDrafts, restoreDraft, deleteDraft, acceptSelf, declineSelf, modifySelf,
     };
 }
