@@ -1,9 +1,9 @@
 // POS shell. Tablet (landscape, >= 600dp): navigation rail + menu + docked order panel (392dp).
 // Phone (portrait): header, menu, floating order bar -> order sheet, bottom tab bar.
 import React, { useEffect, useMemo, useState } from 'react';
-import { BackHandler, Pressable, Text, View } from 'react-native';
+import { BackHandler, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Store, LayoutGrid, Clock3, History, Wallet, Settings, ShieldCheck, WifiOff, ChevronRight, CircleUserRound, Loader2, Sun, Moon, CalendarClock, Smartphone } from 'lucide-react-native';
+import { Store, LayoutGrid, Clock3, History, Wallet, Settings, ShieldCheck, WifiOff, ChevronRight, CircleUserRound, Loader2, Sun, Moon, CalendarClock, Smartphone, Bell } from 'lucide-react-native';
 import { C } from '../lib/catalog';
 import { COLORS, Money, Sheet, useLayout, useTheme, useUi } from '../ui';
 import { usePos } from './usePos';
@@ -15,9 +15,9 @@ import { DoneSheet, PaymentSheet } from './Payment';
 import { ClearRunningSheet, DraftsSheet, LeaveSheet, OpenRegisterSheet, OrderSheet, RegisterSheet, RunningView, SalesView, SettingsView, TableOrdersSheet, TablesView } from './Views';
 import { Segment } from '../ui';
 import { InvoiceSheet, RefundSheet } from './Refund';
-import { SelfOrdersSheet } from './SelfOrders';
+import { SelfOrdersView } from './SelfOrders';
 import { PreOrderDeliverSheet, PreOrderFormSheet, PreOrdersView } from './PreOrders';
-import { useNotifications, NotificationsSheet, RailBell, HeaderBell } from './Notifications';
+import { useNotifications, NotificationsView, HeaderBell } from './Notifications';
 import { flipX, tr } from '../lib/i18n';
 
 const NAV = [
@@ -26,6 +26,8 @@ const NAV = [
     { id: 'running', label: 'Running', icon: Clock3 },
     { id: 'sales', label: 'Sales', icon: History },
     { id: 'preorders', label: 'Pre-orders', icon: CalendarClock, tablet: true },     // phone: under More
+    { id: 'self', label: 'Online', icon: Smartphone, tablet: true },                  // phone: button at the top
+    { id: 'alerts', label: 'Alerts', icon: Bell, tablet: true },                      // phone: bell at the top
     { id: 'more', label: 'Settings', icon: Settings },
 ];
 
@@ -78,8 +80,6 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
             {m?.name === 'tableOrders' ? <TableOrdersSheet pos={pos} table={m.table} onClose={closeModal} /> : null}
             {m?.name === 'register' ? <RegisterSheet pos={pos} onClose={closeModal} onClosed={() => { closeModal(); onLogout(); }} /> : null}
             {m?.name === 'drafts' ? <DraftsSheet pos={pos} onClose={closeModal} /> : null}
-            {m?.name === 'selfOrders' ? <SelfOrdersSheet pos={pos} onClose={closeModal} /> : null}
-            {m?.name === 'notifications' ? <NotificationsSheet notes={notes} onClose={closeModal} /> : null}
             {m?.name === 'leave' ? <LeaveSheet pos={pos} exit={m.exit} onClose={closeModal} onLeave={() => { closeModal(); if (m.exit) BackHandler.exitApp(); else onLogout(); }} /> : null}
             {m?.name === 'clearRunning' ? <ClearRunningSheet pos={pos} onClose={closeModal} /> : null}
             {m?.name === 'invoice' ? <InvoiceSheet pos={pos} id={m.id} onClose={closeModal} onRefund={(sale) => pos.setModal({ name: 'refund', sale })} /> : null}
@@ -94,8 +94,10 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
         : view === 'running' ? <RunningView pos={pos} />
             : view === 'sales' ? <SalesView pos={pos} />
                 : view === 'preorders' ? <PreOrdersView pos={pos} />
-                    : view === 'more' ? <SettingsView pos={pos} user={user} device={device} onLogout={requestLogout} onOpenRegister={() => pos.setModal({ name: 'register' })} onOpenPreOrders={() => setView('preorders')} />
-                        : null;
+                    : view === 'self' ? <SelfOrdersView pos={pos} onModify={() => setView('order')} />
+                        : view === 'alerts' ? <NotificationsView notes={notes} />
+                            : view === 'more' ? <SettingsView pos={pos} user={user} device={device} onLogout={requestLogout} onOpenRegister={() => pos.setModal({ name: 'register' })} onOpenPreOrders={() => setView('preorders')} />
+                                : null;
 
     const status = (
         <View className="flex-row items-center" style={{ gap: 8 }}>
@@ -112,34 +114,30 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
         const cols = Math.max(3, Math.floor(menuW / (wide ? 190 : 200)));
         return (
             <View className="flex-1 flex-row bg-app" style={{ paddingTop: inset.top }}>
-                <View className="w-[84px] bg-rail items-center py-3.5" style={{ gap: 6 }}>
-                    <View className="w-[46px] h-[46px] rounded-2xl bg-brand items-center justify-center mb-3"><Text className="text-white font-extrabold text-[22px]">R</Text></View>
-                    {NAV.filter((n) => n.id !== 'preorders' || pos.canPay).map((n) => {
-                        const on = view === n.id;
-                        const Icon = n.icon;
-                        const badge = n.id === 'running' ? pos.running.length : 0;
-                        return (
-                            <Pressable key={n.id} onPress={() => setView(n.id)} accessibilityLabel={tr(n.label)} className={`w-[68px] h-[62px] rounded-2xl items-center justify-center ${on ? 'bg-[#7B5CFF38]' : ''}`}>
-                                <Icon size={22} color={on ? '#fff' : COLORS.railText} strokeWidth={1.9} />
-                                <Text className={`text-[11px] font-semibold mt-1 ${on ? 'text-white' : 'text-[#AEB6CC]'}`} numberOfLines={1}>{tr(n.label)}</Text>
-                                {badge ? <View className="absolute top-1.5 right-2 min-w-[18px] h-[18px] rounded-full bg-[#FF5A5F] items-center justify-center px-1"><Text className="text-white text-[10px] font-bold">{badge}</Text></View> : null}
-                            </Pressable>
-                        );
-                    })}
-                    {pos.canSelf ? (
-                        <Pressable onPress={() => pos.setModal({ name: 'selfOrders' })} accessibilityLabel={tr("Self / Online orders")} className={`w-[68px] h-[62px] rounded-2xl items-center justify-center ${m?.name === 'selfOrders' ? 'bg-[#7B5CFF38]' : ''}`}>
-                            <Smartphone size={22} color={COLORS.railText} strokeWidth={1.9} />
-                            <Text className="text-[11px] font-semibold mt-1 text-[#AEB6CC]">{tr("Online")}</Text>
-                            {pos.selfCount ? <View className="absolute top-1.5 right-2 min-w-[18px] h-[18px] rounded-full bg-[#FF5A5F] items-center justify-center px-1"><Text className="text-white text-[10px] font-bold">{pos.selfCount}</Text></View> : null}
+                {/* side rail: scrolls on smaller tablets (9") so nothing is cut off */}
+                <View className="w-[84px] bg-rail">
+                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1, alignItems: 'center', paddingVertical: 14, gap: 6 }}>
+                        <View className="w-[46px] h-[46px] rounded-2xl bg-brand items-center justify-center mb-3"><Text className="text-white font-extrabold text-[22px]">R</Text></View>
+                        {NAV.filter((n) => (n.id !== 'preorders' || pos.canPay) && (n.id !== 'self' || pos.canSelf)).map((n) => {
+                            const on = view === n.id;
+                            const Icon = n.icon;
+                            const badge = n.id === 'running' ? pos.running.length : n.id === 'self' ? pos.selfCount : n.id === 'alerts' ? notes.count : 0;
+                            return (
+                                <Pressable key={n.id} onPress={() => setView(n.id)} accessibilityLabel={tr(n.id === 'self' ? 'Self / Online orders' : n.id === 'alerts' ? 'Notifications' : n.label)}
+                                    className={`w-[68px] h-[62px] rounded-2xl items-center justify-center ${on ? 'bg-[#7B5CFF38]' : ''}`}>
+                                    <Icon size={22} color={on ? '#fff' : COLORS.railText} strokeWidth={1.9} />
+                                    <Text className={`text-[11px] font-semibold mt-1 ${on ? 'text-white' : 'text-[#AEB6CC]'}`} numberOfLines={1}>{tr(n.label)}</Text>
+                                    {badge ? <View className="absolute top-1.5 right-2 min-w-[18px] h-[18px] rounded-full bg-[#FF5A5F] items-center justify-center px-1"><Text className="text-white text-[10px] font-bold">{badge > 99 ? '99+' : badge}</Text></View> : null}
+                                </Pressable>
+                            );
+                        })}
+                        <View className="flex-1 min-h-[12px]" />
+                        <Pressable onPress={() => theme.setMode(theme.scheme === 'dark' ? 'light' : 'dark')} accessibilityLabel={theme.scheme === 'dark' ? tr("Light mode") : tr("Dark mode")}
+                            className="w-[52px] h-[44px] rounded-xl items-center justify-center mb-1 active:opacity-70">
+                            {theme.scheme === 'dark' ? <Sun size={21} color={COLORS.railText} strokeWidth={1.9} /> : <Moon size={21} color={COLORS.railText} strokeWidth={1.9} />}
                         </Pressable>
-                    ) : null}
-                    <RailBell notes={notes} onPress={() => pos.setModal({ name: 'notifications' })} />
-                    <View className="flex-1" />
-                    <Pressable onPress={() => theme.setMode(theme.scheme === 'dark' ? 'light' : 'dark')} accessibilityLabel={theme.scheme === 'dark' ? tr("Light mode") : tr("Dark mode")}
-                        className="w-[52px] h-[44px] rounded-xl items-center justify-center mb-1 active:opacity-70">
-                        {theme.scheme === 'dark' ? <Sun size={21} color={COLORS.railText} strokeWidth={1.9} /> : <Moon size={21} color={COLORS.railText} strokeWidth={1.9} />}
-                    </Pressable>
-                    <View className="w-10 h-10 rounded-full bg-[#2A3350] items-center justify-center"><Text className="text-white font-bold text-[13px]">{(user?.name || '?').split(' ').map((x) => x[0]).join('').slice(0, 2).toUpperCase()}</Text></View>
+                        <View className="w-10 h-10 rounded-full bg-[#2A3350] items-center justify-center"><Text className="text-white font-bold text-[13px]">{(user?.name || '?').split(' ').map((x) => x[0]).join('').slice(0, 2).toUpperCase()}</Text></View>
+                    </ScrollView>
                 </View>
                 {view === 'order' ? (
                     <>
@@ -170,9 +168,9 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
                 <View className="flex-1">
                     <View className="flex-row items-center px-[18px] pt-1.5 pb-2.5">
                         <View className="flex-1"><Text className="text-[20px] font-extrabold text-ink" numberOfLines={1}>{C.outlet.name || device?.outlet_name}</Text><Text className="text-ink-2 text-[12.5px]">{user?.name}</Text></View>
-                        <HeaderBell notes={notes} onPress={() => pos.setModal({ name: 'notifications' })} />
+                        <HeaderBell notes={notes} onPress={() => setView('alerts')} />
                         {pos.canSelf ? (
-                            <Pressable onPress={() => pos.setModal({ name: 'selfOrders' })} accessibilityLabel={tr("Self / Online orders")} className="w-10 h-10 rounded-xl bg-card border border-line items-center justify-center mr-2 active:opacity-70">
+                            <Pressable onPress={() => setView('self')} accessibilityLabel={tr("Self / Online orders")} className="w-10 h-10 rounded-xl bg-card border border-line items-center justify-center mr-2 active:opacity-70">
                                 <Smartphone size={20} color={COLORS.ink2} />
                                 {pos.selfCount ? <View className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-[#FF5A5F] items-center justify-center px-1"><Text className="text-white text-[10px] font-bold">{pos.selfCount}</Text></View> : null}
                             </Pressable>
