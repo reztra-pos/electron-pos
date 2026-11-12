@@ -5,6 +5,7 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, X } from 'lucide-react-native';
 import { Btn, COLORS, Sheet } from '../ui';
+import { flipX, tr } from '../lib/i18n';
 
 const pad = (n) => String(n).padStart(2, '0');
 export const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -15,22 +16,22 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "Thu, 12 Nov 2026" */
-export const dateLabel = (s) => { const d = parse(s); return d ? `${DAYS[d.getDay()]}, ${d.getDate()} ${SHORT[d.getMonth()]} ${d.getFullYear()}` : ''; };
+export const dateLabel = (s) => { const d = parse(s); return d ? `${tr(DAYS[d.getDay()])}, ${d.getDate()} ${tr(SHORT[d.getMonth()])} ${d.getFullYear()}` : ''; };
 /** "2:30 PM" */
 export const timeLabel = (s) => {
     const m = /^(\d{1,2}):(\d{2})/.exec(String(s || ''));
     if (!m) return '';
     const h = +m[1];
-    return `${h % 12 || 12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
+    return `${h % 12 || 12}:${m[2]} ${h < 12 ? tr('AM') : tr('PM')}`;
 };
 
 function FieldButton({ icon: Icon, text, placeholder, onPress, onClear, label }) {
     return (
-        <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}
+        <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={tr(label)}
             className="h-12 rounded-xl border border-line bg-card px-3 flex-row items-center active:opacity-80">
             <Icon size={18} color={text ? COLORS.brand : COLORS.ink3} />
-            <Text className={`flex-1 ml-2 text-[15px] ${text ? 'text-ink font-semibold' : 'text-ink-3'}`} numberOfLines={1}>{text || placeholder}</Text>
-            {text && onClear ? <Pressable onPress={onClear} hitSlop={10} accessibilityLabel={`Clear ${label}`}><X size={16} color={COLORS.ink3} /></Pressable> : null}
+            <Text className={`flex-1 ml-2 text-[15px] ${text ? 'text-ink font-semibold' : 'text-ink-3'}`} numberOfLines={1}>{text || tr(placeholder)}</Text>
+            {text && onClear ? <Pressable onPress={onClear} hitSlop={10} accessibilityLabel={tr("Clear {label}", { label })}><X size={16} color={COLORS.ink3} /></Pressable> : null}
         </Pressable>
     );
 }
@@ -71,22 +72,22 @@ function CalendarSheet({ title, value, min, onClose, onPick }) {
                     return (
                         <Pressable key={l} onPress={() => onPick(ymd(d))} accessibilityLabel={l}
                             className={`h-9 px-3 rounded-full border items-center justify-center ${on ? 'bg-brand border-brand' : 'bg-card border-line'}`}>
-                            <Text className={`text-[13px] font-semibold ${on ? 'text-white' : 'text-ink'}`}>{l}</Text>
+                            <Text className={`text-[13px] font-semibold ${on ? 'text-white' : 'text-ink'}`}>{tr(l)}</Text>
                         </Pressable>
                     );
                 })}
             </View>
             <View className="flex-row items-center justify-between mb-2">
                 <Pressable onPress={() => canPrev && setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} disabled={!canPrev}
-                    accessibilityLabel="Previous month" className={`w-10 h-10 rounded-xl items-center justify-center ${canPrev ? '' : 'opacity-30'}`}>
-                    <ChevronLeft size={22} color={COLORS.ink} />
+                    accessibilityLabel={tr("Previous month")} className={`w-10 h-10 rounded-xl items-center justify-center ${canPrev ? '' : 'opacity-30'}`}>
+                    <ChevronLeft size={22} color={COLORS.ink} style={flipX()} />
                 </Pressable>
-                <Text className="font-extrabold text-ink text-[16px]">{MONTHS[month.getMonth()]} {month.getFullYear()}</Text>
-                <Pressable onPress={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} accessibilityLabel="Next month"
-                    className="w-10 h-10 rounded-xl items-center justify-center"><ChevronRight size={22} color={COLORS.ink} /></Pressable>
+                <Text className="font-extrabold text-ink text-[16px]">{tr(MONTHS[month.getMonth()])} {month.getFullYear()}</Text>
+                <Pressable onPress={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} accessibilityLabel={tr("Next month")}
+                    className="w-10 h-10 rounded-xl items-center justify-center"><ChevronRight size={22} color={COLORS.ink} style={flipX()} /></Pressable>
             </View>
             <View className="flex-row">
-                {DAYS.map((d) => <Text key={d} className="flex-1 text-center text-ink-3 text-[12px] font-semibold mb-1">{d}</Text>)}
+                {DAYS.map((d) => <Text key={d} className="flex-1 text-center text-ink-3 text-[12px] font-semibold mb-1">{tr(d)}</Text>)}
             </View>
             {Array.from({ length: cells.length / 7 }).map((_, r) => (
                 <View key={r} className="flex-row">
@@ -138,14 +139,14 @@ function TimeSheet({ title, value, onClose, onPick }) {
     return (
         <Sheet title={title} subtitle={h != null ? timeLabel(`${pad(h)}:${min}`) : ''} onClose={onClose} size="sm"
             footer={<>
-                <Btn label="No time" onPress={() => onPick('')} className="flex-1" />
-                <Btn label="Set time" variant="primary" disabled={h == null} onPress={() => onPick(`${pad(h)}:${min}`)} className="flex-1" />
+                <Btn label={tr("No time")} onPress={() => onPick('')} className="flex-1" />
+                <Btn label={tr("Set time")} variant="primary" disabled={h == null} onPress={() => onPick(`${pad(h)}:${min}`)} className="flex-1" />
             </>}>
-            <Text className="text-[12.5px] font-semibold text-ink-2 mb-1.5">Hour</Text>
+            <Text className="text-[12.5px] font-semibold text-ink-2 mb-1.5">{tr("Hour")}</Text>
             <View className="flex-row flex-wrap justify-between" style={{ rowGap: 8 }}>
                 {hours.map((x) => chip(h === x, timeLabel(`${x}:00`).replace(':00', ''), () => setH(x), x, `${pad(x)}:00`))}
             </View>
-            <Text className="text-[12.5px] font-semibold text-ink-2 mt-4 mb-1.5">Minutes</Text>
+            <Text className="text-[12.5px] font-semibold text-ink-2 mt-4 mb-1.5">{tr("Minutes")}</Text>
             <View className="flex-row flex-wrap justify-between" style={{ rowGap: 8 }}>
                 {mins.map((x) => chip(min === x, `:${x}`, () => setMin(x), x, `${x} minutes`))}
             </View>

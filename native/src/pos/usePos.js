@@ -10,6 +10,7 @@ import { getPref, setPref } from '../lib/storage';
 import { RUNNING_POLL_MS } from '../lib/config';
 import { useUi } from '../ui';
 import { del, get, post, put, newKey } from '../lib/api';
+import { tr, trn } from '../lib/i18n';
 
 const hasTables = (t) => Array.isArray(t) && t.length > 0;
 export const tblText = (t) => (t || []).map((x) => x.name).join(', ');
@@ -59,13 +60,13 @@ export function usePos(user) {
     const prefsRef = useRef(prefs);
     prefsRef.current = prefs;
 
-    const customer = customers.find((c) => c.id === Number(customerId)) || customers[0] || { id: C.defaultCustomerId, name: 'Walk-in Customer' };
+    const customer = customers.find((c) => c.id === Number(customerId)) || customers[0] || { id: C.defaultCustomerId, name: tr('Walk-in Customer') };
     const totals = calc?.totals || null;
     const itemCount = cart.reduce((s, l) => s + l.qty, 0);
     const ok = useCallback(() => setOnline(true), []);
 
     const onError = useCallback((e, fallback) => {
-        if (e?.network) { setOnline(false); notify('No connection to the server. Try again when it is back.', 4000, 'danger'); return; }
+        if (e?.network) { setOnline(false); notify(tr("No connection to the server. Try again when it is back."), 4000, 'danger'); return; }
         if (e?.code === 'REGISTER_CLOSED') { setRegisterOpen(false); setModal(null); return; }
         notify(firstError(e) || fallback, 5000, 'danger');
     }, [notify]);
@@ -187,7 +188,7 @@ export function usePos(user) {
     const removeLine = (key) => setCart((c) => c.filter((l) => l.key !== key));
 
     const onItemPress = (item) => {
-        if (item.unavailable) return notify(`${item.name} is not available right now`);
+        if (item.unavailable) return notify(tr("{name} is not available right now", { name: item.name }));
         if (!orderType) return setModal({ name: 'orderType', then: { kind: 'add', item } });
         if (item.variations.length) return setModal({ name: 'variations', item });
         if (needsOptions(item)) return setModal({ name: 'item', item });
@@ -225,8 +226,8 @@ export function usePos(user) {
     /* ---------- printing ---------- */
     const printJob = async (job) => {
         const r = await runJob(job);
-        if (r.ok) notify(`${r.title} sent to the printer`);
-        else notify(`${r.title || 'Receipt'} not printed: ${r.error}`, 8000, 'danger');
+        if (r.ok) notify(tr("{title} sent to the printer", { title: r.title }));
+        else notify(tr("{v1} not printed: {error}", { v1: r.title || 'Receipt', error: r.error }), 8000, 'danger');
         return r.ok;
     };
     const printKot = async (kot) => {
@@ -236,8 +237,8 @@ export function usePos(user) {
         for (const j of jobs) res.push(await runJob(j));      // one after the other
         const okNames = res.filter((r) => r.ok).map((r) => r.title.replace(/^KOT /, ''));
         const bad = res.filter((r) => !r.ok);
-        if (!bad.length) notify(`KOT sent to ${okNames.join(', ')}`);
-        else notify(`${okNames.length ? `KOT sent to ${okNames.join(', ')}. ` : ''}Not printed: ${bad.map((r) => `${r.title.replace(/^KOT /, '')} (${r.error})`).join('; ')}`, 8000, 'danger');
+        if (!bad.length) notify(tr("KOT sent to {v1}", { v1: okNames.join(', ') }));
+        else notify(`${okNames.length ? `${tr('KOT sent to {v1}', { v1: okNames.join(', ') })}. ` : ''}${tr('Not printed: {list}', { list: bad.map((r) => `${r.title.replace(/^KOT /, '')} (${r.error})`).join('; ') })}`, 8000, 'danger');
     };
     const reprintInvoice = async (saleId) => { try { await printJob(await get(`/v1/invoices/${saleId}/print`)); } catch (e) { onError(e); } };
     // "Clear running orders" (same as the web POS): the user's own open orders; Admin: all open orders of the outlet.
@@ -247,11 +248,11 @@ export function usePos(user) {
             const r = await post('/v1/orders/clear-mine', { pin });
             if (editingId) resetOrder();
             setModal(null);
-            notify(r.cleared ? `${r.cleared} running order${r.cleared > 1 ? 's' : ''} cleared` : 'No running orders to clear');
+            notify(r.cleared ? trn(r.cleared, '{n} running order cleared', '{n} running orders cleared') : tr("No running orders to clear"));
             refreshRunning();
             return null;
         } catch (e) {
-            if (['WRONG_PIN', 'PIN_REQUIRED', 'WRONG_PASSWORD', 'PASSWORD_REQUIRED'].includes(e?.code)) return 'The PIN is not correct.';
+            if (['WRONG_PIN', 'PIN_REQUIRED', 'WRONG_PASSWORD', 'PASSWORD_REQUIRED'].includes(e?.code)) return tr("The PIN is not correct.");
             onError(e);
             return null;
         }
@@ -265,17 +266,17 @@ export function usePos(user) {
     const acceptSelf = async (o) => {
         const r = await post(`/v1/orders/${o.id}/accept`);
         if (prefsRef.current.printKot && r.kot?.prints?.length) printKot(r.kot);
-        notify(`Order ${r.order.order_number || r.order.sale_no} accepted — sent to the kitchen`);
+        notify(tr("Order {v1} accepted — sent to the kitchen", { v1: r.order.order_number || r.order.sale_no }));
         refreshSelf(); refreshRunning();
     };
     const declineSelf = async (o) => {
         await post(`/v1/orders/${o.id}/decline`);
-        notify(`Order ${o.order_number || o.sale_no} declined`);
+        notify(tr("Order {v1} declined", { v1: o.order_number || o.sale_no }));
         refreshSelf();
     };
     /** accept it as a running order and open it for changes; false = the user kept the current order */
     const modifySelf = async (o) => {
-        if (cart.length && !(await confirm('Replace the items in the current order with this order?', { confirmLabel: 'Replace' }))) return false;
+        if (cart.length && !(await confirm(tr("Replace the items in the current order with this order?"), { confirmLabel: tr("Replace") }))) return false;
         const full = await post(`/v1/orders/${o.id}/accept-edit`);
         setModal(null);
         loadOrder(full);
@@ -291,11 +292,11 @@ export function usePos(user) {
 
     /* ---------- order flow ---------- */
     const proceed = (action, type = orderType, tbl = table) => {
-        if (!cart.length) return notify('Add at least one item to the order');
+        if (!cart.length) return notify(tr("Add at least one item to the order"));
         if (!type) return setModal({ name: 'orderType', then: { kind: action } });
         if (action === 'place') return commitOrder(type, tbl);
-        if (!canPay) return notify("Waiters can't take payment. Place the order and send it to the cashier.");
-        if (editingId) return notify('Update the order first, then take payment from Running orders.');
+        if (!canPay) return notify(tr("Waiters can't take payment. Place the order and send it to the cashier."));
+        if (editingId) return notify(tr("Update the order first, then take payment from Running orders."));
         return openQuickPayment(type, tbl);
     };
 
@@ -306,7 +307,7 @@ export function usePos(user) {
             const body = orderBody(type, tbl);
             const r = editingId ? await put(`/v1/orders/${editingId}`, body) : await post('/v1/orders', body, { idempotencyKey: newKey() });
             ok();
-            notify(`Order ${r.order.order_number || r.order.sale_no} ${editingId ? 'updated' : 'placed'} — sent to the kitchen`);
+            notify(tr(editingId ? 'Order {no} updated — sent to the kitchen' : 'Order {no} placed — sent to the kitchen', { no: r.order.order_number || r.order.sale_no }));
             let kot = r.kot;
             // a self / online order changed before it went to the kitchen: the kitchen gets the whole order now
             if (editingId && editingSelf) kot = await get(`/v1/orders/${editingId}/kot?all=1`).catch(() => r.kot);
@@ -314,21 +315,21 @@ export function usePos(user) {
             resetOrder();
             setModal(null);
             refreshRunning();
-        } catch (e) { onError(e, 'The order was not saved.'); }
+        } catch (e) { onError(e, tr("The order was not saved.")); }
         finally { setBusy(null); }
     };
 
     const refreshDrafts = useCallback(async () => { try { setDrafts(await get('/v1/drafts')); } catch { /* shown when opened */ } }, []);
     useEffect(() => { refreshDrafts(); }, [refreshDrafts]);
     const saveDraft = async () => {
-        if (!cart.length) return notify('Nothing to save — the order is empty');
-        if (editingId) return notify('This is a running order. Use Update order to save changes.');
-        try { await post('/v1/drafts', orderBody(), { idempotencyKey: newKey() }); resetOrder(); refreshDrafts(); notify('Order saved as draft'); }
+        if (!cart.length) return notify(tr("Nothing to save — the order is empty"));
+        if (editingId) return notify(tr("This is a running order. Use Update order to save changes."));
+        try { await post('/v1/drafts', orderBody(), { idempotencyKey: newKey() }); resetOrder(); refreshDrafts(); notify(tr("Order saved as draft")); }
         catch (e) { onError(e); }
     };
     // a draft back into the cart (the draft is removed, same as the desktop app / web POS)
     const restoreDraft = async (d) => {
-        if (cart.length && !(await confirm('Replace the current order with this draft?', { confirmLabel: 'Replace' }))) return false;
+        if (cart.length && !(await confirm(tr("Replace the current order with this draft?"), { confirmLabel: tr("Replace") }))) return false;
         try {
             const o = (await get(`/v1/drafts/${d.id}`)).order;
             const lines = [];
@@ -361,13 +362,13 @@ export function usePos(user) {
             await del(`/v1/drafts/${d.id}`);
             refreshDrafts();
             setModal(null);
-            notify(lines.length < (o.items || []).length ? 'Draft restored (items no longer on the menu were left out)' : 'Draft restored');
+            notify(lines.length < (o.items || []).length ? tr("Draft restored (items no longer on the menu were left out)") : tr("Draft restored"));
             return true;
         } catch (e) { onError(e); return false; }
     };
     const deleteDraft = async (d) => {
-        if (!(await confirm('Delete this draft?', { title: 'Delete draft', confirmLabel: 'Delete', danger: true }))) return;
-        try { await del(`/v1/drafts/${d.id}`); notify('Draft deleted'); } catch (e) { onError(e); }
+        if (!(await confirm(tr("Delete this draft?"), { title: tr("Delete draft"), confirmLabel: tr("Delete"), danger: true }))) return;
+        try { await del(`/v1/drafts/${d.id}`); notify(tr("Draft deleted")); } catch (e) { onError(e); }
         refreshDrafts();
     };
 
@@ -380,7 +381,7 @@ export function usePos(user) {
                 name: 'payment', source: 'cart', type, tbl, due: r.totals.total_payable, totals: r.totals,
                 adjust: { discount, charge: chargeTouched ? charge : parseAmount(r.totals?.charge_value) },
                 allowDue: customer.id !== C.defaultCustomerId,
-                label: `${ORDER_TYPES[type].label}${hasTables(tbl) ? ` · ${tblText(tbl)}` : ''} · ${customer.name}`
+                label: `${tr(ORDER_TYPES[type].label)}${hasTables(tbl) ? ` · ${tblText(tbl)}` : ''} · ${tr(customer.name)}`
             });
         } catch (e) { onError(e); }
         finally { setBusy(null); }
@@ -394,7 +395,7 @@ export function usePos(user) {
                 name: 'payment', source: 'running', orderId, due: o.totals.total_payable, totals: o.totals,
                 adjust: { discount: parseAmount(o.totals?.discount), charge: parseAmount(o.totals?.charge) },
                 allowDue: !!o.customer?.id && o.customer.id !== C.defaultCustomerId,
-                label: `${o.order_type_name || ''}${o.tables_text ? ` · ${o.tables_text}` : ''} · ${o.customer?.name || ''}`
+                label: `${tr(o.order_type_name) || ''}${o.tables_text ? ` · ${o.tables_text}` : ''} · ${tr(o.customer?.name) || ''}`
             });
         } catch (e) { onError(e); }
         finally { setBusy(null); }
@@ -422,8 +423,8 @@ export function usePos(user) {
             if (st?.state === 'done') {
                 setZatcaQueue((q) => q.filter((x) => x.id !== invoice.id));
                 const z = st.zatca || {};
-                if (z.synced) notify(`Invoice ${invoice.sale_no}: reported to ZATCA`);
-                else notify(`Invoice ${invoice.sale_no}: ZATCA — ${z.message || 'not reported yet'}`, 9000, 'danger');
+                if (z.synced) notify(tr("Invoice {sale_no}: reported to ZATCA", { sale_no: invoice.sale_no }));
+                else notify(tr("Invoice {sale_no}: ZATCA — {v2}", { sale_no: invoice.sale_no, v2: z.message || 'not reported yet' }), 9000, 'danger');
                 // the "Payment received" screen (if still open) shows the result and gets the print job
                 setModal((md) => (md?.name === 'done' && md.invoice?.id === invoice.id
                     ? { ...md, waiting: false, printed: !popup && prefsRef.current.printInvoice && !!st.print_job, invoice: { ...md.invoice, print_job: st.print_job || null, zatca: { ...(md.invoice.zatca || {}), ...z, pending: false } } } : md));
@@ -432,7 +433,7 @@ export function usePos(user) {
             }
             if (Date.now() - started > 15 * 60000) {
                 setZatcaQueue((q) => q.filter((x) => x.id !== invoice.id));
-                notify(`Invoice ${invoice.sale_no}: ZATCA is taking long. Check it in Recent sales.`, 9000);
+                notify(tr("Invoice {sale_no}: ZATCA is taking long. Check it in Recent sales.", { sale_no: invoice.sale_no }), 9000);
                 return;
             }
             setTimeout(tick, Date.now() - started < 60000 ? 1500 : 5000);
@@ -470,7 +471,7 @@ export function usePos(user) {
                     break;
                 } catch (e) {
                     if (e?.code !== 'ZATCA_BUSY' || i >= 40) throw e;
-                    notify('Waiting for the previous invoice to finish with ZATCA…', 4000);
+                    notify(tr("Waiting for the previous invoice to finish with ZATCA…"), 4000);
                     await new Promise((res) => setTimeout(res, 1500));
                 }
             }
@@ -482,7 +483,7 @@ export function usePos(user) {
             ok();
             refreshRunning();
             showInvoice(invoice);
-        } catch (e) { onError(e, 'Payment was not saved.'); }
+        } catch (e) { onError(e, tr("Payment was not saved.")); }
         finally { setBusy(null); }
     };
 
@@ -507,14 +508,14 @@ export function usePos(user) {
         setDiscount(parseAmount(o.totals?.discount));
         setCharge(parseAmount(o.totals?.charge)); setChargeTouched(true);
         setEditingId(o.id);
-        notify(`Editing order ${o.order_number || o.sale_no}`);
+        notify(tr("Editing order {v1}", { v1: o.order_number || o.sale_no }));
     };
     const modifyOrder = async (id) => {
-        if (cart.length && !editingId && !(await confirm('Replace the items in the current order with this running order?', { confirmLabel: 'Replace' }))) return false;
+        if (cart.length && !editingId && !(await confirm(tr("Replace the items in the current order with this running order?"), { confirmLabel: tr("Replace") }))) return false;
         try { loadOrder(await get(`/v1/orders/${id}`)); setModal(null); return true; } catch (e) { onError(e); return false; }
     };
     const cancelOrder = async (id, reason) => {
-        try { await post(`/v1/orders/${id}/cancel`, { reason }); notify('Order cancelled'); refreshRunning(); setModal(null); }
+        try { await post(`/v1/orders/${id}/cancel`, { reason }); notify(tr("Order cancelled")); refreshRunning(); setModal(null); }
         catch (e) { onError(e); }
     };
 

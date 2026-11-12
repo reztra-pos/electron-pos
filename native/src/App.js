@@ -9,19 +9,23 @@ import { firstError } from './lib/format';
 import ActivateScreen from './screens/Activate';
 import LoginScreen from './screens/Login';
 import PosScreen from './pos/PosScreen';
+import { LangProvider, tr, useLang } from './lib/i18n';
 
 export default function App() {
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <UiProvider><Root /></UiProvider>
-      </ThemeProvider>
+      <LangProvider>
+        <ThemeProvider>
+          <UiProvider><Root /></UiProvider>
+        </ThemeProvider>
+      </LangProvider>
     </SafeAreaProvider>
   );
 }
 
 function Root() {
   useTheme();      // re-render every screen when light / dark changes (icon colours come from COLORS)
+  useLang();       // ... and when the language changes
   const [stage, setStage] = useState('boot');     // boot | activate | login | loading | pos | error
   const [notice, setNotice] = useState('');
   const [user, setUser] = useState(null);
@@ -30,15 +34,15 @@ function Root() {
 
   useEffect(() => {
     api.setHandlers({
-      revoked: (msg) => { setUser(null); setNotice(msg || 'This device has been disabled in the web app.'); setStage('activate'); api.resetDevice(); },
-      sessionEnded: (msg) => { setUser(null); setNotice(msg || 'Your session has ended. Please log in again.'); setStage('login'); },
+      revoked: (msg) => { setUser(null); setNotice(msg || tr('This device has been disabled in the web app.')); setStage('activate'); api.resetDevice(); },
+      sessionEnded: (msg) => { setUser(null); setNotice(msg || tr('Your session has ended. Please log in again.')); setStage('login'); },
     });
     (async () => {
       const d = await api.getDevice();
       if (!d) return setStage('activate');
       setDevice(d);
       const st = await api.checkDevice();
-      if (!st.active) { setNotice(st.message || 'This device has been disabled. Activate it again.'); await api.resetDevice(); return setStage('activate'); }
+      if (!st.active) { setNotice(st.message || tr('This device has been disabled. Activate it again.')); await api.resetDevice(); return setStage('activate'); }
       setStage('login');
     })();
   }, []);
@@ -54,10 +58,10 @@ function Root() {
 
   const logout = useCallback(async () => { await api.logout(); setUser(null); setStage('login'); }, []);
 
-  if (stage === 'boot') return <Splash text="Connecting to the server…" />;
+  if (stage === 'boot') return <Splash text={tr("Connecting to the server…")} />;
   if (stage === 'activate') return <ActivateScreen notice={notice} onActivated={(d) => { setNotice(''); setDevice(d); setStage('login'); }} />;
   if (stage === 'login') return <LoginScreen notice={notice} device={device} onLogin={(u) => { setNotice(''); setUser(u); load(); }} onReset={async () => { await api.resetDevice(); setDevice(null); setStage('activate'); }} />;
-  if (stage === 'loading') return <Splash text="Loading menu, tables and settings…" />;
-  if (stage === 'error') return <Splash text={error} action={{ label: 'Retry', onClick: load }} second={{ label: 'Log out', onClick: logout }} />;
+  if (stage === 'loading') return <Splash text={tr("Loading menu, tables and settings…")} />;
+  if (stage === 'error') return <Splash text={error} action={{ label: tr("Retry"), onClick: load }} second={{ label: tr("Log out"), onClick: logout }} />;
   return <PosScreen key={user?.id} user={user} device={device} onLogout={logout} registerOpen={C.registerOpen} />;
 }

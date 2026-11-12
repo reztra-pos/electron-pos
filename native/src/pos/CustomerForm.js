@@ -8,6 +8,7 @@ import { get } from '../lib/api';
 import { C } from '../lib/catalog';
 import { firstError } from '../lib/format';
 import { Btn, COLORS, Field, Input, Segment, Sheet, useLayout } from '../ui';
+import { isRtl, tr } from '../lib/i18n';
 
 // [key, label, arabic]
 export const NATIONAL = [
@@ -32,7 +33,7 @@ export function b2bMissing(f) {
         name: f.name, trn_number: f.trn_number, postal_code: na.postal_code, street: na.street_en || na.street_ar, building_no: na.building_no,
         secondary_no: na.secondary_no, district: na.district_en || na.district_ar, city: na.city_en || na.city_ar
     };
-    return B2B_NEEDS.filter(([k]) => !String(val[k] || '').trim()).map(([, l]) => l);
+    return B2B_NEEDS.filter(([k]) => !String(val[k] || '').trim()).map(([, l]) => tr(l));
 }
 
 const EMPTY = { name: '', phone: '', email: '', trn_number: '', cr_number: '', default_discount: '', gst_number: '', same_or_diff_state: '', address: '', national_address: {} };
@@ -94,9 +95,9 @@ export function CustomerFormSheet({ edit, onClose, onSave, onError }) {
     const row = (children) => <View className={isTablet ? 'flex-row flex-wrap' : ''} style={isTablet ? { columnGap: 12 } : null}>{children}</View>;
 
     return (
-        <Sheet title={edit ? 'Edit customer' : 'Add customer'} subtitle={edit ? edit.name : ''} onClose={() => !saving && onClose()} closable={!saving} size="lg"
-            footer={<><Btn label="Cancel" disabled={saving} onPress={onClose} className="flex-1" />
-                <Btn icon={Check} label={edit ? 'Save customer' : 'Add customer'} variant="primary" busy={saving} disabled={saving || loading || !f.name.trim()} onPress={save} className="flex-1" /></>}>
+        <Sheet title={edit ? tr("Edit customer") : tr("Add customer")} subtitle={edit ? edit.name : ''} onClose={() => !saving && onClose()} closable={!saving} size="lg"
+            footer={<><Btn label={tr("Cancel")} disabled={saving} onPress={onClose} className="flex-1" />
+                <Btn icon={Check} label={edit ? tr("Save customer") : tr("Add customer")} variant="primary" busy={saving} disabled={saving || loading || !f.name.trim()} onPress={save} className="flex-1" /></>}>
             {loading ? <ActivityIndicator color={COLORS.brand} /> : (
                 <View>
                     {row(<>
@@ -107,19 +108,19 @@ export function CustomerFormSheet({ edit, onClose, onSave, onError }) {
                     {row(<>
                         {fld('trn_number', 'TRN (VAT number)', { keyboardType: 'number-pad' })}
                         {fld('cr_number', 'CR number')}
-                        {fld('default_discount', 'Default discount', { placeholder: '10 or 10%' })}
+                        {fld('default_discount', 'Default discount', { placeholder: tr("10 or 10%") })}
                     </>)}
                     {gst ? row(<>
                         {fld('gst_number', 'GST number')}
-                        <Field label="Same or different state" error={errs.same_or_diff_state} className={isTablet ? 'flex-1 min-w-[200px]' : ''}>
-                            <Segment options={[{ value: '1', label: 'Same state' }, { value: '2', label: 'Different state' }]} value={String(f.same_or_diff_state || '')} onChange={set('same_or_diff_state')} />
+                        <Field label={tr("Same or different state")} error={errs.same_or_diff_state} className={isTablet ? 'flex-1 min-w-[200px]' : ''}>
+                            <Segment options={[{ value: '1', label: tr("Same state") }, { value: '2', label: tr("Different state") }]} value={String(f.same_or_diff_state || '')} onChange={set('same_or_diff_state')} />
                         </Field>
                     </>) : null}
 
-                    <Text className="text-[12.5px] font-semibold text-ink-2 mb-1.5">Delivery address</Text>
+                    <Text className="text-[12.5px] font-semibold text-ink-2 mb-1.5">{tr("Delivery address")}</Text>
                     {addresses.length ? (
                         <View className="mb-2">
-                            {[...addresses.map((a) => ({ id: String(a.id), text: a.address })), { id: 'new', text: 'New address' }].map((a) => {
+                            {[...addresses.map((a) => ({ id: String(a.id), text: a.address })), { id: 'new', text: tr("New address") }].map((a) => {
                                 const on = addrId === a.id;
                                 return (
                                     <Pressable key={a.id} onPress={() => pickAddr(a.id)} accessibilityRole="radio" accessibilityState={{ checked: on }}
@@ -132,20 +133,20 @@ export function CustomerFormSheet({ edit, onClose, onSave, onError }) {
                         </View>
                     ) : null}
                     <Field error={errs.address}>
-                        <Input value={f.address} onChangeText={set('address')} placeholder="Delivery address" multiline className="h-20 py-2" style={{ textAlignVertical: 'top' }} accessibilityLabel="Delivery address" />
+                        <Input value={f.address} onChangeText={set('address')} placeholder={tr("Delivery address")} multiline className="h-20 py-2" style={{ textAlignVertical: 'top' }} accessibilityLabel={tr("Delivery address")} />
                     </Field>
 
-                    <View className="flex-row items-center mt-1 mb-1"><Building2 size={18} color={COLORS.ink2} /><Text className="ml-2 font-extrabold text-ink text-[16px]">National address</Text></View>
+                    <View className="flex-row items-center mt-1 mb-1"><Building2 size={18} color={COLORS.ink2} /><Text className="ml-2 font-extrabold text-ink text-[16px]">{tr("National address")}</Text></View>
                     {hasTrn ? (missing.length ? (
                         <View className="flex-row items-start bg-warn-bg rounded-xl px-3 py-2.5 mb-3">
                             <ShieldAlert size={17} color={COLORS.warn} />
-                            <Text className="text-warn text-[13px] font-semibold ml-2 flex-1">For a ZATCA standard (B2B) invoice also fill: {missing.join(', ')}</Text>
+                            <Text className="text-warn text-[13px] font-semibold ml-2 flex-1">{tr("For a ZATCA standard (B2B) invoice also fill:")} {missing.join(', ')}</Text>
                         </View>
                     ) : (
                         <View className="flex-row items-center bg-ok-bg rounded-xl px-3 py-2.5 mb-3">
-                            <ShieldCheck size={17} color={COLORS.ok} /><Text className="text-ok text-[13px] font-semibold ml-2 flex-1">Complete for a ZATCA standard (B2B) invoice</Text>
+                            <ShieldCheck size={17} color={COLORS.ok} /><Text className="text-ok text-[13px] font-semibold ml-2 flex-1">{tr("Complete for a ZATCA standard (B2B) invoice")}</Text>
                         </View>
-                    )) : <Text className="text-ink-3 text-[12.5px] mb-3">With a TRN, these are needed for ZATCA standard (B2B) invoices.</Text>}
+                    )) : <Text className="text-ink-3 text-[12.5px] mb-3">{tr("With a TRN, these are needed for ZATCA standard (B2B) invoices.")}</Text>}
                     {NA_ROWS.map((pair) => (
                         <View key={pair.join()} className="flex-row" style={{ columnGap: 12 }}>
                             {pair.map((k) => {
@@ -154,7 +155,7 @@ export function CustomerFormSheet({ edit, onClose, onSave, onError }) {
                                     <Field key={k} label={label} error={errs[`national_address.${k}`]} className="flex-1">
                                         <Input value={na[k] || ''} onChangeText={setNa(k)} placeholder={label} accessibilityLabel={label}
                                             keyboardType={k === 'postal_code' || k === 'building_no' || k === 'secondary_no' ? 'number-pad' : 'default'}
-                                            style={ar ? { textAlign: 'right', writingDirection: 'rtl' } : null} />
+                                            style={ar && !isRtl() ? { textAlign: 'right', writingDirection: 'rtl' } : null} />
                                     </Field>
                                 );
                             })}

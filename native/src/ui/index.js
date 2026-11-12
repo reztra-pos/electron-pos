@@ -7,6 +7,8 @@ import { C } from '../lib/catalog';
 import { money } from '../lib/format';
 
 import { COLORS, useTheme } from './theme';
+import { tr, useLang } from '../lib/i18n';
+
 export { COLORS };
 export { ThemeProvider, useTheme, tintFor } from './theme';
 
@@ -48,7 +50,7 @@ export function Btn({ label, icon: Icon, onPress, variant = 'neutral', disabled,
     <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel || label} disabled={disabled || busy} onPress={onPress}
       className={`${h} ${bg} rounded-btn flex-row items-center justify-center ${disabled ? 'opacity-50' : ''} active:opacity-80 ${className}`}>
       {busy ? <ActivityIndicator color={color} size="small" /> : Icon ? <Icon size={size === 'sm' ? 16 : 19} color={color} strokeWidth={2.1} /> : null}
-      {label ? <Text numberOfLines={1} className={`${fg} ${ts} font-bold ${Icon || busy ? 'ml-2' : ''} ${textClass}`}>{label}</Text> : null}
+      {label ? <Text numberOfLines={1} className={`${fg} ${ts} font-bold ${Icon || busy ? 'ml-2' : ''} ${textClass}`}>{tr(label)}</Text> : null}
       {right}
     </Pressable>
   );
@@ -67,7 +69,7 @@ export function IconBtn({ icon: Icon, onPress, label, className = '', color = CO
 const TONES = { ok: 'bg-ok-bg text-ok', warn: 'bg-warn-bg text-warn', danger: 'bg-danger-bg text-danger', info: 'bg-info-bg text-info', brand: 'bg-brand-tint text-brand-dark', neutral: 'bg-chip text-ink-2' };
 export function Tag({ text, tone = 'neutral', className = '' }) {
   const [bg, fg] = (TONES[tone] || TONES.neutral).split(' ');
-  return <View className={`${bg} rounded-md px-2 py-0.5 self-start ${className}`}><Text className={`${fg} text-[11.5px] font-bold`}>{text}</Text></View>;
+  return <View className={`${bg} rounded-md px-2 py-0.5 self-start ${className}`}><Text className={`${fg} text-[11.5px] font-bold`}>{tr(text)}</Text></View>;
 }
 
 /** pill toggle (categories, filters, segments) */
@@ -76,7 +78,7 @@ export function Pill({ label, active, onPress, count, icon: Icon, className = ''
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: !!active }}
       className={`h-10 px-4 rounded-xl flex-row items-center mr-2 ${active ? 'bg-inverse' : 'bg-card border border-line'} ${className}`}>
       {Icon ? <Icon size={15} color={active ? '#fff' : COLORS.ink2} strokeWidth={2.2} /> : null}
-      <Text className={`text-[14px] font-semibold ${Icon ? 'ml-1.5' : ''} ${active ? 'text-white' : 'text-ink-2'}`}>{label}</Text>
+      <Text className={`text-[14px] font-semibold ${Icon ? 'ml-1.5' : ''} ${active ? 'text-white' : 'text-ink-2'}`}>{tr(label)}</Text>
       {count != null ? <Text className={`ml-2 text-[11.5px] font-semibold ${active ? 'text-ink-3' : 'text-ink-3'}`}>{count}</Text> : null}
     </Pressable>
   );
@@ -93,7 +95,7 @@ export function Segment({ options, value, onChange, className = '' }) {
           <Pressable key={String(o.value)} onPress={() => onChange(o.value)} accessibilityRole="button" accessibilityState={{ selected: on }}
             className={`flex-1 h-10 rounded-[9px] flex-row items-center justify-center ${on ? 'bg-card' : ''}`} style={on ? { elevation: 1 } : null}>
             {Icon ? <Icon size={16} color={on ? COLORS.brand : COLORS.ink2} strokeWidth={2.2} /> : null}
-            <Text numberOfLines={1} className={`text-[13.5px] font-bold ${Icon ? 'ml-1.5' : ''} ${on ? 'text-brand' : 'text-ink-2'}`}>{o.label}</Text>
+            <Text numberOfLines={1} className={`text-[13.5px] font-bold ${Icon ? 'ml-1.5' : ''} ${on ? 'text-brand' : 'text-ink-2'}`}>{tr(o.label)}</Text>
           </Pressable>
         );
       })}
@@ -105,9 +107,9 @@ export function Stepper({ value, onChange, min = 0, big = false }) {
   const h = big ? 'h-12' : 'h-10';
   return (
     <View className={`flex-row items-center bg-chip rounded-xl ${h}`}>
-      <Pressable accessibilityLabel="Decrease" onPress={() => onChange(Math.max(min, value - 1))} className={`w-10 ${h} items-center justify-center`}><Minus size={17} color={COLORS.ink2} strokeWidth={2.4} /></Pressable>
+      <Pressable accessibilityLabel={tr("Decrease")} onPress={() => onChange(Math.max(min, value - 1))} className={`w-10 ${h} items-center justify-center`}><Minus size={17} color={COLORS.ink2} strokeWidth={2.4} /></Pressable>
       <Text className="min-w-[24px] text-center text-[15px] font-bold text-ink">{value}</Text>
-      <Pressable accessibilityLabel="Increase" onPress={() => onChange(value + 1)} className={`w-10 ${h} items-center justify-center`}><Plus size={17} color={COLORS.ink2} strokeWidth={2.4} /></Pressable>
+      <Pressable accessibilityLabel={tr("Increase")} onPress={() => onChange(value + 1)} className={`w-10 ${h} items-center justify-center`}><Plus size={17} color={COLORS.ink2} strokeWidth={2.4} /></Pressable>
     </View>
   );
 }
@@ -115,20 +117,20 @@ export function Stepper({ value, onChange, min = 0, big = false }) {
 export function Field({ label, children, error, className = '' }) {
   return (
     <View className={`mb-3 ${className}`}>
-      {label ? <Text className="text-[12.5px] font-semibold text-ink-2 mb-1.5">{label}</Text> : null}
+      {label ? <Text className="text-[12.5px] font-semibold text-ink-2 mb-1.5">{tr(label)}</Text> : null}
       {children}
-      {error ? <Text className="text-danger text-[12.5px] mt-1">{error}</Text> : null}
+      {error ? <Text className="text-danger text-[12.5px] mt-1">{tr(error)}</Text> : null}
     </View>
   );
 }
 export const Input = React.forwardRef(function Input({ className = '', ...p }, ref) {
-  return <TextInput ref={ref} placeholderTextColor={COLORS.ink3} className={`h-12 rounded-xl border border-line bg-card px-3 text-[15px] text-ink ${className}`} {...p} />;
+  return <TextInput ref={ref} placeholderTextColor={COLORS.ink3} className={`h-12 rounded-xl border border-line bg-card px-3 text-[15px] text-ink ${className}`} {...p} placeholder={typeof p.placeholder === 'string' ? tr(p.placeholder) : p.placeholder} />;
 });
 
 export function Row({ label, value, strong, className = '' }) {
   return (
     <View className={`flex-row justify-between items-center py-1 ${className}`}>
-      <Text className={strong ? 'text-[16px] font-extrabold text-ink' : 'text-[13.5px] text-ink-2'}>{label}</Text>
+      <Text className={strong ? 'text-[16px] font-extrabold text-ink' : 'text-[13.5px] text-ink-2'}>{tr(label)}</Text>
       {typeof value === 'string' || typeof value === 'number' ? <Text className={strong ? 'text-[20px] font-extrabold text-ink' : 'text-[13.5px] font-bold text-ink'}>{value}</Text> : value}
     </View>
   );
@@ -137,10 +139,11 @@ export function Row({ label, value, strong, className = '' }) {
 /** number pad (payment, PIN, opening balance) */
 export function Keypad({ onKey, keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'del'], className = '', keyClass = 'h-14' }) {
   return (
-    <View className={`flex-row flex-wrap -m-1 ${className}`}>
+    // digits stay 1 2 3 left-to-right in Arabic too (like a phone / calculator keypad)
+    <View className={`flex-row flex-wrap -m-1 ${className}`} style={{ direction: 'ltr' }}>
       {keys.map((k) => (
         <View key={k} className="w-1/3 p-1">
-          <Pressable accessibilityLabel={k === 'del' ? 'Delete' : k} onPress={() => onKey(k)}
+          <Pressable accessibilityLabel={k === 'del' ? tr("Delete") : k} onPress={() => onKey(k)}
             className={`${keyClass} rounded-xl bg-chip items-center justify-center active:bg-brand-tint`}>
             {k === 'del' ? <Delete size={22} color={COLORS.ink} /> : <Text className="text-[22px] font-bold text-ink">{k === 'clr' ? 'C' : k}</Text>}
           </Pressable>
@@ -163,9 +166,9 @@ export function Sheet({ visible = true, title, subtitle, onClose, children, foot
       {!isTablet ? <View className="w-11 h-1.5 rounded-full bg-line self-center mt-2.5" /> : null}
       {title ? (
         <View className="flex-row items-center px-5 pt-4 pb-3 border-b border-line">
-          <View className="flex-1"><Text className="text-[19px] font-extrabold text-ink" numberOfLines={1}>{title}</Text>
-            {subtitle ? <Text className="text-[12.5px] text-ink-2 mt-0.5" numberOfLines={1}>{subtitle}</Text> : null}</View>
-          {closable ? <Pressable accessibilityLabel="Close" onPress={onClose} className="w-10 h-10 rounded-xl items-center justify-center bg-chip"><X size={20} color={COLORS.ink2} /></Pressable> : null}
+          <View className="flex-1"><Text className="text-[19px] font-extrabold text-ink" numberOfLines={1}>{tr(title)}</Text>
+            {subtitle ? <Text className="text-[12.5px] text-ink-2 mt-0.5" numberOfLines={1}>{tr(subtitle)}</Text> : null}</View>
+          {closable ? <Pressable accessibilityLabel={tr("Close")} onPress={onClose} className="w-10 h-10 rounded-xl items-center justify-center bg-chip"><X size={20} color={COLORS.ink2} /></Pressable> : null}
         </View>
       ) : null}
       <Body className={scroll ? '' : 'flex-shrink'} contentContainerStyle={scroll ? { padding: 20 } : undefined} keyboardShouldPersistTaps="handled" style={!scroll ? { padding: 20, flexShrink: 1 } : { flexShrink: 1 }}>
@@ -191,6 +194,7 @@ export const useUi = () => useContext(UiCtx);
 
 export function UiProvider({ children }) {
   useTheme();
+  useLang();                // re-render the toasts / confirm box in the new language
   const [toast, setToast] = useState(null);
   const [dlg, setDlg] = useState(null);
   const tRef = useRef(null);
@@ -208,15 +212,15 @@ export function UiProvider({ children }) {
       {toast ? (
         <View pointerEvents="none" className="absolute left-0 right-0 bottom-24 items-center px-4">
           <View className={`rounded-2xl px-4 py-3 max-w-[560px] ${toast.tone === 'danger' ? 'bg-danger' : 'bg-inverse'}`} style={{ elevation: 6 }}>
-            <Text className="text-white text-[14px] font-semibold">{toast.text}</Text>
+            <Text className="text-white text-[14px] font-semibold">{tr(toast.text)}</Text>
           </View>
         </View>
       ) : null}
       {dlg ? (
-        <Sheet title={dlg.title || 'Please confirm'} onClose={() => close(false)} size="sm" scroll={false}
-          footer={<><Btn label={dlg.cancelLabel || 'Cancel'} onPress={() => close(false)} className="flex-1" />
-            <Btn label={dlg.confirmLabel || 'OK'} variant={dlg.danger ? 'danger' : 'primary'} onPress={() => close(true)} className="flex-1" /></>}>
-          <Text className="text-[15px] text-ink leading-6">{dlg.message}</Text>
+        <Sheet title={dlg.title || tr("Please confirm")} onClose={() => close(false)} size="sm" scroll={false}
+          footer={<><Btn label={dlg.cancelLabel || tr("Cancel")} onPress={() => close(false)} className="flex-1" />
+            <Btn label={dlg.confirmLabel || tr("OK")} variant={dlg.danger ? 'danger' : 'primary'} onPress={() => close(true)} className="flex-1" /></>}>
+          <Text className="text-[15px] text-ink leading-6">{tr(dlg.message)}</Text>
         </Sheet>
       ) : null}
     </UiCtx.Provider>
@@ -228,7 +232,7 @@ export function Splash({ text, action, second }) {
     <View className="flex-1 bg-app items-center justify-center p-6">
       <View className="w-14 h-14 rounded-2xl bg-brand items-center justify-center mb-4"><Text className="text-white text-2xl font-extrabold">R</Text></View>
       {!action ? <ActivityIndicator color={COLORS.brand} /> : null}
-      <Text className="text-ink-2 text-[15px] mt-3 text-center">{text}</Text>
+      <Text className="text-ink-2 text-[15px] mt-3 text-center">{tr(text)}</Text>
       {action ? <View className="flex-row mt-5" style={{ gap: 8 }}>
         {second ? <Btn label={second.label} onPress={second.onClick} /> : null}
         <Btn label={action.label} variant="primary" onPress={action.onClick} />

@@ -12,6 +12,7 @@
 // it uses the printer from the web app (network address).
 import { NativeModules, PermissionsAndroid, Platform } from 'react-native';
 import { getPref, setPref } from './storage';
+import { tr } from './i18n';
 
 const P = NativeModules.ReztraPrinter;
 const SUNMI_INNER = '00:11:22:33:44:55';
@@ -54,20 +55,20 @@ async function needBluetoothPermission() {
     const perm = PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT;
     if (await PermissionsAndroid.check(perm)) return;
     const r = await PermissionsAndroid.request(perm, {
-        title: 'Bluetooth printers',
-        message: 'Reztra POS needs "Nearby devices" to print on Bluetooth printers.',
-        buttonPositive: 'Allow',
+        title: tr("Bluetooth printers"),
+        message: tr("Reztra POS needs \"Nearby devices\" to print on Bluetooth printers."),
+        buttonPositive: tr('Allow'),
     });
-    if (r !== PermissionsAndroid.RESULTS.GRANTED) throw new Error('Allow "Nearby devices" for Reztra POS to use Bluetooth printers.');
+    if (r !== PermissionsAndroid.RESULTS.GRANTED) throw new Error(tr("Allow \"Nearby devices\" for Reztra POS to use Bluetooth printers."));
 }
 
 export async function listBluetooth() {
-    if (!P) throw new Error('Printing is not available in this build.');
+    if (!P) throw new Error(tr("Printing is not available in this build."));
     await needBluetoothPermission();
     return P.listBluetooth();
 }
 export async function listUsb() {
-    if (!P) throw new Error('Printing is not available in this build.');
+    if (!P) throw new Error(tr("Printing is not available in this build."));
     return P.listUsb();
 }
 
@@ -80,20 +81,20 @@ async function printBuiltin(base64) {
     const usb = await P.listUsb();
     const usbPrinter = usb.find((d) => d.printer) || usb[0];
     if (usbPrinter) return P.printUsb(usbPrinter.deviceName, base64);
-    throw new Error('No built-in printer found on this device.');
+    throw new Error(tr("No built-in printer found on this device."));
 }
 
 /** send bytes to one local route */
 export async function sendTo(route, base64, serverPrinter = null) {
-    if (!P) throw new Error('Printing is not available in this build.');
+    if (!P) throw new Error(tr("Printing is not available in this build."));
     switch (route.mode) {
         case 'network': {
             const ip = (route.ip || serverPrinter?.printer_ip_address || '').trim();
-            if (!ip) throw new Error(`Printer "${serverPrinter?.title || route.name || ''}" has no IP address.`);
+            if (!ip) throw new Error(tr("Printer \"{v1}\" has no IP address.", { v1: serverPrinter?.title || route.name || '' }));
             return P.printTcp(ip, Number(route.port || serverPrinter?.printer_port) || 9100, base64, 8000);
         }
         case 'bluetooth':
-            if (!route.address) throw new Error('Choose the Bluetooth printer in Settings → Printers.');
+            if (!route.address) throw new Error(tr("Choose the Bluetooth printer in Settings → Printers."));
             await needBluetoothPermission();
             return P.printBluetooth(route.address, base64);
         case 'usb':
@@ -101,7 +102,7 @@ export async function sendTo(route, base64, serverPrinter = null) {
         case 'builtin':
             return printBuiltin(base64);
         default:
-            throw new Error('Unknown printer type.');
+            throw new Error(tr("Unknown printer type."));
     }
 }
 
@@ -128,11 +129,11 @@ export async function routeFor(serverPrinter, role = null) {
  */
 export async function runJob(job) {
     const title = job?.title || 'Receipt';
-    if (!job) return { ok: false, title, error: 'Nothing to print.' };
-    if (!job.print_bytes) return { ok: false, title, error: job.error || 'Nothing to print.' };
+    if (!job) return { ok: false, title, error: tr("Nothing to print.") };
+    if (!job.print_bytes) return { ok: false, title, error: job.error || tr("Nothing to print.") };
     try {
         const route = await routeFor(job.printer, jobRole(job));
-        if (!route) return { ok: false, title, error: 'Choose a printer for this on this device (Settings → Printers).' };
+        if (!route) return { ok: false, title, error: tr("Choose a printer for this on this device (Settings → Printers).") };
         await sendTo(route, job.print_bytes, job.printer);
         return { ok: true, title };
     } catch (e) {
@@ -163,7 +164,7 @@ function btoaSafe(bin) {
  * Needs the app built with ReztraPrinter.printHtml (native code); an older build says so.
  */
 export async function printDocument(html, name) {
-    if (!P?.printHtml) throw new Error('Saving PDFs needs the new app build. Rebuild and install the app (npx react-native run-android).');
+    if (!P?.printHtml) throw new Error(tr("Saving PDFs needs the new app build. Rebuild and install the app (npx react-native run-android)."));
     return P.printHtml(html, name || 'Reztra POS');
 }
 

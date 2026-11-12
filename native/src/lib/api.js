@@ -7,6 +7,7 @@ import { loadDevice, saveDevice, clearDevice } from './storage';
 import { decryptApiKey } from './crypto';
 import { APP_VERSION, CLIENT, TIMEOUT_MS } from './config';
 import { uuid } from './bytes';
+import { tr } from './i18n';
 
 export class ApiError extends Error {
     constructor(message, { status = 0, code = '', errors = null, network = false } = {}) {
@@ -25,7 +26,7 @@ export async function getDevice() {
     return device;
 }
 
-const netReason = (e) => (e?.name === 'AbortError' ? 'The server did not answer in time.' : 'Check the Wi-Fi / internet connection.');
+const netReason = (e) => (e?.name === 'AbortError' ? tr('The server did not answer in time.') : tr('Check the Wi-Fi / internet connection.'));
 
 async function fetchJson(url, { method = 'GET', headers = {}, body, timeout = TIMEOUT_MS } = {}) {
     const ctrl = new AbortController();
@@ -41,7 +42,7 @@ async function fetchJson(url, { method = 'GET', headers = {}, body, timeout = TI
 
 export async function request(method, path, body, { useUser = true, deviceHeader = false, idempotencyKey = null, timeout = TIMEOUT_MS, token = null } = {}) {
     const d = await getDevice();
-    if (!d) throw new ApiError('This device is not activated.', { code: 'DEVICE_NOT_ACTIVATED' });
+    if (!d) throw new ApiError(tr('This device is not activated.'), { code: 'DEVICE_NOT_ACTIVATED' });
     const headers = { 'X-Device-Id': d.device_id };
     if (useUser && (token || userToken)) headers.Authorization = `Bearer ${token || userToken}`;
     if (!useUser) headers.Authorization = `Bearer ${d.device_token}`;
@@ -51,7 +52,7 @@ export async function request(method, path, body, { useUser = true, deviceHeader
     try {
         r = await fetchJson(`${d.url}${path}`, { method, headers, timeout, body: body != null && method !== 'GET' ? JSON.stringify(body) : undefined });
     } catch (e) {
-        throw new ApiError(`No connection to the server. ${netReason(e)}`, { network: true, code: 'NETWORK' });
+        throw new ApiError(tr('No connection to the server. {reason}', { reason: netReason(e) }), { network: true, code: 'NETWORK' });
     }
     const { res, json, text } = r;
     if (!res.ok || (json && json.success === false)) {
@@ -78,10 +79,10 @@ export async function previewKey(apiKey) {
     const out = { device_id: k.device_id, device_name: '', outlet_id: k.outlet_id, outlet_name: '', expires: k.exp ? new Date(k.exp * 1000).toISOString() : null, checked: false };
     let r;
     try { r = await fetchJson(`${k.url}/v1/devices/preview`, { method: 'POST', timeout: 10000, body: JSON.stringify({ device_id: k.device_id, code: k.code }) }); }
-    catch (e) { throw new Error(`Can't reach the server. ${netReason(e)}`); }
+    catch (e) { throw new Error(tr("Can't reach the server. {v1}", { v1: netReason(e) })); }
     const raw = r.json || {};
     if (r.res.status === 404 && !raw.code) return out;
-    if (!r.res.ok) throw new Error(raw.message || `The server refused this key (HTTP ${r.res.status}).`);
+    if (!r.res.ok) throw new Error(raw.message || tr("The server refused this key (HTTP {status}).", { status: r.res.status }));
     const b = 'data' in raw ? raw.data : raw;
     return { ...out, device_name: b.device?.name || '', outlet_name: b.outlet?.name || '', access_days: b.access_days ?? null, checked: true };
 }
@@ -94,14 +95,14 @@ export async function activate(apiKey, machine = {}) {
             method: 'POST', timeout: 15000,
             body: JSON.stringify({ device_id: k.device_id, code: k.code, machine: { hostname: machine.model || 'android', platform: Platform.OS, arch: machine.manufacturer || '' }, app_version: APP_VERSION }),
         });
-    } catch (e) { throw new Error(`Can't reach the server at ${k.url}. ${netReason(e)}`); }
+    } catch (e) { throw new Error(tr("Can't reach the server at {url}. {v2}", { url: k.url, v2: netReason(e) })); }
     const raw = r.json || {};
     if (!r.res.ok) {
         const page = String(r.text || '').replace(/<(head|style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-        throw new Error(raw.message || `The server refused the activation (HTTP ${r.res.status}).${page ? ' ' + page.slice(0, 300) : ''}`);
+        throw new Error(raw.message || tr("The server refused the activation (HTTP {status}).{v2}", { status: r.res.status, v2: page ? ' ' + page.slice(0, 300) : '' }));
     }
     const b = 'success' in raw && 'data' in raw ? raw.data : raw;
-    if (!b.device_token) throw new Error('The server response is missing the device token.');
+    if (!b.device_token) throw new Error(tr("The server response is missing the device token."));
     const data = {
         url: k.url, device_id: k.device_id,
         device_name: b.device?.name || k.device_id,

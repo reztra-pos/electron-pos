@@ -18,6 +18,7 @@ import { InvoiceSheet, RefundSheet } from './Refund';
 import { SelfOrdersSheet } from './SelfOrders';
 import { PreOrderDeliverSheet, PreOrderFormSheet, PreOrdersView } from './PreOrders';
 import { useNotifications, NotificationsSheet, RailBell, HeaderBell } from './Notifications';
+import { flipX, tr } from '../lib/i18n';
 
 const NAV = [
     { id: 'order', label: 'Order', icon: Store },
@@ -98,9 +99,9 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
 
     const status = (
         <View className="flex-row items-center" style={{ gap: 8 }}>
-            {pos.zatcaQueue.length ? <View className="flex-row items-center bg-info-bg rounded-full px-3 h-8"><Loader2 size={14} color={COLORS.info} /><Text className="text-info font-semibold text-[12.5px] ml-1.5">ZATCA {pos.zatcaQueue.length}</Text></View> : null}
-            {pos.online ? <View className="flex-row items-center bg-ok-bg rounded-full px-3 h-8"><ShieldCheck size={14} color={COLORS.ok} /><Text className="text-ok font-semibold text-[12.5px] ml-1.5">ZATCA</Text></View>
-                : <View className="flex-row items-center bg-danger-bg rounded-full px-3 h-8"><WifiOff size={14} color={COLORS.danger} /><Text className="text-danger font-semibold text-[12.5px] ml-1.5">Offline</Text></View>}
+            {pos.zatcaQueue.length ? <View className="flex-row items-center bg-info-bg rounded-full px-3 h-8"><Loader2 size={14} color={COLORS.info} /><Text className="text-info font-semibold text-[12.5px] ml-1.5">{tr("ZATCA")} {pos.zatcaQueue.length}</Text></View> : null}
+            {pos.online ? <View className="flex-row items-center bg-ok-bg rounded-full px-3 h-8"><ShieldCheck size={14} color={COLORS.ok} /><Text className="text-ok font-semibold text-[12.5px] ml-1.5">{tr("ZATCA")}</Text></View>
+                : <View className="flex-row items-center bg-danger-bg rounded-full px-3 h-8"><WifiOff size={14} color={COLORS.danger} /><Text className="text-danger font-semibold text-[12.5px] ml-1.5">{tr("Offline")}</Text></View>}
         </View>
     );
 
@@ -118,23 +119,23 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
                         const Icon = n.icon;
                         const badge = n.id === 'running' ? pos.running.length : 0;
                         return (
-                            <Pressable key={n.id} onPress={() => setView(n.id)} accessibilityLabel={n.label} className={`w-[68px] h-[62px] rounded-2xl items-center justify-center ${on ? 'bg-[#7B5CFF38]' : ''}`}>
+                            <Pressable key={n.id} onPress={() => setView(n.id)} accessibilityLabel={tr(n.label)} className={`w-[68px] h-[62px] rounded-2xl items-center justify-center ${on ? 'bg-[#7B5CFF38]' : ''}`}>
                                 <Icon size={22} color={on ? '#fff' : COLORS.railText} strokeWidth={1.9} />
-                                <Text className={`text-[11px] font-semibold mt-1 ${on ? 'text-white' : 'text-[#AEB6CC]'}`}>{n.label}</Text>
+                                <Text className={`text-[11px] font-semibold mt-1 ${on ? 'text-white' : 'text-[#AEB6CC]'}`} numberOfLines={1}>{tr(n.label)}</Text>
                                 {badge ? <View className="absolute top-1.5 right-2 min-w-[18px] h-[18px] rounded-full bg-[#FF5A5F] items-center justify-center px-1"><Text className="text-white text-[10px] font-bold">{badge}</Text></View> : null}
                             </Pressable>
                         );
                     })}
                     {pos.canSelf ? (
-                        <Pressable onPress={() => pos.setModal({ name: 'selfOrders' })} accessibilityLabel="Self / Online orders" className={`w-[68px] h-[62px] rounded-2xl items-center justify-center ${m?.name === 'selfOrders' ? 'bg-[#7B5CFF38]' : ''}`}>
+                        <Pressable onPress={() => pos.setModal({ name: 'selfOrders' })} accessibilityLabel={tr("Self / Online orders")} className={`w-[68px] h-[62px] rounded-2xl items-center justify-center ${m?.name === 'selfOrders' ? 'bg-[#7B5CFF38]' : ''}`}>
                             <Smartphone size={22} color={COLORS.railText} strokeWidth={1.9} />
-                            <Text className="text-[11px] font-semibold mt-1 text-[#AEB6CC]">Online</Text>
+                            <Text className="text-[11px] font-semibold mt-1 text-[#AEB6CC]">{tr("Online")}</Text>
                             {pos.selfCount ? <View className="absolute top-1.5 right-2 min-w-[18px] h-[18px] rounded-full bg-[#FF5A5F] items-center justify-center px-1"><Text className="text-white text-[10px] font-bold">{pos.selfCount}</Text></View> : null}
                         </Pressable>
                     ) : null}
                     <RailBell notes={notes} onPress={() => pos.setModal({ name: 'notifications' })} />
                     <View className="flex-1" />
-                    <Pressable onPress={() => theme.setMode(theme.scheme === 'dark' ? 'light' : 'dark')} accessibilityLabel={theme.scheme === 'dark' ? 'Light mode' : 'Dark mode'}
+                    <Pressable onPress={() => theme.setMode(theme.scheme === 'dark' ? 'light' : 'dark')} accessibilityLabel={theme.scheme === 'dark' ? tr("Light mode") : tr("Dark mode")}
                         className="w-[52px] h-[44px] rounded-xl items-center justify-center mb-1 active:opacity-70">
                         {theme.scheme === 'dark' ? <Sun size={21} color={COLORS.railText} strokeWidth={1.9} /> : <Moon size={21} color={COLORS.railText} strokeWidth={1.9} />}
                     </Pressable>
@@ -171,7 +172,7 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
                         <View className="flex-1"><Text className="text-[20px] font-extrabold text-ink" numberOfLines={1}>{C.outlet.name || device?.outlet_name}</Text><Text className="text-ink-2 text-[12.5px]">{user?.name}</Text></View>
                         <HeaderBell notes={notes} onPress={() => pos.setModal({ name: 'notifications' })} />
                         {pos.canSelf ? (
-                            <Pressable onPress={() => pos.setModal({ name: 'selfOrders' })} accessibilityLabel="Self / Online orders" className="w-10 h-10 rounded-xl bg-card border border-line items-center justify-center mr-2 active:opacity-70">
+                            <Pressable onPress={() => pos.setModal({ name: 'selfOrders' })} accessibilityLabel={tr("Self / Online orders")} className="w-10 h-10 rounded-xl bg-card border border-line items-center justify-center mr-2 active:opacity-70">
                                 <Smartphone size={20} color={COLORS.ink2} />
                                 {pos.selfCount ? <View className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-[#FF5A5F] items-center justify-center px-1"><Text className="text-white text-[10px] font-bold">{pos.selfCount}</Text></View> : null}
                             </Pressable>
@@ -187,9 +188,9 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
                     {pos.cart.length ? (
                         <Pressable onPress={() => setCartOpen(true)} className="absolute left-3.5 right-3.5 bottom-3 h-[62px] rounded-[18px] bg-inverse flex-row items-center px-3" style={{ elevation: 8 }}>
                             <View className="w-[38px] h-[38px] rounded-xl bg-brand items-center justify-center"><Text className="text-white font-extrabold">{pos.itemCount}</Text></View>
-                            <View className="ml-3 flex-1"><Text className="text-[#AEB6CC] text-[11.5px] font-semibold">{TYPE_OPTIONS.find((o) => o.value === pos.orderType)?.label || 'Choose order type'}{pos.table ? ` · ${pos.table.map((t) => t.name).join(', ')}` : ''}</Text>
+                            <View className="ml-3 flex-1"><Text className="text-[#AEB6CC] text-[11.5px] font-semibold">{tr(TYPE_OPTIONS.find((o) => o.value === pos.orderType)?.label) || tr("Choose order type")}{pos.table ? ` · ${pos.table.map((t) => t.name).join(', ')}` : ''}</Text>
                                 <Money value={total} bold className="text-white text-[17px] font-extrabold" /></View>
-                            <View className="h-11 rounded-xl bg-card flex-row items-center pl-4 pr-3"><Text className="text-ink font-extrabold">View order</Text><ChevronRight size={18} color={COLORS.ink} /></View>
+                            <View className="h-11 rounded-xl bg-card flex-row items-center pl-4 pr-3"><Text className="text-ink font-extrabold">{tr("View order")}</Text><ChevronRight size={18} color={COLORS.ink} style={flipX()} /></View>
                         </Pressable>
                     ) : null}
                 </View>
@@ -200,16 +201,16 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
                     const Icon = n.id === 'more' ? CircleUserRound : n.icon;
                     const badge = n.id === 'running' ? pos.running.length : 0;
                     return (
-                        <Pressable key={n.id} onPress={() => setView(n.id)} className="flex-1 items-center" accessibilityLabel={n.label}>
+                        <Pressable key={n.id} onPress={() => setView(n.id)} className="flex-1 items-center" accessibilityLabel={tr(n.label)}>
                             <Icon size={24} color={on ? COLORS.brand : COLORS.ink3} strokeWidth={on ? 2.2 : 1.8} />
-                            <Text className={`text-[11px] font-semibold mt-0.5 ${on ? 'text-brand' : 'text-ink-3'}`}>{n.id === 'more' ? 'More' : n.label}</Text>
+                            <Text className={`text-[11px] font-semibold mt-0.5 ${on ? 'text-brand' : 'text-ink-3'}`}>{n.id === 'more' ? tr("More") : tr(n.label)}</Text>
                             {badge ? <View className="absolute -top-1 left-[56%] min-w-[17px] h-[17px] rounded-full bg-[#FF5A5F] items-center justify-center px-1"><Text className="text-white text-[10px] font-bold">{badge}</Text></View> : null}
                         </Pressable>
                     );
                 })}
             </View>
             {cartOpen ? (
-                <Sheet title={pos.editingId ? 'Editing order' : 'Order'} subtitle={`${pos.itemCount} items`} onClose={() => setCartOpen(false)} size="md" scroll={false}
+                <Sheet title={pos.editingId ? tr("Editing order") : tr("Order")} subtitle={tr("{itemCount} items", { itemCount: pos.itemCount })} onClose={() => setCartOpen(false)} size="md" scroll={false}
                     footer={null}>
                     <View style={{ maxHeight: 640 }}>
                         <OrderMeta pos={pos} />

@@ -8,6 +8,7 @@ import { firstError, minutesAgo, today } from '../lib/format';
 import { listBluetooth, listUsb, getRoutes, setRoute, sendTo, testPage, MODES, ROLE, printDocument } from '../lib/printer';
 import { registerA4Html } from '../lib/reports';
 import { Btn, COLORS, Field, Input, Keypad, Money, Pill, Row, Segment, Sheet, Tag, useLayout, useTheme, useUi } from '../ui';
+import { flipX, LANGS, tr, trn, useLang } from '../lib/i18n';
 
 const TYPE_ICON = { dine: Armchair, take: ShoppingBag, delivery: Truck };
 const KITCHEN = { new: ['New', 'brand'], cooking: ['Preparing', 'warn'], ready: ['Ready', 'ok'] };
@@ -24,23 +25,23 @@ export function RunningView({ pos }) {
     return (
         <View className="flex-1">
             <View className="flex-row items-end justify-between mb-3">
-                <View><Text className="text-[22px] font-extrabold text-ink">Running orders</Text>
-                    <View className="flex-row items-center"><Text className="text-ink-2">{pos.running.length} open · </Text><Money value={total} className="text-ink-2" /></View></View>
+                <View><Text className="text-[22px] font-extrabold text-ink">{tr("Running orders")}</Text>
+                    <View className="flex-row items-center"><Text className="text-ink-2">{pos.running.length} {tr("open ·")} </Text><Money value={total} className="text-ink-2" /></View></View>
                 <View className="flex-row" style={{ gap: 8 }}>
-                    <Btn size="sm" icon={FileClock} label={`Drafts (${pos.drafts.length})`} accessibilityLabel="Drafts" onPress={() => pos.setModal({ name: 'drafts' })} />
-                    <Btn size="sm" icon={Eraser} label="Clear running orders" onPress={() => pos.setModal({ name: 'clearRunning' })} />
+                    <Btn size="sm" icon={FileClock} label={tr("Drafts ({length})", { length: pos.drafts.length })} accessibilityLabel={tr("Drafts")} onPress={() => pos.setModal({ name: 'drafts' })} />
+                    <Btn size="sm" icon={Eraser} label={tr("Clear running orders")} onPress={() => pos.setModal({ name: 'clearRunning' })} />
                 </View>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-grow-0 mb-3">
-                <Pill label="All" count={pos.running.length} active={type === 'all'} onPress={() => setType('all')} />
-                <Pill label="Dine In" icon={Armchair} count={count('dine')} active={type === 'dine'} onPress={() => setType('dine')} />
-                <Pill label="Take Away" icon={ShoppingBag} count={count('take')} active={type === 'take'} onPress={() => setType('take')} />
-                <Pill label="Delivery" icon={Truck} count={count('delivery')} active={type === 'delivery'} onPress={() => setType('delivery')} />
+                <Pill label={tr("All")} count={pos.running.length} active={type === 'all'} onPress={() => setType('all')} />
+                <Pill label={tr("Dine In")} icon={Armchair} count={count('dine')} active={type === 'dine'} onPress={() => setType('dine')} />
+                <Pill label={tr("Take Away")} icon={ShoppingBag} count={count('take')} active={type === 'take'} onPress={() => setType('take')} />
+                <Pill label={tr("Delivery")} icon={Truck} count={count('delivery')} active={type === 'delivery'} onPress={() => setType('delivery')} />
             </ScrollView>
             <FlatList data={list} key={cols} numColumns={cols} keyExtractor={(o) => String(o.id)}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await pos.refreshRunning(); setRefreshing(false); }} />}
                 columnWrapperStyle={cols > 1 ? { gap: 12 } : undefined} contentContainerStyle={{ gap: 12, paddingBottom: 100 }}
-                ListEmptyComponent={<Text className="text-ink-3 text-center mt-10">No running orders</Text>}
+                ListEmptyComponent={<Text className="text-ink-3 text-center mt-10">{tr("No running orders")}</Text>}
                 renderItem={({ item: o }) => {
                     const k = TYPE_KEY[o.order_type];
                     const Icon = TYPE_ICON[k] || Receipt;
@@ -54,8 +55,8 @@ export function RunningView({ pos }) {
                             <View className="flex-row items-center justify-between mt-3 pt-3 border-t border-dashed border-line">
                                 <Money value={o.total_payable} bold className="text-[18px] font-extrabold text-ink" />
                                 <View className="flex-row" style={{ gap: 6 }}>
-                                    <Btn size="sm" icon={Receipt} label="Bill" onPress={() => pos.printBill(o.id)} />
-                                    {pos.canPay ? <Btn size="sm" icon={Banknote} label="Pay" variant="primary" onPress={() => pos.openOrderPayment(o.id)} /> : null}
+                                    <Btn size="sm" icon={Receipt} label={tr("Bill")} onPress={() => pos.printBill(o.id)} />
+                                    {pos.canPay ? <Btn size="sm" icon={Banknote} label={tr("Pay")} variant="primary" onPress={() => pos.openOrderPayment(o.id)} /> : null}
                                 </View>
                             </View>
                         </Pressable>
@@ -71,39 +72,39 @@ export function OrderSheet({ pos, id, onClose }) {
     const [cancelling, setCancelling] = useState(false);
     const [reason, setReason] = useState('');
     useEffect(() => { get(`/v1/orders/${id}`).then(setO).catch((e) => { pos.onError(e); onClose(); }); }, [id]); // eslint-disable-line
-    if (!o) return <Sheet title="Order" onClose={onClose} size="md"><ActivityIndicator color={COLORS.brand} /></Sheet>;
+    if (!o) return <Sheet title={tr("Order")} onClose={onClose} size="md"><ActivityIndicator color={COLORS.brand} /></Sheet>;
     if (cancelling) {
         return (
-            <Sheet title={`Cancel order #${o.order_number || o.sale_no}`} onClose={onClose} size="sm"
-                footer={<><Btn label="Back" onPress={() => setCancelling(false)} className="flex-1" /><Btn label="Cancel order" variant="danger" disabled={!reason.trim()} onPress={() => pos.cancelOrder(o.id, reason.trim())} className="flex-1" /></>}>
-                <Field label="Reason"><Input value={reason} onChangeText={setReason} placeholder="e.g. customer left" autoFocus /></Field>
+            <Sheet title={tr("Cancel order #{v1}", { v1: o.order_number || o.sale_no })} onClose={onClose} size="sm"
+                footer={<><Btn label={tr("Back")} onPress={() => setCancelling(false)} className="flex-1" /><Btn label={tr("Cancel order")} variant="danger" disabled={!reason.trim()} onPress={() => pos.cancelOrder(o.id, reason.trim())} className="flex-1" /></>}>
+                <Field label={tr("Reason")}><Input value={reason} onChangeText={setReason} placeholder={tr("e.g. customer left")} autoFocus /></Field>
             </Sheet>
         );
     }
     return (
-        <Sheet title={`Order #${o.order_number || o.sale_no}`} subtitle={`${o.order_type_name}${o.tables_text ? ` · ${o.tables_text}` : ''} · ${o.customer?.name || ''}`} onClose={onClose} size="md"
+        <Sheet title={tr("Order #{v1}", { v1: o.order_number || o.sale_no })} subtitle={`${o.order_type_name}${o.tables_text ? ` · ${o.tables_text}` : ''} · ${o.customer?.name || ''}`} onClose={onClose} size="md"
             footer={<View className="flex-1" style={{ gap: 8 }}>
                 <View className="flex-row" style={{ gap: 8 }}>
-                    {o.can_modify ? <Btn icon={Pencil} label="Modify" onPress={async () => { if (await pos.modifyOrder(o.id)) onClose(); }} className="flex-1" /> : null}
-                    <Btn icon={Printer} label="KOT" onPress={() => { pos.reprintKot(o.id); onClose(); }} className="flex-1" />
-                    <Btn icon={Receipt} label="Bill" onPress={() => { pos.printBill(o.id); onClose(); }} className="flex-1" />
+                    {o.can_modify ? <Btn icon={Pencil} label={tr("Modify")} onPress={async () => { if (await pos.modifyOrder(o.id)) onClose(); }} className="flex-1" /> : null}
+                    <Btn icon={Printer} label={tr("KOT")} onPress={() => { pos.reprintKot(o.id); onClose(); }} className="flex-1" />
+                    <Btn icon={Receipt} label={tr("Bill")} onPress={() => { pos.printBill(o.id); onClose(); }} className="flex-1" />
                 </View>
                 <View className="flex-row" style={{ gap: 8 }}>
-                    {o.can_modify ? <Btn icon={Ban} label="Cancel" textClass="text-danger" onPress={async () => { if (await confirm('Cancel this order? The kitchen will be told.', { confirmLabel: 'Yes, cancel', danger: true })) setCancelling(true); }} className="flex-1" /> : null}
-                    {pos.canPay ? <Btn icon={Banknote} variant="primary" label="Pay" onPress={() => pos.openOrderPayment(o.id)} className="flex-[2]"
+                    {o.can_modify ? <Btn icon={Ban} label={tr("Cancel")} textClass="text-danger" onPress={async () => { if (await confirm(tr("Cancel this order? The kitchen will be told."), { confirmLabel: tr("Yes, cancel"), danger: true })) setCancelling(true); }} className="flex-1" /> : null}
+                    {pos.canPay ? <Btn icon={Banknote} variant="primary" label={tr("Pay")} onPress={() => pos.openOrderPayment(o.id)} className="flex-[2]"
                         right={<View className="ml-2"><Money value={o.totals.total_payable} bold className="text-white font-extrabold" /></View>} /> : null}
                 </View>
             </View>}>
             {o.items.map((l) => (
                 <View key={l.line_id} className="flex-row justify-between py-2.5 border-b border-dashed border-line">
-                    <View className="flex-1 pr-3"><Text className="font-bold text-ink">{l.qty} × {l.name}{l.is_free ? '  (free)' : ''}</Text>
+                    <View className="flex-1 pr-3"><Text className="font-bold text-ink">{l.qty} × {l.name}{l.is_free ? tr("  (free)") : ''}</Text>
                         {(l.modifiers || []).length || l.note ? <Text className="text-ink-3 text-[12.5px]">{[(l.modifiers || []).map((m) => m.name).join(', '), l.note].filter(Boolean).join(' · ')}</Text> : null}</View>
                     <Money value={l.line_total ?? l.price_with_discount} className="font-bold text-ink" />
                 </View>
             ))}
             <View className="mt-2">
-                <Row label="VAT" value={<Money value={o.totals.total_vat} className="font-bold text-ink" />} />
-                <Row strong label="Total" value={<Money value={o.totals.total_payable} bold className="text-[20px] font-extrabold text-ink" />} />
+                <Row label={tr("VAT")} value={<Money value={o.totals.total_vat} className="font-bold text-ink" />} />
+                <Row strong label={tr("Total")} value={<Money value={o.totals.total_payable} bold className="text-[20px] font-extrabold text-ink" />} />
             </View>
         </Sheet>
     );
@@ -125,15 +126,15 @@ export function TablesView({ pos, onStartOrder }) {
     return (
         <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
             <View className="flex-row items-center justify-between mb-3">
-                <Text className="text-[22px] font-extrabold text-ink">Tables</Text>
-                <Pressable onPress={load} className="flex-row items-center"><RefreshCw size={15} color={COLORS.ink2} /><Text className="ml-1 text-ink-2 font-semibold">Refresh</Text></Pressable>
+                <Text className="text-[22px] font-extrabold text-ink">{tr("Tables")}</Text>
+                <Pressable onPress={load} className="flex-row items-center"><RefreshCw size={15} color={COLORS.ink2} /><Text className="ml-1 text-ink-2 font-semibold">{tr("Refresh")}</Text></Pressable>
             </View>
             <View className="flex-row mb-3" style={{ gap: 12 }}>
-                <View className="flex-1 bg-card rounded-2xl border border-line p-3"><Text className="text-ink-2 text-[12.5px] font-semibold">Occupied</Text><Text className="text-[22px] font-extrabold text-ink">{busy} <Text className="text-ink-3 text-[14px]">/ {(data.tables || []).length}</Text></Text></View>
-                <View className="flex-1 bg-card rounded-2xl border border-line p-3"><Text className="text-ink-2 text-[12.5px] font-semibold">Guests seated</Text><Text className="text-[22px] font-extrabold text-ink">{guests}</Text></View>
+                <View className="flex-1 bg-card rounded-2xl border border-line p-3"><Text className="text-ink-2 text-[12.5px] font-semibold">{tr("Occupied")}</Text><Text className="text-[22px] font-extrabold text-ink">{busy} <Text className="text-ink-3 text-[14px]">/ {(data.tables || []).length}</Text></Text></View>
+                <View className="flex-1 bg-card rounded-2xl border border-line p-3"><Text className="text-ink-2 text-[12.5px] font-semibold">{tr("Guests seated")}</Text><Text className="text-[22px] font-extrabold text-ink">{guests}</Text></View>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-grow-0 mb-3">
-                <Pill label="All" active={area === 'all'} onPress={() => setArea('all')} />
+                <Pill label={tr("All")} active={area === 'all'} onPress={() => setArea('all')} />
                 {(data.areas || []).map((a) => <Pill key={a.id} label={a.name} active={area === a.id} onPress={() => setArea(a.id)} />)}
             </ScrollView>
             <View className="flex-row flex-wrap" style={{ gap: 12 }}>
@@ -146,9 +147,9 @@ export function TablesView({ pos, onStartOrder }) {
                         <Pressable key={t.id} onPress={() => (orders.length === 1 ? pos.setModal({ name: 'order', id: orders[0].order_id }) : orders.length > 1 ? pos.setModal({ name: 'tableOrders', table: t }) : onStartOrder(t))}
                             className="bg-card rounded-2xl border border-line p-3.5 overflow-hidden" style={{ width: w, minHeight: 120, borderLeftWidth: 5, borderLeftColor: color }}>
                             <View className="flex-row justify-between items-center"><Text className="text-[16px] font-extrabold text-ink">{t.name}</Text>
-                                <Tag text={free ? 'Free' : t.status === 'full' ? 'Occupied' : 'Partly booked'} tone={free ? 'ok' : t.status === 'full' ? 'brand' : 'warn'} /></View>
-                            <View className="flex-row items-center mt-1.5"><Users size={14} color={COLORS.ink2} /><Text className="text-ink-2 text-[12.5px] ml-1.5 font-semibold">{used ? `${used}/` : ''}{t.capacity} seats</Text></View>
-                            <Text className="text-ink-3 text-[12.5px] font-semibold mt-auto pt-3">{free ? 'Tap to start an order' : `${orders.length} order${orders.length === 1 ? '' : 's'} · ${orders.map((x) => x.sale_no).join(', ')}`}</Text>
+                                <Tag text={free ? tr("Free") : t.status === 'full' ? tr("Occupied") : tr("Partly booked")} tone={free ? 'ok' : t.status === 'full' ? 'brand' : 'warn'} /></View>
+                            <View className="flex-row items-center mt-1.5"><Users size={14} color={COLORS.ink2} /><Text className="text-ink-2 text-[12.5px] ml-1.5 font-semibold">{used ? `${used}/` : ''}{t.capacity} {tr("seats")}</Text></View>
+                            <Text className="text-ink-3 text-[12.5px] font-semibold mt-auto pt-3">{free ? tr("Tap to start an order") : `${trn(orders.length, '{n} order', '{n} orders')} · ${orders.map((x) => x.sale_no).join(', ')}`}</Text>
                         </Pressable>
                     );
                 })}
@@ -159,10 +160,10 @@ export function TablesView({ pos, onStartOrder }) {
 
 export function TableOrdersSheet({ pos, table, onClose }) {
     return (
-        <Sheet title={table.name} subtitle="Orders on this table" onClose={onClose} size="sm">
+        <Sheet title={table.name} subtitle={tr("Orders on this table")} onClose={onClose} size="sm">
             {(table.orders || []).map((o) => (
                 <Pressable key={o.order_id} onPress={() => pos.setModal({ name: 'order', id: o.order_id })} className="flex-row items-center justify-between px-3 py-3 rounded-xl border border-line mb-2">
-                    <Text className="font-bold text-ink">#{o.sale_no}</Text><Text className="text-ink-2">{o.persons} guests</Text>
+                    <Text className="font-bold text-ink">#{o.sale_no}</Text><Text className="text-ink-2">{o.persons} {tr("guests")}</Text>
                 </Pressable>
             ))}
         </Sheet>
@@ -186,22 +187,22 @@ export function SalesView({ pos }) {
     const reprint = async (id) => { setBusy(id); await pos.reprintInvoice(id); setBusy(null); };
     return (
         <View className="flex-1">
-            <Text className="text-[22px] font-extrabold text-ink mb-3">Recent sales</Text>
-            <Input value={q} onChangeText={setQ} placeholder="Invoice no, customer or phone" className="mb-3" />
-            <View className="flex-row mb-3"><Pill label="Today" active={!allDays} onPress={() => setAllDays(false)} /><Pill label="All days" active={allDays} onPress={() => setAllDays(true)} /></View>
+            <Text className="text-[22px] font-extrabold text-ink mb-3">{tr("Recent sales")}</Text>
+            <Input value={q} onChangeText={setQ} placeholder={tr("Invoice no, customer or phone")} className="mb-3" />
+            <View className="flex-row mb-3"><Pill label={tr("Today")} active={!allDays} onPress={() => setAllDays(false)} /><Pill label={tr("All days")} active={allDays} onPress={() => setAllDays(true)} /></View>
             {!list ? <ActivityIndicator color={COLORS.brand} /> : (
                 <FlatList data={list} keyExtractor={(s) => String(s.id)} contentContainerStyle={{ paddingBottom: 100, gap: 8 }}
-                    ListEmptyComponent={<Text className="text-ink-3 text-center mt-10">{allDays || q ? 'No sales found' : 'No sales today'}</Text>}
+                    ListEmptyComponent={<Text className="text-ink-3 text-center mt-10">{allDays || q ? tr("No sales found") : tr("No sales today")}</Text>}
                     renderItem={({ item: s }) => (
                         <Pressable onPress={() => pos.setModal({ name: 'invoice', id: s.id })} className={`bg-card rounded-2xl border border-line p-3.5 active:opacity-80 ${isTablet ? 'flex-row items-center' : ''}`}>
                             <View className="flex-1">
-                                <View className="flex-row items-center"><Text className="font-extrabold text-ink text-[15px]">{s.sale_no}</Text>{s.refund ? <Tag text={s.refund.refund_no || 'Credit note'} tone="warn" className="ml-2" /> : null}</View>
+                                <View className="flex-row items-center"><Text className="font-extrabold text-ink text-[15px]">{s.sale_no}</Text>{s.refund ? <Tag text={s.refund.refund_no || tr("Credit note")} tone="warn" className="ml-2" /> : null}</View>
                                 <Text className="text-ink-2 text-[12.5px]" numberOfLines={1}>{s.order_type_name} · {s.customer?.name}{s.tables_text ? ` · ${s.tables_text}` : ''} · {allDays ? s.date_time : String(s.date_time || '').slice(11, 16)}</Text>
                             </View>
                             <View className={`flex-row items-center ${isTablet ? '' : 'mt-2 justify-between'}`} style={{ gap: 8 }}>
                                 <Money value={s.total_payable} bold className="font-extrabold text-ink text-[16px] mr-2" />
-                                {pos.canRefund ? <Btn size="sm" icon={RotateCcw} label={s.refund ? 'Credit note' : 'Refund'} onPress={() => pos.setModal({ name: 'refund', sale: { id: s.id, sale_no: s.sale_no } })} /> : null}
-                                <Btn size="sm" icon={Printer} label="Reprint" busy={busy === s.id} onPress={() => reprint(s.id)} />
+                                {pos.canRefund ? <Btn size="sm" icon={RotateCcw} label={s.refund ? tr("Credit note") : tr("Refund")} onPress={() => pos.setModal({ name: 'refund', sale: { id: s.id, sale_no: s.sale_no } })} /> : null}
+                                <Btn size="sm" icon={Printer} label={tr("Reprint")} busy={busy === s.id} onPress={() => reprint(s.id)} />
                             </View>
                         </Pressable>
                     )} />
@@ -224,10 +225,10 @@ export function OpenRegisterSheet({ pos, user, onOpened, onLogout }) {
         catch (e) { setErr(firstError(e)); } finally { setSaving(false); }
     };
     return (
-        <Sheet title="Open register" onClose={() => { }} closable={false} size="sm"
-            footer={<><Btn label="Log out" icon={LogOut} onPress={onLogout} className="flex-1" /><Btn label="Open register" icon={Wallet} variant="primary" busy={saving} disabled={!methods} onPress={open} className="flex-1" /></>}>
-            <Text className="text-ink-2 mb-3">Hi {user?.name || ''}, your register is closed. Enter the opening balance to start.</Text>
-            {err ? <Text className="text-danger font-semibold mb-2">{err}  <Text className="text-brand" onPress={load}>Try again</Text></Text> : null}
+        <Sheet title={tr("Open register")} onClose={() => { }} closable={false} size="sm"
+            footer={<><Btn label={tr("Log out")} icon={LogOut} onPress={onLogout} className="flex-1" /><Btn label={tr("Open register")} icon={Wallet} variant="primary" busy={saving} disabled={!methods} onPress={open} className="flex-1" /></>}>
+            <Text className="text-ink-2 mb-3">{tr('Hi {name}, your register is closed. Enter the opening balance to start.', { name: user?.name || '' })}</Text>
+            {err ? <Text className="text-danger font-semibold mb-2">{err}  <Text className="text-brand" onPress={load}>{tr("Try again")}</Text></Text> : null}
             {!methods ? (!err ? <ActivityIndicator color={COLORS.brand} /> : null) : methods.filter((m) => !isLoyaltyMethod(m)).map((m) => (
                 <Field key={m.id} label={m.name}><Input keyboardType="decimal-pad" value={amounts[m.id] ?? ''} placeholder="0.00" onChangeText={(v) => setAmounts((a) => ({ ...a, [m.id]: v }))} /></Field>
             ))}
@@ -251,30 +252,30 @@ export function RegisterSheet({ pos, onClose, onClosed }) {
         setBusy(null);
     };
     const close = async () => {
-        if (!(await confirm('Close the register and log out? The register report is printed.', { confirmLabel: 'Close register', danger: true }))) return;
+        if (!(await confirm(tr("Close the register and log out? The register report is printed."), { confirmLabel: tr("Close register"), danger: true }))) return;
         setBusy('close');
         try { const r = await post('/v1/register/close'); await pos.printJob(r.print_job); onClosed(); }
         catch (e) { pos.onError(e); setBusy(null); }
     };
     const t = s?.totals || {};
     return (
-        <Sheet title="Register" subtitle={s ? `${s.user} · opened ${s.opened_at}` : ''} onClose={onClose} size="md"
-            footer={s ? <><Btn icon={Printer} label="Print report" busy={busy === 'print'} onPress={print} className="flex-1" /><Btn icon={FileDown} label="PDF" busy={busy === 'pdf'} disabled={!!busy} onPress={pdf} className="flex-1" /><Btn icon={Ban} label="Close register" variant="danger" busy={busy === 'close'} onPress={close} className="flex-1" /></> : null}>
+        <Sheet title={tr("Register")} subtitle={s ? tr("{user} · opened {opened_at}", { user: s.user, opened_at: s.opened_at }) : ''} onClose={onClose} size="md"
+            footer={s ? <><Btn icon={Printer} label={tr("Print report")} busy={busy === 'print'} onPress={print} className="flex-1" /><Btn icon={FileDown} label={tr("PDF")} busy={busy === 'pdf'} disabled={!!busy} onPress={pdf} className="flex-1" /><Btn icon={Ban} label={tr("Close register")} variant="danger" busy={busy === 'close'} onPress={close} className="flex-1" /></> : null}>
             {!s ? <ActivityIndicator color={COLORS.brand} /> : (
                 <View>
                     {(s.methods || []).filter((m) => !isLoyaltyMethod(m)).map((m) => (
                         <View key={m.payment_method_id} className="flex-row items-center justify-between py-2.5 border-b border-dashed border-line">
                             <View className="flex-1"><Text className="font-bold text-ink">{m.name}</Text>
-                                <Text className="text-ink-3 text-[12px]">Opening {Number(m.opening).toFixed(2)} · Sales {Number(m.sale).toFixed(2)}{Number(m.pre_order) > 0 ? ` · Pre-order ${Number(m.pre_order).toFixed(2)}` : ''}</Text></View>
+                                <Text className="text-ink-3 text-[12px]">{tr("Opening")} {Number(m.opening).toFixed(2)} {tr("· Sales")} {Number(m.sale).toFixed(2)}{Number(m.pre_order) > 0 ? tr(" · Pre-order {v1}", { v1: Number(m.pre_order).toFixed(2) }) : ''}</Text></View>
                             <Money value={m.closing} bold className="font-extrabold text-ink" />
                         </View>
                     ))}
                     <View className="mt-3">
-                        <Row label="Opening" value={<Money value={t.opening} className="font-bold text-ink" />} />
-                        <Row label="Sales" value={<Money value={t.sale} className="font-bold text-ink" />} />
-                        {Number(t.pre_order) > 0 ? <Row label="Pre-order payment" value={<Money value={t.pre_order} className="font-bold text-ink" />} /> : null}
-                        {Number(t.expense) > 0 ? <Row label="Expense" value={<Money sign="−" value={t.expense} className="font-bold text-ink" />} /> : null}
-                        <Row strong label="Closing balance" value={<Money value={t.closing} bold className="text-[20px] font-extrabold text-ink" />} />
+                        <Row label={tr("Opening")} value={<Money value={t.opening} className="font-bold text-ink" />} />
+                        <Row label={tr("Sales")} value={<Money value={t.sale} className="font-bold text-ink" />} />
+                        {Number(t.pre_order) > 0 ? <Row label={tr("Pre-order payment")} value={<Money value={t.pre_order} className="font-bold text-ink" />} /> : null}
+                        {Number(t.expense) > 0 ? <Row label={tr("Expense")} value={<Money sign="−" value={t.expense} className="font-bold text-ink" />} /> : null}
+                        <Row strong label={tr("Closing balance")} value={<Money value={t.closing} bold className="text-[20px] font-extrabold text-ink" />} />
                     </View>
                 </View>
             )}
@@ -295,7 +296,7 @@ export function LeaveSheet({ pos, exit, onClose, onLeave }) {
                 pos.setRegisterOpen(false);
                 await pos.printJob(r.print_job);              // web: Escposbuilder::buildRegister on the receipt printer
             } catch (e) {
-                if (e?.code !== 'REGISTER_CLOSED') { pos.onError(e, 'The register was not closed.'); setBusy(null); return; }
+                if (e?.code !== 'REGISTER_CLOSED') { pos.onError(e, tr("The register was not closed.")); setBusy(null); return; }
             }
         }
         onLeave();
@@ -308,20 +309,20 @@ export function LeaveSheet({ pos, exit, onClose, onLeave }) {
         setBusy(null);
     };
     return (
-        <Sheet title={exit ? 'Close the app' : 'Log out'} onClose={() => !busy && onClose()} closable={!busy} size="md"
+        <Sheet title={exit ? tr("Close the app") : tr("Log out")} onClose={() => !busy && onClose()} closable={!busy} size="md"
             footer={<View className="flex-1" style={{ gap: 8 }}>
                 <View className="flex-row" style={{ gap: 8 }}>
-                    <Btn icon={Printer} label="Print report" busy={busy === 'print'} disabled={!!busy} onPress={printIt} className="flex-1" />
-                    <Btn icon={FileDown} label="PDF" busy={busy === 'pdf'} disabled={!!busy} onPress={pdfIt} className="flex-1" />
+                    <Btn icon={Printer} label={tr("Print report")} busy={busy === 'print'} disabled={!!busy} onPress={printIt} className="flex-1" />
+                    <Btn icon={FileDown} label={tr("PDF")} busy={busy === 'pdf'} disabled={!!busy} onPress={pdfIt} className="flex-1" />
                 </View>
-                <Btn icon={LogOut} label={exit ? 'Exit without closing' : 'Log out without closing'} busy={busy === 'keep'} disabled={!!busy} onPress={() => go(false)} />
-                <Btn icon={Ban} variant="danger" label={exit ? 'Close register & exit' : 'Close register & log out'} busy={busy === 'close'} disabled={!!busy} onPress={() => go(true)} />
+                <Btn icon={LogOut} label={exit ? tr("Exit without closing") : tr("Log out without closing")} busy={busy === 'keep'} disabled={!!busy} onPress={() => go(false)} />
+                <Btn icon={Ban} variant="danger" label={exit ? tr("Close register & exit") : tr("Close register & log out")} busy={busy === 'close'} disabled={!!busy} onPress={() => go(true)} />
             </View>}>
             <View className="flex-row items-start">
                 <View className="w-11 h-11 rounded-xl bg-warn-bg items-center justify-center"><Wallet size={22} color={COLORS.warn} /></View>
                 <View className="flex-1 ml-3">
-                    <Text className="text-ink text-[15px] font-semibold">Your register is still open. Do you want to close the register before you {exit ? 'close the app' : 'log out'}?</Text>
-                    <Text className="text-ink-3 text-[13px] mt-1.5">Print or save the register report without closing the register. Closing the register prints it too.</Text>
+                    <Text className="text-ink text-[15px] font-semibold">{exit ? tr('Your register is still open. Do you want to close the register before you close the app?') : tr('Your register is still open. Do you want to close the register before you log out?')}</Text>
+                    <Text className="text-ink-3 text-[13px] mt-1.5">{tr("Print or save the register report without closing the register. Closing the register prints it too.")}</Text>
                 </View>
             </View>
         </Sheet>
@@ -335,16 +336,16 @@ export function DraftsSheet({ pos, onClose }) {
     const restore = async (d) => { setBusy(`r${d.id}`); const ok = await pos.restoreDraft(d); if (!ok) setBusy(null); };
     const remove = async (d) => { setBusy(`d${d.id}`); await pos.deleteDraft(d); setBusy(null); };
     return (
-        <Sheet title="Drafts" subtitle={pos.drafts.length ? `${pos.drafts.length} saved` : ''} onClose={onClose} size="md">
-            {!pos.drafts.length ? <Text className="text-ink-3">No drafts yet. Use Draft on an order to park it and come back to it.</Text> : pos.drafts.map((d) => (
+        <Sheet title={tr("Drafts")} subtitle={pos.drafts.length ? tr("{length} saved", { length: pos.drafts.length }) : ''} onClose={onClose} size="md">
+            {!pos.drafts.length ? <Text className="text-ink-3">{tr("No drafts yet. Use Draft on an order to park it and come back to it.")}</Text> : pos.drafts.map((d) => (
                 <View key={d.id} className="flex-row items-center py-3 border-b border-line">
                     <View className="flex-1 pr-2">
-                        <Text className="font-bold text-ink" numberOfLines={1}>{d.customer?.name || 'Customer'}</Text>
-                        <Text className="text-ink-3 text-[12.5px]" numberOfLines={2}>{d.total_items} item{Number(d.total_items) === 1 ? '' : 's'}{d.name ? ` · ${d.name}` : ''}{d.saved_at ? ` · ${d.saved_at}` : ''}</Text>
+                        <Text className="font-bold text-ink" numberOfLines={1}>{d.customer?.name || tr("Customer")}</Text>
+                        <Text className="text-ink-3 text-[12.5px]" numberOfLines={2}>{d.total_items} {tr("item")}{Number(d.total_items) === 1 ? '' : 's'}{d.name ? ` · ${d.name}` : ''}{d.saved_at ? ` · ${d.saved_at}` : ''}</Text>
                     </View>
                     <Money value={d.total_payable} bold className="font-extrabold text-ink mr-2" />
-                    <Btn size="sm" label="Restore" variant="primary" busy={busy === `r${d.id}`} disabled={!!busy} onPress={() => restore(d)} accessibilityLabel={`Restore draft ${d.id}`} />
-                    <Pressable onPress={() => remove(d)} disabled={!!busy} accessibilityLabel={`Delete draft ${d.id}`} className="w-10 h-10 items-center justify-center ml-1 active:opacity-60">
+                    <Btn size="sm" label={tr("Restore")} variant="primary" busy={busy === `r${d.id}`} disabled={!!busy} onPress={() => restore(d)} accessibilityLabel={tr("Restore draft {id}", { id: d.id })} />
+                    <Pressable onPress={() => remove(d)} disabled={!!busy} accessibilityLabel={tr("Delete draft {id}", { id: d.id })} className="w-10 h-10 items-center justify-center ml-1 active:opacity-60">
                         {busy === `d${d.id}` ? <ActivityIndicator color={COLORS.danger} /> : <Trash2 size={18} color={COLORS.danger} />}
                     </Pressable>
                 </View>
@@ -361,21 +362,21 @@ export function ClearRunningSheet({ pos, onClose }) {
     const admin = pos.user?.role === 'Admin';
     const onKey = (k) => { setErr(''); setPin((p) => (k === 'del' ? p.slice(0, -1) : k === 'clr' ? '' : (p + k).slice(0, 6))); };
     const go = async () => {
-        if (!/^\d{4,6}$/.test(pin)) return setErr('Enter your login PIN.');
+        if (!/^\d{4,6}$/.test(pin)) return setErr(tr("Enter your login PIN."));
         setBusy(true); setErr('');
         const e = await pos.clearRunning(pin);
         if (e) { setErr(e); setPin(''); setBusy(false); }
     };
     return (
-        <Sheet title="Clear running orders" onClose={() => !busy && onClose()} closable={!busy} size="sm"
-            footer={<><Btn label="Cancel" disabled={busy} onPress={onClose} className="flex-1" />
-                <Btn icon={Eraser} label="Clear orders" variant="danger" busy={busy} disabled={busy || pin.length < 4} onPress={go} className="flex-1" /></>}>
+        <Sheet title={tr("Clear running orders")} onClose={() => !busy && onClose()} closable={!busy} size="sm"
+            footer={<><Btn label={tr("Cancel")} disabled={busy} onPress={onClose} className="flex-1" />
+                <Btn icon={Eraser} label={tr("Clear orders")} variant="danger" busy={busy} disabled={busy || pin.length < 4} onPress={go} className="flex-1" /></>}>
             <Text className="text-ink">{admin
-                ? 'This removes all open orders of this outlet, from the web POS and the kitchen screen too.'
-                : "This removes your open orders (orders you placed or are the waiter of) from the web POS and the kitchen screen too. Other staff's orders stay."}</Text>
-            <Text className="text-ink-3 text-[13px] mt-1.5">Paid invoices are not affected. This cannot be undone.</Text>
-            <Text className="text-[12.5px] font-semibold text-ink-2 mt-4 text-center">Your login PIN</Text>
-            <View className="flex-row justify-center my-3" style={{ gap: 12 }} accessibilityLabel={`${pin.length} digits entered`}>
+                ? tr("This removes all open orders of this outlet, from the web POS and the kitchen screen too.")
+                : tr("This removes your open orders (orders you placed or are the waiter of) from the web POS and the kitchen screen too. Other staff's orders stay.")}</Text>
+            <Text className="text-ink-3 text-[13px] mt-1.5">{tr("Paid invoices are not affected. This cannot be undone.")}</Text>
+            <Text className="text-[12.5px] font-semibold text-ink-2 mt-4 text-center">{tr("Your login PIN")}</Text>
+            <View className="flex-row justify-center my-3" style={{ gap: 12 }} accessibilityLabel={tr("{length} digits entered", { length: pin.length })}>
                 {Array.from({ length: Math.max(4, pin.length) }).map((_, i) => (
                     <View key={i} className={`w-3.5 h-3.5 rounded-full ${i < pin.length ? 'bg-ink' : 'border-2 border-line'}`} />
                 ))}
@@ -394,58 +395,61 @@ const THEMES = [{ value: 'light', label: 'Light', icon: Sun }, { value: 'dark', 
 export function SettingsView({ pos, user, device, onLogout, onOpenRegister, onOpenPreOrders }) {
     const { notify } = useUi();
     const theme = useTheme();
+    const lang = useLang();
     const [routes, setRoutes] = useState(null);
     const [edit, setEdit] = useState(null);       // a row of the printer list
     useEffect(() => { getRoutes().then(setRoutes); }, []);
-    const label = (r) => r.mode === 'auto' ? 'Web app printer' : r.mode === 'network' ? `Network ${r.ip || ''}` : r.mode === 'bluetooth' ? `Bluetooth · ${r.name || r.address}` : r.mode === 'usb' ? `USB · ${r.name || 'first printer'}` : 'Built-in printer';
+    const label = (r) => r.mode === 'auto' ? tr('Web app printer') : r.mode === 'network' ? tr('Network {ip}', { ip: r.ip || '' }) : r.mode === 'bluetooth' ? tr('Bluetooth · {name}', { name: r.name || r.address }) : r.mode === 'usb' ? tr('USB · {name}', { name: r.name || tr('first printer') }) : tr('Built-in printer');
     const web = (p) => (p ? { ...p, printer_ip_address: p.printer_ip_address ?? p.ip_address, printer_port: p.printer_port ?? p.port } : null);
-    const kitchens = C.kitchens.length ? C.kitchens : [{ id: null, name: 'Kitchen', printer: null }];
+    const kitchens = C.kitchens.length ? C.kitchens : [{ id: null, name: tr('Kitchen'), printer: null }];
     const rows = [
-        { key: '*', title: 'Default printer of this device', sub: 'Used by everything below that has no printer of its own', isDefault: true },
-        { key: ROLE.invoice, title: 'Invoice', sub: 'Invoices, credit notes, pre-order drafts, register report' },
-        { key: ROLE.bill, title: 'Bill', sub: 'Draft bills of running orders' },
+        { key: '*', title: tr("Default printer of this device"), sub: tr("Used by everything below that has no printer of its own"), isDefault: true },
+        { key: ROLE.invoice, title: tr("Invoice"), sub: tr("Invoices, credit notes, pre-order drafts, register report") },
+        { key: ROLE.bill, title: tr("Bill"), sub: tr("Draft bills of running orders") },
         ...kitchens.map((k) => ({
-            key: k.id == null ? 'role:kot' : ROLE.kot(k.id), title: `KOT · ${k.name}`, server: web(k.printer),
-            sub: k.printer ? `Web app printer: ${k.printer.title}${k.printer.ip_address ? ` (${k.printer.ip_address})` : ''}` : 'Kitchen order tickets'
+            key: k.id == null ? 'role:kot' : ROLE.kot(k.id), title: tr("KOT · {name}", { name: k.name }), server: web(k.printer),
+            sub: k.printer ? tr("Web app printer: {title}{v2}", { title: k.printer.title, v2: k.printer.ip_address ? ` (${k.printer.ip_address})` : '' }) : tr("Kitchen order tickets")
         })),
     ];
     const shown = (r) => {
         const own = routes?.[r.key];
         if (own) return label(own);
-        if (r.isDefault) return 'Not set';
-        return routes?.['*'] ? `Default (${label(routes['*'])})` : 'Web app printer';
+        if (r.isDefault) return tr("Not set");
+        return routes?.['*'] ? tr('Default ({name})', { name: label(routes['*']) }) : tr('Web app printer');
     };
     return (
         <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-            <Text className="text-[22px] font-extrabold text-ink mb-3">Settings</Text>
+            <Text className="text-[22px] font-extrabold text-ink mb-3">{tr("Settings")}</Text>
             <View className="bg-card rounded-2xl border border-line p-4 mb-4">
                 <View className="flex-row items-center"><Monitor size={18} color={COLORS.ink2} /><Text className="ml-2 font-bold text-ink flex-1">{device?.device_name} · {device?.outlet_name}</Text></View>
-                <Text className="text-ink-2 mt-1">Logged in as {user?.name}{user?.role ? ` (${user.role})` : ''}</Text>
+                <Text className="text-ink-2 mt-1">{tr("Logged in as")} {user?.name}{user?.role ? ` (${user.role})` : ''}</Text>
                 <View className="flex-row mt-3" style={{ gap: 8 }}>
-                    {!pos.isWaiter ? <Btn icon={Wallet} label="Register" onPress={onOpenRegister} className="flex-1" /> : null}
-                    <Btn icon={LogOut} label="Log out" onPress={onLogout} className="flex-1" />
+                    {!pos.isWaiter ? <Btn icon={Wallet} label={tr("Register")} onPress={onOpenRegister} className="flex-1" /> : null}
+                    <Btn icon={LogOut} label={tr("Log out")} onPress={onLogout} className="flex-1" />
                 </View>
             </View>
             {onOpenPreOrders && pos.canPay ? (
                 <Pressable onPress={onOpenPreOrders} className="bg-card rounded-2xl border border-line p-4 mb-4 flex-row items-center active:opacity-80">
                     <View className="w-10 h-10 rounded-xl bg-brand-tint items-center justify-center"><CalendarClock size={20} color={COLORS.brand} /></View>
-                    <View className="flex-1 ml-3"><Text className="font-extrabold text-ink text-[16px]">Pre-orders</Text><Text className="text-ink-2 text-[13px]">Orders for a later date: add, prepare, deliver</Text></View>
-                    <ChevronRight size={20} color={COLORS.ink3} />
+                    <View className="flex-1 ml-3"><Text className="font-extrabold text-ink text-[16px]">{tr("Pre-orders")}</Text><Text className="text-ink-2 text-[13px]">{tr("Orders for a later date: add, prepare, deliver")}</Text></View>
+                    <ChevronRight size={20} color={COLORS.ink3} style={flipX()} />
                 </Pressable>
             ) : null}
             <View className="bg-card rounded-2xl border border-line p-4 mb-4">
-                <Text className="font-extrabold text-ink text-[16px]">Appearance</Text>
-                <Text className="text-ink-2 text-[13px] mb-3">Auto follows the light / dark setting of this device.</Text>
+                <Text className="font-extrabold text-ink text-[16px]">{tr("Appearance")}</Text>
+                <Text className="text-ink-2 text-[13px] mb-3">{tr("Auto follows the light / dark setting of this device.")}</Text>
                 <Segment options={THEMES} value={theme.mode} onChange={theme.setMode} />
+                <Text className="text-ink-2 text-[13px] mt-4 mb-2">{tr("Language")}</Text>
+                <Segment options={LANGS} value={lang.lang} onChange={async (v) => { if (await lang.setLang(v) === 'restart') notify(tr('Close and open the app again to finish switching the language.'), 6000); }} />
             </View>
             <View className="bg-card rounded-2xl border border-line p-4 mb-4">
-                <Text className="font-extrabold text-ink text-[16px] mb-2">Printing</Text>
-                <View className="flex-row items-center justify-between py-2"><Text className="text-ink">Print KOT when an order is placed</Text><Switch value={pos.prefs.printKot} onValueChange={(v) => pos.savePrefs({ ...pos.prefs, printKot: v })} trackColor={{ true: COLORS.brand }} /></View>
-                <View className="flex-row items-center justify-between py-2"><Text className="text-ink">Print the invoice after payment</Text><Switch value={pos.prefs.printInvoice} onValueChange={(v) => pos.savePrefs({ ...pos.prefs, printInvoice: v })} trackColor={{ true: COLORS.brand }} /></View>
+                <Text className="font-extrabold text-ink text-[16px] mb-2">{tr("Printing")}</Text>
+                <View className="flex-row items-center justify-between py-2"><Text className="text-ink">{tr("Print KOT when an order is placed")}</Text><Switch value={pos.prefs.printKot} onValueChange={(v) => pos.savePrefs({ ...pos.prefs, printKot: v })} trackColor={{ true: COLORS.brand }} /></View>
+                <View className="flex-row items-center justify-between py-2"><Text className="text-ink">{tr("Print the invoice after payment")}</Text><Switch value={pos.prefs.printInvoice} onValueChange={(v) => pos.savePrefs({ ...pos.prefs, printInvoice: v })} trackColor={{ true: COLORS.brand }} /></View>
             </View>
             <View className="bg-card rounded-2xl border border-line p-4">
-                <Text className="font-extrabold text-ink text-[16px]">Printers</Text>
-                <Text className="text-ink-2 text-[13px] mb-2">Choose where each receipt prints on this device. Anything without its own printer uses the default printer; with no default, the printer set in the web app.</Text>
+                <Text className="font-extrabold text-ink text-[16px]">{tr("Printers")}</Text>
+                <Text className="text-ink-2 text-[13px] mb-2">{tr("Choose where each receipt prints on this device. Anything without its own printer uses the default printer; with no default, the printer set in the web app.")}</Text>
                 {!routes ? <ActivityIndicator color={COLORS.brand} /> : rows.map((r) => (
                     <Pressable key={r.key} onPress={() => setEdit(r)} accessibilityLabel={r.title} className="flex-row items-center py-3 border-t border-line active:opacity-70">
                         <View className="flex-1 pr-2"><Text className="font-bold text-ink">{r.title}</Text><Text className="text-ink-3 text-[12px]">{r.sub}</Text></View>
@@ -454,7 +458,7 @@ export function SettingsView({ pos, user, device, onLogout, onOpenRegister, onOp
                 ))}
             </View>
             {edit ? <PrinterSheet row={edit} route={routes[edit.key]} onClose={() => setEdit(null)}
-                onSave={async (route) => { setRoutes(await setRoute(edit.key, route)); setEdit(null); notify('Printer saved'); }} /> : null}
+                onSave={async (route) => { setRoutes(await setRoute(edit.key, route)); setEdit(null); notify(tr("Printer saved")); }} /> : null}
         </ScrollView>
     );
 }
@@ -477,37 +481,37 @@ function PrinterSheet({ row, route, onClose, onSave }) {
         : mode === 'bluetooth' ? (sel?.mode === 'bluetooth' ? sel : null) : mode === 'usb' ? (sel?.mode === 'usb' ? sel : { mode: 'usb', deviceName: '', name: 'first USB printer' }) : { mode: 'builtin' };
     const test = async () => {
         const r = current();
-        if (!r) return setErr('Choose a printer first.');
+        if (!r) return setErr(tr("Choose a printer first."));
         let target = r;
-        if (r === 'default') { target = (await getRoutes())['*']; if (!target) return setErr('No default printer is set on this device yet.'); }
+        if (r === 'default') { target = (await getRoutes())['*']; if (!target) return setErr(tr("No default printer is set on this device yet.")); }
         if (target.mode === 'auto') {
-            if (!row.server?.printer_ip_address) return setErr('The web app printer is used when a receipt prints. Print a receipt to test it.');
+            if (!row.server?.printer_ip_address) return setErr(tr("The web app printer is used when a receipt prints. Print a receipt to test it."));
             target = { mode: 'network', ip: row.server.printer_ip_address, port: row.server.printer_port };
         }
         setTesting(true); setErr('');
         try { await sendTo(target, testPage(row.title), row.server); } catch (e) { setErr(e.message); }
         setTesting(false);
     };
-    const modes = [...(row.isDefault ? [] : [{ id: 'default', label: 'Use the default printer of this device' }, { id: 'auto', label: 'Printer from the web app (network address)' }]), ...MODES];
+    const modes = [...(row.isDefault ? [] : [{ id: 'default', label: tr("Use the default printer of this device") }, { id: 'auto', label: tr("Printer from the web app (network address)") }]), ...MODES];
     const ModeIcon = { default: Printer, auto: RefreshCw, network: Wifi, bluetooth: Bluetooth, usb: Usb, builtin: Cpu };
     return (
-        <Sheet title={row.title} subtitle="Where it prints on this device" onClose={onClose} size="md"
-            footer={<><Btn label="Test print" icon={Printer} busy={testing} onPress={test} className="flex-1" /><Btn label="Save" variant="primary" disabled={!current()} onPress={() => onSave(current() === 'default' ? null : current())} className="flex-1" /></>}>
+        <Sheet title={row.title} subtitle={tr("Where it prints on this device")} onClose={onClose} size="md"
+            footer={<><Btn label={tr("Test print")} icon={Printer} busy={testing} onPress={test} className="flex-1" /><Btn label={tr("Save")} variant="primary" disabled={!current()} onPress={() => onSave(current() === 'default' ? null : current())} className="flex-1" /></>}>
             {modes.map((m) => {
                 const Icon = ModeIcon[m.id];
                 const on = mode === m.id;
                 return (
                     <Pressable key={m.id} onPress={() => setMode(m.id)} accessibilityLabel={m.label} className={`flex-row items-center px-3 h-12 rounded-xl mb-1.5 border ${on ? 'border-brand bg-brand-tint' : 'border-line'}`}>
-                        <Icon size={18} color={on ? COLORS.brand : COLORS.ink2} /><Text className={`ml-2 font-semibold flex-1 ${on ? 'text-brand-dark' : 'text-ink'}`}>{m.label}</Text>{on ? <Check size={18} color={COLORS.brand} /> : null}
+                        <Icon size={18} color={on ? COLORS.brand : COLORS.ink2} /><Text className={`ml-2 font-semibold flex-1 ${on ? 'text-brand-dark' : 'text-ink'}`}>{tr(m.label)}</Text>{on ? <Check size={18} color={COLORS.brand} /> : null}
                     </Pressable>
                 );
             })}
             {mode === 'network' ? <View className="flex-row mt-2" style={{ gap: 8 }}>
-                <Field label="IP address" className="flex-[2]"><Input value={ip} onChangeText={setIp} keyboardType="numeric" placeholder="192.168.1.50" /></Field>
-                <Field label="Port" className="flex-1"><Input value={port} onChangeText={setPort} keyboardType="number-pad" /></Field></View> : null}
+                <Field label={tr("IP address")} className="flex-[2]"><Input value={ip} onChangeText={setIp} keyboardType="numeric" placeholder="192.168.1.50" /></Field>
+                <Field label={tr("Port")} className="flex-1"><Input value={port} onChangeText={setPort} keyboardType="number-pad" /></Field></View> : null}
             {mode === 'bluetooth' ? (
                 <View className="mt-2">
-                    <Text className="text-ink-2 text-[12.5px] mb-1">Paired printers (pair new ones in Android Bluetooth settings)</Text>
+                    <Text className="text-ink-2 text-[12.5px] mb-1">{tr("Paired printers (pair new ones in Android Bluetooth settings)")}</Text>
                     {!bt ? <ActivityIndicator color={COLORS.brand} /> : bt.map((d) => {
                         const on = sel?.mode === 'bluetooth' && sel.address === d.address;
                         return <Pressable key={d.address} onPress={() => setSel({ mode: 'bluetooth', address: d.address, name: d.name })} className={`flex-row items-center px-3 py-3 rounded-xl mb-1 ${on ? 'bg-brand-tint' : ''}`}>
@@ -517,14 +521,14 @@ function PrinterSheet({ row, route, onClose, onSave }) {
             ) : null}
             {mode === 'usb' ? (
                 <View className="mt-2">
-                    {!usb ? <ActivityIndicator color={COLORS.brand} /> : !usb.length ? <Text className="text-ink-2">No USB printer is connected. The first printer plugged in will be used.</Text> : usb.map((d) => {
+                    {!usb ? <ActivityIndicator color={COLORS.brand} /> : !usb.length ? <Text className="text-ink-2">{tr("No USB printer is connected. The first printer plugged in will be used.")}</Text> : usb.map((d) => {
                         const on = sel?.mode === 'usb' && sel.deviceName === d.deviceName;
                         return <Pressable key={d.deviceName} onPress={() => setSel({ mode: 'usb', deviceName: d.deviceName, name: d.name })} className={`flex-row items-center px-3 py-3 rounded-xl mb-1 ${on ? 'bg-brand-tint' : ''}`}>
-                            <Usb size={16} color={COLORS.ink2} /><Text className="ml-2 font-bold text-ink flex-1">{d.name}</Text>{d.printer ? <Tag text="Printer" tone="ok" /> : null}</Pressable>;
+                            <Usb size={16} color={COLORS.ink2} /><Text className="ml-2 font-bold text-ink flex-1">{d.name}</Text>{d.printer ? <Tag text={tr("Printer")} tone="ok" /> : null}</Pressable>;
                     })}
                 </View>
             ) : null}
-            {mode === 'builtin' ? <Text className="text-ink-2 mt-2">Uses the printer inside the POS terminal (Sunmi, iMin and similar).</Text> : null}
+            {mode === 'builtin' ? <Text className="text-ink-2 mt-2">{tr("Uses the printer inside the POS terminal (Sunmi, iMin and similar).")}</Text> : null}
             {err ? <Text className="text-danger font-semibold mt-3">{err}</Text> : null}
         </Sheet>
     );

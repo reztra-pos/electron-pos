@@ -5,6 +5,7 @@ import { Armchair, ShoppingBag, Truck, LayoutGrid, UserRound, ChefHat, Receipt, 
 import { C } from '../lib/catalog';
 import { Btn, COLORS, Money, Row, Segment, Stepper } from '../ui';
 import { tblText } from './usePos';
+import { flipX, getLang, tr } from '../lib/i18n';
 
 export const TYPE_OPTIONS = [
     { value: 'dine', label: 'Dine In', icon: Armchair },
@@ -29,10 +30,10 @@ export function OrderMeta({ pos }) {
         <View>
             <Segment options={TYPE_OPTIONS} value={orderType} onChange={(t) => pos.pickOrderType(t, null)} />
             <View className="flex-row flex-wrap mt-2.5" style={{ gap: 8 }}>
-                {orderType === 'dine' ? <Chip icon={LayoutGrid} active={!!table} text={table ? tblText(table) : 'Table'} onPress={() => pos.setModal({ name: 'table' })} /> : null}
-                {orderType === 'delivery' ? <Chip icon={Truck} active={!!partner} text={partnerName || 'Partner'} onPress={() => pos.setModal({ name: 'partner' })} /> : null}
-                <Chip icon={UserRound} text={customer.trn ? `${customer.name} · B2B` : customer.name} onPress={() => pos.setModal({ name: 'customer' })} className="flex-1 min-w-[120px]" />
-                {C.waiters.length && !pos.isWaiter ? <Chip icon={ChefHat} text={waiterName || 'Waiter'} onPress={() => pos.setModal({ name: 'waiter' })} /> : null}
+                {orderType === 'dine' ? <Chip icon={LayoutGrid} active={!!table} text={table ? tblText(table) : tr("Table")} onPress={() => pos.setModal({ name: 'table' })} /> : null}
+                {orderType === 'delivery' ? <Chip icon={Truck} active={!!partner} text={partnerName || tr("Partner")} onPress={() => pos.setModal({ name: 'partner' })} /> : null}
+                <Chip icon={UserRound} text={customer.trn ? `${tr(customer.name)} · B2B` : tr(customer.name)} onPress={() => pos.setModal({ name: 'customer' })} className="flex-1 min-w-[120px]" />
+                {C.waiters.length && !pos.isWaiter ? <Chip icon={ChefHat} text={waiterName || tr("Waiter")} onPress={() => pos.setModal({ name: 'waiter' })} /> : null}
             </View>
         </View>
     );
@@ -42,14 +43,14 @@ function Line({ l, i, pos }) {
     const srv = pos.srvFor(i);
     const total = srv ? Number(srv.line_total) : (l.price + l.mods.reduce((s, m) => s + m.price, 0)) * l.qty;
     const free = srv?.free?.reduce((a, f) => a + Number(f.qty || 0), 0) || 0;
-    const sub = [l.mods.map((m) => m.name).join(' · '), l.note, free ? `${free} free (promotion)` : '', srv && Number(srv.discount_amount) > 0 ? `− ${Number(srv.discount_amount).toFixed(2)} discount` : '']
+    const sub = [l.mods.map((m) => m.name).join(' · '), l.note, free ? tr('{free} free (promotion)', { free }) : '', srv && Number(srv.discount_amount) > 0 ? tr('− {amount} discount', { amount: Number(srv.discount_amount).toFixed(2) }) : '']
         .filter(Boolean).join(' · ');
     return (
         <Pressable onPress={() => pos.setModal({ name: 'item', item: C.byId[l.itemId], line: l })} className="flex-row items-center py-3 px-2 border-b border-dashed border-line">
             <View className="flex-1 pr-2">
-                <Text className="text-[14px] font-bold text-ink" numberOfLines={2}>{l.name}</Text>
+                <Text className="text-[14px] font-bold text-ink" numberOfLines={2}>{(getLang() === 'ar' && C.byId[l.itemId]?.name2) || l.name}</Text>
                 {sub ? <Text className="text-[12px] text-brand-dark mt-0.5" numberOfLines={2}>{sub}</Text> : null}
-                <View className="flex-row items-center mt-0.5"><Money value={l.price} className="text-[12px] text-ink-3" /><Text className="text-[12px] text-ink-3"> each</Text>{l.lineId ? <Text className="text-[11px] text-warn ml-2 font-bold">IN KITCHEN</Text> : null}</View>
+                <View className="flex-row items-center mt-0.5"><Money value={l.price} className="text-[12px] text-ink-3" /><Text className="text-[12px] text-ink-3"> {tr("each")}</Text>{l.lineId ? <Text className="text-[11px] text-warn ml-2 font-bold">{tr("IN KITCHEN")}</Text> : null}</View>
             </View>
             <Stepper value={l.qty} onChange={(q) => pos.setLineQty(l.key, q)} />
             <Money value={total} bold className="text-[14.5px] font-extrabold text-ink w-[78px] text-right" />
@@ -62,7 +63,7 @@ export function CartLines({ pos, footer }) {
         return (
             <View className="flex-1 items-center justify-center py-10">
                 <ShoppingCart size={40} color={COLORS.ink3} strokeWidth={1.5} />
-                <Text className="text-ink-3 mt-2">Tap an item on the menu to start an order.</Text>
+                <Text className="text-ink-3 mt-2">{tr("Tap an item on the menu to start an order.")}</Text>
             </View>
         );
     }
@@ -76,13 +77,13 @@ export function CartTotals({ pos }) {
     return (
         <View className="px-4 py-3 border-t border-line bg-soft">
             {pos.calcErr ? <Text className="text-danger text-[13px] mb-1">{pos.calcErr}</Text> : null}
-            <Row label={`Items (${pos.itemCount})`} value={<Money value={pos.calcBusy || !t ? localSub : t.sub_total} className="text-[13.5px] font-bold text-ink" />} />
-            {Number(t?.total_discount_amount) > 0 ? <Row label="Discount" value={<Money sign="−" value={t.total_discount_amount} className="text-[13.5px] font-bold text-ok" />} /> : null}
-            {Number(t?.charge_amount) > 0 ? <Row label={pos.orderType === 'delivery' ? 'Delivery charge' : 'Service charge'} value={<Money value={t.charge_amount} className="text-[13.5px] font-bold text-ink" />} /> : null}
-            <Row label="VAT" value={<Money value={t?.total_vat ?? 0} className="text-[13.5px] font-bold text-ink" />} />
-            {Number(t?.rounding_amount) ? <Row label="Rounding" value={<Money value={t.rounding_amount} className="text-[13.5px] font-bold text-ink" />} /> : null}
+            <Row label={tr("Items ({itemCount})", { itemCount: pos.itemCount })} value={<Money value={pos.calcBusy || !t ? localSub : t.sub_total} className="text-[13.5px] font-bold text-ink" />} />
+            {Number(t?.total_discount_amount) > 0 ? <Row label={tr("Discount")} value={<Money sign="−" value={t.total_discount_amount} className="text-[13.5px] font-bold text-ok" />} /> : null}
+            {Number(t?.charge_amount) > 0 ? <Row label={pos.orderType === 'delivery' ? tr("Delivery charge") : tr("Service charge")} value={<Money value={t.charge_amount} className="text-[13.5px] font-bold text-ink" />} /> : null}
+            <Row label={tr("VAT")} value={<Money value={t?.total_vat ?? 0} className="text-[13.5px] font-bold text-ink" />} />
+            {Number(t?.rounding_amount) ? <Row label={tr("Rounding")} value={<Money value={t.rounding_amount} className="text-[13.5px] font-bold text-ink" />} /> : null}
             <View className="flex-row justify-between items-baseline mt-1.5 pt-2 border-t border-line">
-                <Text className="text-[15px] font-bold text-ink">Total{pos.calcBusy ? ' …' : ''}</Text>
+                <Text className="text-[15px] font-bold text-ink">{tr("Total")}{pos.calcBusy ? ' …' : ''}</Text>
                 <Money value={t?.total_payable ?? 0} bold className="text-[26px] font-extrabold text-ink" />
             </View>
         </View>
@@ -96,15 +97,15 @@ export function CartActions({ pos, onDone }) {
     return (
         <View className="px-4 pt-3 pb-4" style={{ gap: 8 }}>
             <View className="flex-row" style={{ gap: 8 }}>
-                {editing ? <Btn label="Cancel edit" icon={Trash2} onPress={pos.resetOrder} className="flex-1" />
-                    : C.outlet.btnDraft ? <Btn label="Draft" icon={Save} onPress={pos.saveDraft} disabled={empty} className="flex-1" /> : null}
+                {editing ? <Btn label={tr("Cancel edit")} icon={Trash2} onPress={pos.resetOrder} className="flex-1" />
+                    : C.outlet.btnDraft ? <Btn label={tr("Draft")} icon={Save} onPress={pos.saveDraft} disabled={empty} className="flex-1" /> : null}
                 {C.outlet.btnPlace || editing
-                    ? <Btn label={editing ? 'Update order' : 'Place order'} icon={ChefHat} variant="secondary" busy={pos.busy === 'place'} disabled={empty} onPress={run(() => pos.proceed('place'))} className="flex-1" /> : null}
+                    ? <Btn label={editing ? tr("Update order") : tr("Place order")} icon={ChefHat} variant="secondary" busy={pos.busy === 'place'} disabled={empty} onPress={run(() => pos.proceed('place'))} className="flex-1" /> : null}
             </View>
             {pos.canPay && C.outlet.btnQuick && !editing ? (
                 <Btn variant="primary" size="lg" disabled={empty || !pos.totals} busy={pos.busy === 'calc'} onPress={() => pos.proceed('invoice')} className="justify-between"
-                    icon={Banknote} label="Pay now" textClass="flex-1"
-                    right={<View className="flex-row items-center"><Money value={pos.totals?.total_payable ?? 0} bold className="text-white text-[17px] font-extrabold" /><ChevronRight size={20} color="#fff" /></View>} />
+                    icon={Banknote} label={tr("Pay now")} textClass="flex-1"
+                    right={<View className="flex-row items-center"><Money value={pos.totals?.total_payable ?? 0} bold className="text-white text-[17px] font-extrabold" /><ChevronRight size={20} color="#fff" style={flipX()} /></View>} />
             ) : null}
         </View>
     );
@@ -113,10 +114,10 @@ export function CartActions({ pos, onDone }) {
 export function CartHeader({ pos }) {
     return (
         <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-[18px] font-extrabold text-ink">{pos.editingId ? 'Editing order' : 'New order'}</Text>
+            <Text className="text-[18px] font-extrabold text-ink">{pos.editingId ? tr("Editing order") : tr("New order")}</Text>
             <View className="flex-row items-center">
-                {pos.cart.length ? <Pressable onPress={pos.resetOrder} className="flex-row items-center px-2 py-1"><Trash2 size={15} color={COLORS.ink3} /><Text className="text-ink-3 text-[12.5px] font-semibold ml-1">Clear</Text></Pressable> : null}
-                <Receipt size={15} color={COLORS.ink3} /><Text className="text-ink-3 text-[12.5px] font-semibold ml-1">{pos.itemCount} items</Text>
+                {pos.cart.length ? <Pressable onPress={pos.resetOrder} className="flex-row items-center px-2 py-1"><Trash2 size={15} color={COLORS.ink3} /><Text className="text-ink-3 text-[12.5px] font-semibold ml-1">{tr("Clear")}</Text></Pressable> : null}
+                <Receipt size={15} color={COLORS.ink3} /><Text className="text-ink-3 text-[12.5px] font-semibold ml-1">{pos.itemCount} {tr("items")}</Text>
             </View>
         </View>
     );
