@@ -17,6 +17,7 @@ import { Segment } from '../ui';
 import { InvoiceSheet, RefundSheet } from './Refund';
 import { SelfOrdersSheet } from './SelfOrders';
 import { PreOrderDeliverSheet, PreOrderFormSheet, PreOrdersView } from './PreOrders';
+import { useNotifications, NotificationsSheet, RailBell, HeaderBell } from './Notifications';
 
 const NAV = [
     { id: 'order', label: 'Order', icon: Store },
@@ -29,6 +30,7 @@ const NAV = [
 
 export default function PosScreen({ user, device, onLogout, registerOpen: regInitial }) {
     const pos = usePos(user);
+    const notes = useNotifications();
     const theme = useTheme();
     const { isTablet, width, wide } = useLayout();
     const inset = useSafeAreaInsets();
@@ -75,6 +77,8 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
             {m?.name === 'tableOrders' ? <TableOrdersSheet pos={pos} table={m.table} onClose={closeModal} /> : null}
             {m?.name === 'register' ? <RegisterSheet pos={pos} onClose={closeModal} onClosed={() => { closeModal(); onLogout(); }} /> : null}
             {m?.name === 'drafts' ? <DraftsSheet pos={pos} onClose={closeModal} /> : null}
+            {m?.name === 'selfOrders' ? <SelfOrdersSheet pos={pos} onClose={closeModal} /> : null}
+            {m?.name === 'notifications' ? <NotificationsSheet notes={notes} onClose={closeModal} /> : null}
             {m?.name === 'leave' ? <LeaveSheet pos={pos} exit={m.exit} onClose={closeModal} onLeave={() => { closeModal(); if (m.exit) BackHandler.exitApp(); else onLogout(); }} /> : null}
             {m?.name === 'clearRunning' ? <ClearRunningSheet pos={pos} onClose={closeModal} /> : null}
             {m?.name === 'invoice' ? <InvoiceSheet pos={pos} id={m.id} onClose={closeModal} onRefund={(sale) => pos.setModal({ name: 'refund', sale })} /> : null}
@@ -128,6 +132,7 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
                             {pos.selfCount ? <View className="absolute top-1.5 right-2 min-w-[18px] h-[18px] rounded-full bg-[#FF5A5F] items-center justify-center px-1"><Text className="text-white text-[10px] font-bold">{pos.selfCount}</Text></View> : null}
                         </Pressable>
                     ) : null}
+                    <RailBell notes={notes} onPress={() => pos.setModal({ name: 'notifications' })} />
                     <View className="flex-1" />
                     <Pressable onPress={() => theme.setMode(theme.scheme === 'dark' ? 'light' : 'dark')} accessibilityLabel={theme.scheme === 'dark' ? 'Light mode' : 'Dark mode'}
                         className="w-[52px] h-[44px] rounded-xl items-center justify-center mb-1 active:opacity-70">
@@ -164,6 +169,7 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
                 <View className="flex-1">
                     <View className="flex-row items-center px-[18px] pt-1.5 pb-2.5">
                         <View className="flex-1"><Text className="text-[20px] font-extrabold text-ink" numberOfLines={1}>{C.outlet.name || device?.outlet_name}</Text><Text className="text-ink-2 text-[12.5px]">{user?.name}</Text></View>
+                        <HeaderBell notes={notes} onPress={() => pos.setModal({ name: 'notifications' })} />
                         {pos.canSelf ? (
                             <Pressable onPress={() => pos.setModal({ name: 'selfOrders' })} accessibilityLabel="Self / Online orders" className="w-10 h-10 rounded-xl bg-card border border-line items-center justify-center mr-2 active:opacity-70">
                                 <Smartphone size={20} color={COLORS.ink2} />
