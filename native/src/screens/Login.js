@@ -7,6 +7,7 @@ import { loginPin, loginPassword } from '../lib/api';
 import { firstError } from '../lib/format';
 import { LANGS, tr, useLang } from '../lib/i18n';
 import { dateLabel } from '../pos/DateTime';
+import { trialNow } from '../lib/trial';
 
 const PIN_LEN = 4;
 
@@ -88,6 +89,7 @@ export default function LoginScreen({ onLogin, notice = '', device, onReset }) {
 
     return (
         <ScrollView className="flex-1 bg-app" contentContainerStyle={{ flexGrow: 1, padding: 20, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
+            {trialNow().trial ? <View className="bg-warn-bg rounded-full px-4 py-1.5 mb-3 self-center"><Text className="text-warn font-bold text-[13px]">{tr('Test version · works until {date}', { date: dateLabel(new Date(trialNow().until).toISOString().slice(0, 10)) })}</Text></View> : null}
             {notice ? <View className="flex-row items-center bg-danger-bg rounded-xl p-3 mb-4 self-center" style={{ maxWidth: 720 }}><ShieldAlert size={18} color={COLORS.danger} /><Text className="text-danger font-semibold ml-2">{notice}</Text></View> : null}
             {isTablet ? (
                 <View className="flex-row items-center justify-center" style={{ gap: 60 }}>

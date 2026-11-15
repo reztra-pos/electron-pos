@@ -544,4 +544,9 @@ export default {
     "· Sales": "· बिक्री",
     "· sold": "· बिका",
     "− {amount} discount": "− {amount} छूट",
+    "The trial version has ended": "ट्रायल संस्करण समाप्त हो गया है",
+    "This test version of Reztra POS stopped working on {date}. Contact Reztra to get the full version.": "Reztra POS का यह टेस्ट संस्करण {date} को बंद हो गया। पूरा संस्करण पाने के लिए Reztra से संपर्क करें।",
+    "Trial · {n} day left": "ट्रायल · {n} दिन बाकी",
+    "Trial · {n} days left": "ट्रायल · {n} दिन बाकी",
+    "Test version · works until {date}": "टेस्ट संस्करण · {date} तक चलेगा",
 };

@@ -8,6 +8,10 @@
     "lint": "eslint .",
     "start": "react-native start",
     "test": "jest",
+    "trial:on": "node scripts/make-trial.mjs 3",
+    "trial:off": "node scripts/make-trial.mjs off",
+    "apk:trial": "node scripts/build-apk.mjs 3",
+    "apk:prod": "node scripts/build-apk.mjs off",
     "build:apk": "cd android && ./gradlew assembleRelease",
     "build:aab": "cd android && ./gradlew bundleRelease"
   },

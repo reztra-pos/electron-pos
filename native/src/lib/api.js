@@ -8,6 +8,7 @@ import { decryptApiKey } from './crypto';
 import { APP_VERSION, CLIENT, TIMEOUT_MS } from './config';
 import { uuid } from './bytes';
 import { tr } from './i18n';
+import { noteServerDate } from './trial';
 
 export class ApiError extends Error {
     constructor(message, { status = 0, code = '', errors = null, network = false } = {}) {
@@ -33,6 +34,7 @@ async function fetchJson(url, { method = 'GET', headers = {}, body, timeout = TI
     const t = setTimeout(() => ctrl.abort(), timeout);
     try {
         const res = await fetch(url, { method, headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...headers }, body, signal: ctrl.signal });
+        noteServerDate(res.headers?.get?.('date'));            // trial builds: the server's clock, not only the tablet's
         const text = await res.text().catch(() => '');
         let json = null;
         try { json = JSON.parse(text); } catch { /* not JSON */ }

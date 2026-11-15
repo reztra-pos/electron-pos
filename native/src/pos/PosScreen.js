@@ -18,7 +18,8 @@ import { InvoiceSheet, RefundSheet } from './Refund';
 import { SelfOrdersView } from './SelfOrders';
 import { PreOrderDeliverSheet, PreOrderFormSheet, PreOrdersView } from './PreOrders';
 import { useNotifications, NotificationsView, HeaderBell } from './Notifications';
-import { flipX, tr } from '../lib/i18n';
+import { flipX, tr, trn } from '../lib/i18n';
+import { trialNow } from '../lib/trial';
 
 const NAV = [
     { id: 'order', label: 'Order', icon: Store },
@@ -101,6 +102,7 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
 
     const status = (
         <View className="flex-row items-center" style={{ gap: 8 }}>
+            {trialNow().trial ? <View className="flex-row items-center bg-warn-bg rounded-full px-3 h-8"><Text className="text-warn font-bold text-[12.5px]">{trn(trialNow().daysLeft, 'Trial · {n} day left', 'Trial · {n} days left')}</Text></View> : null}
             {pos.zatcaQueue.length ? <View className="flex-row items-center bg-info-bg rounded-full px-3 h-8"><Loader2 size={14} color={COLORS.info} /><Text className="text-info font-semibold text-[12.5px] ml-1.5">{tr("ZATCA")} {pos.zatcaQueue.length}</Text></View> : null}
             {pos.online ? <View className="flex-row items-center bg-ok-bg rounded-full px-3 h-8"><ShieldCheck size={14} color={COLORS.ok} /><Text className="text-ok font-semibold text-[12.5px] ml-1.5">{tr("ZATCA")}</Text></View>
                 : <View className="flex-row items-center bg-danger-bg rounded-full px-3 h-8"><WifiOff size={14} color={COLORS.danger} /><Text className="text-danger font-semibold text-[12.5px] ml-1.5">{tr("Offline")}</Text></View>}

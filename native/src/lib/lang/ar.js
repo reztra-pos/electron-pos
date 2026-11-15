@@ -544,4 +544,9 @@ export default {
     "· Sales": "· المبيعات",
     "· sold": "· المباع",
     "− {amount} discount": "− {amount} خصم",
+    "The trial version has ended": "انتهت النسخة التجريبية",
+    "This test version of Reztra POS stopped working on {date}. Contact Reztra to get the full version.": "توقفت هذه النسخة التجريبية من Reztra POS عن العمل في {date}. تواصل مع ريزترا للحصول على النسخة الكاملة.",
+    "Trial · {n} day left": "تجريبي · متبقٍ {n} يوم",
+    "Trial · {n} days left": "تجريبي · متبقٍ {n} أيام",
+    "Test version · works until {date}": "نسخة تجريبية · تعمل حتى {date}",
 };
