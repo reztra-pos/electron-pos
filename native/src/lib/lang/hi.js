@@ -73,6 +73,8 @@ export default {
     "Card": "कार्ड",
     "Cash": "नकद",
     "Change": "बाकी",
+    "Invoice {sale_no} · printing": "इनवॉइस {sale_no} · प्रिंट हो रहा है",
+    "Invoice {sale_no} · printing · change to return {v1}": "इनवॉइस {sale_no} · प्रिंट हो रहा है · लौटाने हैं {v1}",
     "Change to return": "लौटाने की राशि",
     "Charge": "शुल्क",
     "Check key": "कुंजी जाँचें",

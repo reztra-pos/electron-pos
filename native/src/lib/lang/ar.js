@@ -73,6 +73,8 @@ export default {
     "Card": "بطاقة",
     "Cash": "نقدًا",
     "Change": "الباقي",
+    "Invoice {sale_no} · printing": "الفاتورة {sale_no} · جارٍ الطباعة",
+    "Invoice {sale_no} · printing · change to return {v1}": "الفاتورة {sale_no} · جارٍ الطباعة · الباقي للعميل {v1}",
     "Change to return": "الباقي للعميل",
     "Charge": "رسوم",
     "Check key": "تحقق من المفتاح",

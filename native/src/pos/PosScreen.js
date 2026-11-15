@@ -42,6 +42,8 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
     const [cartOpen, setCartOpen] = useState(false);
     // Modify a running order (from Running, Tables or Online): it is loaded into the cart -> go to the Order screen
     useEffect(() => { if (pos.editingId) setView('order'); }, [pos.editingId]);
+    // invoice paid with "Print the invoice after payment" on: no popup, straight back to the Order screen
+    useEffect(() => { if (pos.paidTick) { setCartOpen(false); setView('order'); } }, [pos.paidTick]);
     const menu = useMenuFilter();
     const [menuView, setMenuView] = useMenuView();        // pictures / names only, saved on this device
     const plain = menuView === 'text';
@@ -51,6 +53,8 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
     }, {}), [pos.cart]);
     const needRegister = !pos.isWaiter && pos.registerOpen === false;
     const closeModal = () => pos.setModal(null);
+    // "Payment received" popup closed (Print invoice / New order / X): close the order (cart) popup too and go to the Order screen
+    const afterInvoice = () => { pos.setModal(null); setCartOpen(false); setView('order'); };
     const m = pos.modal;
 
     // log out: with the register still open, ask first (close it, keep it open, or stay) - same as the desktop app
@@ -80,7 +84,7 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
             {m?.name === 'item' ? <ItemSheet pos={pos} item={m.item} line={m.line} onClose={closeModal} /> : null}
             {m?.name === 'variations' ? <VariationSheet pos={pos} item={m.item} onClose={closeModal} /> : null}
             {m?.name === 'payment' && pos.canInvoice ? <PaymentSheet pos={pos} m={m} onClose={closeModal} /> : null}
-            {m?.name === 'done' ? <DoneSheet pos={pos} m={m} onClose={closeModal} /> : null}
+            {m?.name === 'done' ? <DoneSheet pos={pos} m={m} onClose={afterInvoice} /> : null}
             {m?.name === 'order' ? <OrderSheet pos={pos} id={m.id} onClose={closeModal} /> : null}
             {m?.name === 'tableOrders' ? <TableOrdersSheet pos={pos} table={m.table} onClose={closeModal} /> : null}
             {m?.name === 'register' ? <RegisterSheet pos={pos} onClose={closeModal} onClosed={() => { closeModal(); onLogout(); }} /> : null}

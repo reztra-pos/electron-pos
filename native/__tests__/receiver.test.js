@@ -96,3 +96,79 @@ test('Modify a running order opens the Order screen', async () => {
     screen.unmount();
     global.fetch = prev;
 });
+
+async function payRunning(printInvoice) {
+    USER = { token: 'x', user: { id: 1, name: 'Admin', role: 'Admin' }, permissions: { all: [] } };
+    const { setPref } = require('../src/lib/storage');
+    await setPref('prefs', { printKot: true, printInvoice });
+    const prev = global.fetch;
+    global.fetch = jest.fn(async (url, o) => {
+        const p = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
+        let d = null;
+        if (p === '/v1/orders/9') d = {
+            id: 9, sale_no: 'S9', order_number: 'A9', order_type: 2, order_type_name: 'Take Away', can_modify: true, customer: { id: 1, name: 'Walk-in Customer' },
+            totals: { sub_total: 5, total_vat: 0, total_payable: 5, discount: '0', charge: '0' }, items: [{ line_id: 1, food_menu_id: 2, name: 'Pepsi', qty: 1, unit_price: 5, line_total: 5, modifiers: [] }]
+        };
+        else if (p === '/v1/orders/9/invoice') d = { id: 70, sale_no: 'INV-70', totals: { total_payable: 5, change_amount: 0 }, zatca: { synced: true }, print_job: null };
+        if (!d) return prev(url, o);
+        return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify({ success: true, data: d }) };
+    });
+    render(<App />);
+    await login();
+    go('Running');
+    tap(await screen.findByText('#A9'));
+    tap((await screen.findAllByText('Pay')).slice(-1)[0]);
+    tap(await screen.findByText('Complete & print'));
+    return () => { screen.unmount(); global.fetch = prev; };
+}
+
+test('"Print the invoice after payment" on: no popup, back to the Order screen', async () => {
+    const done = await payRunning(true);
+    await screen.findAllByLabelText('Pepsi');
+    expect(screen.queryByText('Payment received')).toBeNull();
+    expect(screen.queryByText('#A9')).toBeNull();
+    await screen.findByText('Invoice INV-70 · printing');
+    done();
+});
+
+for (const btn of ['New order', 'Print invoice']) {
+    test(`"Print the invoice after payment" off: the Payment received popup; "${btn}" goes back to the Order screen`, async () => {
+        const done = await payRunning(false);
+        await screen.findByText('Payment received');
+        tap(screen.getByText(btn));
+        await waitFor(() => expect(screen.queryByText('Payment received')).toBeNull());
+        await screen.findAllByLabelText('Pepsi');
+        expect(screen.queryByText('#A9')).toBeNull();
+        expect(screen.queryByText('View order') ? screen.queryByText('Editing order') : null).toBeNull();
+        done();
+    });
+}
+
+test('phone / tablet: Pay now from the cart, popup off -> "New order" closes the cart popup too', async () => {
+    USER = { token: 'x', user: { id: 1, name: 'Admin', role: 'Admin' }, permissions: { all: [] } };
+    const { setPref } = require('../src/lib/storage');
+    await setPref('prefs', { printKot: true, printInvoice: false });
+    const prev = global.fetch;
+    global.fetch = jest.fn(async (url, o) => {
+        const p = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
+        let d = null;
+        if (p === '/v1/orders/calculate') d = { totals: { sub_total: 5, total_vat: 0, total_payable: 5 } };
+        else if (p === '/v1/invoices/quick') d = { invoice: { id: 71, sale_no: 'INV-71', totals: { total_payable: 5 }, zatca: { synced: true }, print_job: null } };
+        if (!d) return prev(url, o);
+        return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify({ success: true, data: d }) };
+    });
+    render(<App />);
+    await login();
+    tap(screen.getAllByLabelText('Pepsi')[0]);
+    const phone = await screen.findByText('View order', {}, { timeout: 800 }).catch(() => null);
+    if (phone) tap(phone);
+    await screen.findByText('Pay now');
+    // the cart total is calculated first (Pay now waits for it)
+    await waitFor(() => { if (!screen.queryByText('Complete & print')) tap(screen.getByText('Pay now')); expect(screen.getByText('Complete & print')).toBeTruthy(); }, { timeout: 6000 });
+    tap(await screen.findByText('Complete & print'));
+    await screen.findByText('Payment received');
+    tap(screen.getAllByText('New order').slice(-1)[0]);
+    await waitFor(() => expect(screen.queryByText('Payment received')).toBeNull());
+    if (phone) expect(screen.queryByText('Place order')).toBeNull();          // phone: the cart ("Order") popup is closed too
+    screen.unmount(); global.fetch = prev;
+});

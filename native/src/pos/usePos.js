@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { C, customerRow, ORDER_TYPES, TYPE_KEY, defaultTypeKey, priceFor, comboExtra, needsOptions, isOpenMod } from '../lib/catalog';
-import { amountStr, parseAmount, firstError, today } from '../lib/format';
+import { amountStr, parseAmount, firstError, today, money } from '../lib/format';
 import { runJob } from '../lib/printer';
 import { getPref, setPref } from '../lib/storage';
 import { RUNNING_POLL_MS } from '../lib/config';
@@ -62,6 +62,7 @@ export function usePos(user) {
     const [modal, setModal] = useState(null);
     const [prefs, setPrefsState] = useState({ printKot: true, printInvoice: true });
     const [zatcaQueue, setZatcaQueue] = useState([]);
+    const [paidTick, setPaidTick] = useState(0);                 // +1 after an auto-printed invoice: the screen goes back to Order
     const calcSeq = useRef(0);
 
     useEffect(() => { getPref('prefs', null).then((p) => p && setPrefsState((x) => ({ ...x, ...p }))); }, []);
@@ -457,6 +458,16 @@ export function usePos(user) {
         if (C.outlet.printPopup) {
             setModal({ name: 'done', invoice: { ...invoice, print_job: invoice?.zatca?.pending ? null : invoice.print_job }, waiting: !!invoice?.zatca?.pending });
             watchZatca(invoice, true);
+        } else if (prefsRef.current.printInvoice) {
+            // "Print the invoice after payment" is on: no popup. Print (after ZATCA, same as before), close every
+            // popup and go back to the Order screen. The change to return is shown in the message.
+            setModal(null);
+            const change = Number(invoice?.totals?.change_amount) || 0;
+            notify(change > 0
+                ? tr("Invoice {sale_no} · printing · change to return {v1}", { sale_no: invoice.sale_no, v1: money(change) })
+                : tr("Invoice {sale_no} · printing", { sale_no: invoice.sale_no }), change > 0 ? 8000 : 3200);
+            watchZatca(invoice);
+            setPaidTick((n) => n + 1);
         } else {
             setModal({ name: 'done', invoice, auto: true, waiting: !!invoice?.zatca?.pending });
             watchZatca(invoice);
@@ -534,6 +545,6 @@ export function usePos(user) {
         discount, charge, editingId, calc, calcErr, calcBusy, totals, srvFor, itemCount, running, sales, setSales, registerOpen, setRegisterOpen, online, busy, modal, setModal,
         prefs, savePrefs, zatcaQueue, preOrderTick, bumpPreOrders,
         onError, refreshRunning, searchCustomers, addCustomer, saveCustomer, addToCart, updateLine, setLineQty, removeLine, onItemPress, resetOrder, pickOrderType, pickTables, setOrderType, setTable,
-        printJob, printKot, reprintInvoice, reprintKot, printBill, proceed, saveDraft, openOrderPayment, adjustTotals, completePayment, showInvoice, modifyOrder, cancelOrder, clearRunning, canSelf, selfCount, refreshSelf, drafts, refreshDrafts, restoreDraft, deleteDraft, acceptSelf, declineSelf, modifySelf,
+        printJob, printKot, reprintInvoice, reprintKot, printBill, proceed, saveDraft, openOrderPayment, adjustTotals, completePayment, showInvoice, paidTick, modifyOrder, cancelOrder, clearRunning, canSelf, selfCount, refreshSelf, drafts, refreshDrafts, restoreDraft, deleteDraft, acceptSelf, declineSelf, modifySelf,
     };
 }
