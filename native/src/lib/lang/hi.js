@@ -554,4 +554,9 @@ export default {
     "Test version · works until {date}": "टेस्ट संस्करण · {date} तक चलेगा",
     "Show item pictures": "आइटम की तस्वीरें दिखाएँ",
     "Names only": "केवल नाम",
+    "{mm} mm": "{mm} मिमी",
+    "Default ({mm} mm)": "डिफ़ॉल्ट ({mm} मिमी)",
+    "Paper size": "काग़ज़ का आकार",
+    "Used by every receipt below that has no paper size of its own. Only for this device.": "नीचे की हर रसीद, जिसका अपना काग़ज़ आकार नहीं है, इसी का उपयोग करती है। केवल इस डिवाइस के लिए।",
+    "Only for this device. The receipt is laid out for this width.": "केवल इस डिवाइस के लिए। रसीद इसी चौड़ाई के अनुसार बनती है।",
 };

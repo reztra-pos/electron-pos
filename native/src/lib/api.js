@@ -9,6 +9,7 @@ import { APP_VERSION, CLIENT, TIMEOUT_MS } from './config';
 import { uuid } from './bytes';
 import { tr } from './i18n';
 import { noteServerDate } from './trial';
+import { paperHeader } from './paper';
 
 export class ApiError extends Error {
     constructor(message, { status = 0, code = '', errors = null, network = false } = {}) {
@@ -50,6 +51,8 @@ export async function request(method, path, body, { useUser = true, deviceHeader
     if (!useUser) headers.Authorization = `Bearer ${d.device_token}`;
     if (deviceHeader) headers['X-Device-Token'] = d.device_token;
     if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+    const paper = await paperHeader().catch(() => null);      // 58 / 80 mm chosen on this device (receipts are laid out on the server)
+    if (paper) headers['X-Paper'] = paper;
     let r;
     try {
         r = await fetchJson(`${d.url}${path}`, { method, headers, timeout, body: body != null && method !== 'GET' ? JSON.stringify(body) : undefined });

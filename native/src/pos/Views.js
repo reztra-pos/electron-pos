@@ -6,6 +6,7 @@ import { get, post } from '../lib/api';
 import { C, TYPE_KEY, isLoyaltyMethod } from '../lib/catalog';
 import { firstError, minutesAgo, today } from '../lib/format';
 import { listBluetooth, listUsb, getRoutes, setRoute, sendTo, testPage, MODES, ROLE, printDocument } from '../lib/printer';
+import { PAPERS, getPaper, setPaper, paperOf, paperUsed } from '../lib/paper';
 import { registerA4Html } from '../lib/reports';
 import { Btn, COLORS, Field, Input, Keypad, Money, Pill, Row, Segment, Sheet, Tag, useLayout, useTheme, useUi } from '../ui';
 import { flipX, LANGS, tr, trn, useLang } from '../lib/i18n';
@@ -397,8 +398,9 @@ export function SettingsView({ pos, user, device, onLogout, onOpenRegister, onOp
     const theme = useTheme();
     const lang = useLang();
     const [routes, setRoutes] = useState(null);
+    const [paper, setPaperMap] = useState({});    // 58 / 80 mm per receipt type, this device only
     const [edit, setEdit] = useState(null);       // a row of the printer list
-    useEffect(() => { getRoutes().then(setRoutes); }, []);
+    useEffect(() => { getRoutes().then(setRoutes); getPaper().then(setPaperMap); }, []);
     const label = (r) => r.mode === 'auto' ? tr('Web app printer') : r.mode === 'network' ? tr('Network {ip}', { ip: r.ip || '' }) : r.mode === 'bluetooth' ? tr('Bluetooth · {name}', { name: r.name || r.address }) : r.mode === 'usb' ? tr('USB · {name}', { name: r.name || tr('first printer') }) : tr('Built-in printer');
     const web = (p) => (p ? { ...p, printer_ip_address: p.printer_ip_address ?? p.ip_address, printer_port: p.printer_port ?? p.port } : null);
     const kitchens = C.kitchens.length ? C.kitchens : [{ id: null, name: tr('Kitchen'), printer: null }];
@@ -407,7 +409,7 @@ export function SettingsView({ pos, user, device, onLogout, onOpenRegister, onOp
         { key: ROLE.invoice, title: tr("Invoice"), sub: tr("Invoices, credit notes, pre-order drafts, register report") },
         { key: ROLE.bill, title: tr("Bill"), sub: tr("Draft bills of running orders") },
         ...kitchens.map((k) => ({
-            key: k.id == null ? 'role:kot' : ROLE.kot(k.id), title: tr("KOT · {name}", { name: k.name }), server: web(k.printer),
+            key: k.id == null ? 'role:kot' : ROLE.kot(k.id), title: tr("KOT · {name}", { name: k.name }), server: web(k.printer), kitchenName: k.id == null ? null : k.name,
             sub: k.printer ? tr("Web app printer: {title}{v2}", { title: k.printer.title, v2: k.printer.ip_address ? ` (${k.printer.ip_address})` : '' }) : tr("Kitchen order tickets")
         })),
     ];
@@ -417,6 +419,7 @@ export function SettingsView({ pos, user, device, onLogout, onOpenRegister, onOp
         if (r.isDefault) return tr("Not set");
         return routes?.['*'] ? tr('Default ({name})', { name: label(routes['*']) }) : tr('Web app printer');
     };
+    const mmText = (r) => tr("{mm} mm", { mm: paperUsed(paper, r.key) });
     return (
         <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
             <Text className="text-[22px] font-extrabold text-ink mb-3">{tr("Settings")}</Text>
@@ -453,18 +456,31 @@ export function SettingsView({ pos, user, device, onLogout, onOpenRegister, onOp
                 {!routes ? <ActivityIndicator color={COLORS.brand} /> : rows.map((r) => (
                     <Pressable key={r.key} onPress={() => setEdit(r)} accessibilityLabel={r.title} className="flex-row items-center py-3 border-t border-line active:opacity-70">
                         <View className="flex-1 pr-2"><Text className="font-bold text-ink">{r.title}</Text><Text className="text-ink-3 text-[12px]">{r.sub}</Text></View>
-                        <Text className={`font-semibold text-[13px] text-right max-w-[45%] ${routes[r.key] ? 'text-brand' : 'text-ink-3'}`} numberOfLines={2}>{shown(r)}</Text>
+                        <View className="items-end max-w-[45%]">
+                            <Text className={`font-semibold text-[13px] text-right ${routes[r.key] ? 'text-brand' : 'text-ink-3'}`} numberOfLines={2}>{shown(r)}</Text>
+                            <Text className={`text-[12px] font-bold mt-0.5 ${paperOf(paper, r.key) ? 'text-brand' : 'text-ink-3'}`}>{mmText(r)}</Text>
+                        </View>
                     </Pressable>
                 ))}
             </View>
-            {edit ? <PrinterSheet row={edit} route={routes[edit.key]} onClose={() => setEdit(null)}
-                onSave={async (route) => { setRoutes(await setRoute(edit.key, route)); setEdit(null); notify(tr("Printer saved")); }} /> : null}
+            {edit ? <PrinterSheet row={edit} route={routes[edit.key]} paper={paperOf(paper, edit.key)} defaultPaper={paperUsed(paper, '*')} onClose={() => setEdit(null)}
+                onSave={async (route, mm) => {
+                    setRoutes(await setRoute(edit.key, route));
+                    setPaperMap(await setPaper(edit.key, mm, edit.kitchenName));
+                    setEdit(null); notify(tr("Printer saved"));
+                }} /> : null}
         </ScrollView>
     );
 }
 
-function PrinterSheet({ row, route, onClose, onSave }) {
+function PrinterSheet({ row, route, paper, defaultPaper, onClose, onSave }) {
     const [mode, setMode] = useState(route?.mode || (row.isDefault ? 'builtin' : 'default'));
+    // paper: 0 = same as the default of this device (not for the default row itself: that one is 58 or 80)
+    const [mm, setMm] = useState(row.isDefault ? (paper || 80) : (paper || 0));
+    const paperOptions = [
+        ...(row.isDefault ? [] : [{ value: 0, label: tr("Default ({mm} mm)", { mm: defaultPaper }) }]),
+        ...PAPERS.map((p) => ({ value: p, label: tr("{mm} mm", { mm: p }) })),
+    ];
     const [ip, setIp] = useState(route?.ip || row.server?.printer_ip_address || '');
     const [port, setPort] = useState(String(route?.port || row.server?.printer_port || 9100));
     const [bt, setBt] = useState(null);
@@ -496,7 +512,11 @@ function PrinterSheet({ row, route, onClose, onSave }) {
     const ModeIcon = { default: Printer, auto: RefreshCw, network: Wifi, bluetooth: Bluetooth, usb: Usb, builtin: Cpu };
     return (
         <Sheet title={row.title} subtitle={tr("Where it prints on this device")} onClose={onClose} size="md"
-            footer={<><Btn label={tr("Test print")} icon={Printer} busy={testing} onPress={test} className="flex-1" /><Btn label={tr("Save")} variant="primary" disabled={!current()} onPress={() => onSave(current() === 'default' ? null : current())} className="flex-1" /></>}>
+            footer={<><Btn label={tr("Test print")} icon={Printer} busy={testing} onPress={test} className="flex-1" /><Btn label={tr("Save")} variant="primary" disabled={!current()} onPress={() => onSave(current() === 'default' ? null : current(), mm)} className="flex-1" /></>}>
+            <Text className="text-[12.5px] font-semibold text-ink-2 mb-1.5">{tr("Paper size")}</Text>
+            <Segment options={paperOptions} value={mm} onChange={setMm} />
+            <Text className="text-ink-3 text-[12px] mt-1 mb-4">{row.isDefault ? tr("Used by every receipt below that has no paper size of its own. Only for this device.") : tr("Only for this device. The receipt is laid out for this width.")}</Text>
+            <Text className="text-[12.5px] font-semibold text-ink-2 mb-1.5">{tr("Printer")}</Text>
             {modes.map((m) => {
                 const Icon = ModeIcon[m.id];
                 const on = mode === m.id;
