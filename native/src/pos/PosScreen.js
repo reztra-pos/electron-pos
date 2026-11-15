@@ -7,7 +7,7 @@ import { Store, LayoutGrid, Clock3, History, Wallet, Settings, ShieldCheck, Wifi
 import { C } from '../lib/catalog';
 import { COLORS, Money, Sheet, useLayout, useTheme, useUi } from '../ui';
 import { usePos } from './usePos';
-import { CategoryBar, ItemGrid, SearchBox, useMenuFilter } from './Menu';
+import { CategoryBar, ItemGrid, MenuViewToggle, SearchBox, useMenuFilter, useMenuView } from './Menu';
 import { CartActions, CartHeader, CartLines, CartPanel, CartTotals, OrderMeta, TYPE_OPTIONS } from './Cart';
 import { ItemSheet, VariationSheet } from './ItemSheet';
 import { CustomerSheet, OrderTypeSheet, PartnerSheet, TableSheet, WaiterSheet } from './Pickers';
@@ -41,6 +41,8 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
     const [view, setView] = useState('order');
     const [cartOpen, setCartOpen] = useState(false);
     const menu = useMenuFilter();
+    const [menuView, setMenuView] = useMenuView();        // pictures / names only, saved on this device
+    const plain = menuView === 'text';
     const qtyById = useMemo(() => pos.cart.reduce((m, l) => {
         const key = C.byId[l.itemId]?.parentId || l.itemId;
         return { ...m, [key]: (m[key] || 0) + l.qty };
@@ -113,7 +115,7 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
     if (isTablet) {
         const cartW = 392;
         const menuW = width - 84 - cartW - 36;
-        const cols = Math.max(3, Math.floor(menuW / (wide ? 190 : 200)));
+        const cols = Math.max(3, Math.floor(menuW / (wide ? 190 : 200))) + (plain ? 1 : 0);
         return (
             <View className="flex-1 flex-row bg-app" style={{ paddingTop: inset.top }}>
                 {/* side rail: scrolls on smaller tablets (9") so nothing is cut off */}
@@ -147,11 +149,12 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
                             <View className="flex-row items-center mb-3.5" style={{ gap: 12 }}>
                                 <View><Text className="text-[17px] font-extrabold text-ink">{C.outlet.name || device?.outlet_name}</Text><Text className="text-ink-2 text-[12.5px]">{device?.device_name} · {user?.name}</Text></View>
                                 <SearchBox value={menu.query} onChange={menu.setQuery} className="flex-1" />
+                                <MenuViewToggle value={menuView} onChange={setMenuView} />
                                 {status}
                             </View>
                             <CategoryBar cat={menu.cat} setCat={menu.setCat} />
                             <View className="flex-1 mt-3 -mx-1.5">
-                                <ItemGrid items={menu.items} columns={cols} width={menuW + 12} qtyById={qtyById} orderType={pos.orderType} partner={pos.partner} onPress={pos.onItemPress} />
+                                <ItemGrid items={menu.items} columns={cols} width={menuW + 12} qtyById={qtyById} orderType={pos.orderType} partner={pos.partner} onPress={pos.onItemPress} plain={plain} />
                             </View>
                         </View>
                         <View style={{ width: cartW }} className="border-l border-line"><CartPanel pos={pos} /></View>
@@ -180,10 +183,10 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
                         {status}
                     </View>
                     <View className="px-[18px]"><Segment options={TYPE_OPTIONS} value={pos.orderType} onChange={(t) => pos.pickOrderType(t, null)} /></View>
-                    <View className="px-[18px] mt-3"><SearchBox value={menu.query} onChange={menu.setQuery} /></View>
+                    <View className="px-[18px] mt-3 flex-row" style={{ gap: 8 }}><SearchBox value={menu.query} onChange={menu.setQuery} className="flex-1" /><MenuViewToggle value={menuView} onChange={setMenuView} /></View>
                     <View className="px-[18px] py-3"><CategoryBar cat={menu.cat} setCat={menu.setCat} /></View>
                     <View className="flex-1 px-3">
-                        <ItemGrid items={menu.items} columns={2} width={width - 24} qtyById={qtyById} orderType={pos.orderType} partner={pos.partner} onPress={pos.onItemPress} footerSpace={pos.cart.length ? 80 : 0} />
+                        <ItemGrid items={menu.items} columns={2} width={width - 24} qtyById={qtyById} orderType={pos.orderType} partner={pos.partner} onPress={pos.onItemPress} footerSpace={pos.cart.length ? 80 : 0} plain={plain} />
                     </View>
                     {pos.cart.length ? (
                         <Pressable onPress={() => setCartOpen(true)} className="absolute left-3.5 right-3.5 bottom-3 h-[62px] rounded-[18px] bg-inverse flex-row items-center px-3" style={{ elevation: 8 }}>

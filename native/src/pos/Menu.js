@@ -1,11 +1,12 @@
 // Menu: categories, search and the item grid (shared by tablet and phone).
-import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
-import { Search, X } from 'lucide-react-native';
+import { Image as ImageIcon, LayoutList, Search, X } from 'lucide-react-native';
 import { C, priceFor, comboExtra } from '../lib/catalog';
 import { COLORS, Money, Pill, tintFor, useTheme } from '../ui';
 import { tr, useLang } from '../lib/i18n';
+import { getPref, setPref } from '../lib/storage';
 
 export function useMenuFilter() {
     const [cat, setCat] = useState('all');
@@ -20,6 +21,36 @@ export function useMenuFilter() {
         });
     }, [cat, query]);
     return { cat, setCat, query, setQuery, items };
+}
+
+/**
+ * Menu style, saved on this device (stays after log out / log in, like the desktop app):
+ * 'images' = cards with the item picture / icon, 'text' = compact cards with name and price only.
+ */
+export function useMenuView() {
+    const [view, setView] = useState('images');
+    useEffect(() => { getPref('menuView', 'images').then((v) => { if (v === 'images' || v === 'text') setView(v); }).catch(() => { }); }, []);
+    const change = useCallback((v) => { setView(v); setPref('menuView', v).catch(() => { }); }, []);
+    return [view, change];
+}
+
+/** two small buttons next to the search box: pictures / text only */
+export function MenuViewToggle({ value, onChange }) {
+    const btn = (v, Icon, label) => {
+        const on = value === v;
+        return (
+            <Pressable key={v} onPress={() => onChange(v)} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: on }}
+                className={`w-11 h-10 rounded-xl items-center justify-center ${on ? 'bg-brand' : ''} active:opacity-80`}>
+                <Icon size={19} color={on ? '#fff' : COLORS.ink2} strokeWidth={2} />
+            </Pressable>
+        );
+    };
+    return (
+        <View className="h-12 bg-card rounded-2xl border border-line flex-row items-center px-[3px]" style={{ gap: 2 }}>
+            {btn('images', ImageIcon, tr('Show item pictures'))}
+            {btn('text', LayoutList, tr('Names only'))}
+        </View>
+    );
 }
 
 export function SearchBox({ value, onChange, className = '' }) {
@@ -61,7 +92,7 @@ function Badges({ item }) {
 }
 
 // memo: when the cart changes, only the cards whose qty changed re-render (not the whole menu)
-export const ItemCard = memo(function ItemCard({ item, qty, orderType, partner, onPress, width, scheme, lang }) {
+export const ItemCard = memo(function ItemCard({ item, qty, orderType, partner, onPress, width, scheme, lang, plain }) {
     // Arabic: the Arabic item name first (as on the desktop app), the English name under it
     const arFirst = lang === 'ar' && !!item.name2;
     const name1 = arFirst ? item.name2 : item.name;
@@ -76,6 +107,30 @@ export const ItemCard = memo(function ItemCard({ item, qty, orderType, partner, 
             <Money value={shownPrice(item, orderType, partner)} bold className={`text-[15px] font-extrabold ${item.image ? 'text-white' : 'text-ink'}`} />
         </View>
     );
+
+    // names only: a compact card, no picture / icon (more items on the screen)
+    if (plain) {
+        const promo = item.promotion;
+        return (
+            <Pressable onPress={() => onPress(item)} accessibilityRole="button" accessibilityLabel={item.name}
+                className={`bg-card rounded-card px-2.5 py-2.5 m-1.5 ${qty ? 'border-2 border-brand' : 'border border-line'} ${item.unavailable ? 'opacity-50' : ''} active:opacity-80`}
+                style={{ width, minHeight: 84 }}>
+                <View className="absolute left-0 top-3 bottom-3 w-[4px] rounded-full" style={{ backgroundColor: fg }} />
+                {item.combo || promo || item.unavailable ? (
+                    <View className="flex-row flex-wrap mb-1" style={{ gap: 4 }}>
+                        {item.combo ? <Text className="text-[9.5px] font-extrabold text-white bg-[#D97706] rounded px-1.5 py-0.5 overflow-hidden">{tr("COMBO")}</Text> : null}
+                        {promo ? <Text className="text-[9.5px] font-extrabold text-white bg-[#DB2777] rounded px-1.5 py-0.5 overflow-hidden" numberOfLines={1}>{promo.type === 2 ? tr("BUY {buy_qty} GET {free_qty}", { buy_qty: promo.buy_qty, free_qty: promo.free_qty }) : tr("PROMO")}</Text> : null}
+                        {item.unavailable ? <Text className="text-[9.5px] font-extrabold text-white bg-inverse rounded px-1.5 py-0.5 overflow-hidden">{tr("NOT AVAILABLE")}</Text> : null}
+                    </View>
+                ) : null}
+                <Text numberOfLines={2} className="text-[14px] font-bold text-ink mx-1">{name1}</Text>
+                {name2 ? <Text numberOfLines={1} className="text-[12px] text-ink-3 mx-1" style={name2Style}>{name2}</Text> : null}
+                <View className="flex-1" />
+                {price}
+                {qtyBadge}
+            </Pressable>
+        );
+    }
 
     // photo: the picture fills the whole card; name and price sit on a dark fade at the bottom (as on Windows)
     if (item.image) {
@@ -121,7 +176,7 @@ export const ItemCard = memo(function ItemCard({ item, qty, orderType, partner, 
     );
 });
 
-export function ItemGrid({ items, columns, width, qtyById, orderType, partner, onPress, footerSpace = 0 }) {
+export function ItemGrid({ items, columns, width, qtyById, orderType, partner, onPress, footerSpace = 0, plain = false }) {
     const cardW = Math.floor(width / columns) - 12;
     // onPress changes on every render of the POS screen; a stable wrapper keeps the memoised cards from re-rendering
     const pressRef = useRef(onPress);
@@ -130,8 +185,8 @@ export function ItemGrid({ items, columns, width, qtyById, orderType, partner, o
     const { scheme } = useTheme();
     const { lang } = useLang();
     const renderItem = useCallback(({ item }) => (
-        <ItemCard item={item} width={cardW} qty={qtyById[item.id]} orderType={orderType} partner={partner} onPress={press} scheme={scheme} lang={lang} />
-    ), [cardW, qtyById, orderType, partner, press, scheme, lang]);
+        <ItemCard item={item} width={cardW} qty={qtyById[item.id]} orderType={orderType} partner={partner} onPress={press} scheme={scheme} lang={lang} plain={plain} />
+    ), [cardW, qtyById, orderType, partner, press, scheme, lang, plain]);
     return (
         <FlatList data={items} key={columns} numColumns={columns} keyExtractor={(it) => String(it.id)}
             renderItem={renderItem} extraData={renderItem}

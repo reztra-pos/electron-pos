@@ -549,4 +549,6 @@ export default {
     "Trial · {n} day left": "تجريبي · متبقٍ {n} يوم",
     "Trial · {n} days left": "تجريبي · متبقٍ {n} أيام",
     "Test version · works until {date}": "نسخة تجريبية · تعمل حتى {date}",
+    "Show item pictures": "عرض صور الأصناف",
+    "Names only": "الأسماء فقط",
 };

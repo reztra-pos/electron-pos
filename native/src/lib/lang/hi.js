@@ -549,4 +549,6 @@ export default {
     "Trial · {n} day left": "ट्रायल · {n} दिन बाकी",
     "Trial · {n} days left": "ट्रायल · {n} दिन बाकी",
     "Test version · works until {date}": "टेस्ट संस्करण · {date} तक चलेगा",
+    "Show item pictures": "आइटम की तस्वीरें दिखाएँ",
+    "Names only": "केवल नाम",
 };
