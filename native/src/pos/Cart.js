@@ -102,7 +102,7 @@ export function CartActions({ pos, onDone }) {
                 {C.outlet.btnPlace || editing
                     ? <Btn label={editing ? tr("Update order") : tr("Place order")} icon={ChefHat} variant="secondary" busy={pos.busy === 'place'} disabled={empty} onPress={run(() => pos.proceed('place'))} className="flex-1" /> : null}
             </View>
-            {pos.canPay && C.outlet.btnQuick && !editing ? (
+            {pos.canInvoice && C.outlet.btnQuick && !editing ? (
                 <Btn variant="primary" size="lg" disabled={empty || !pos.totals} busy={pos.busy === 'calc'} onPress={() => pos.proceed('invoice')} className="justify-between"
                     icon={Banknote} label={tr("Pay now")} textClass="flex-1"
                     right={<View className="flex-row items-center"><Money value={pos.totals?.total_payable ?? 0} bold className="text-white text-[17px] font-extrabold" /><ChevronRight size={20} color="#fff" style={flipX()} /></View>} />

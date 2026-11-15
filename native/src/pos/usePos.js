@@ -21,8 +21,17 @@ export function usePos(user) {
     // Self / Online orders (customer QR / online ordering): Admin, or the web app's "pos_17" permission (same as the desktop app)
     const canSelf = !isWaiter && (user?.role === 'Admin' || !!user?.permissions?.pos?.pos_17);
     const canPay = !isWaiter || !!user?.permissions?.pos?.pos_1;
+    // tbl_users.order_receiving_id set (not Admin): this user's orders go to that cashier, who makes the invoice.
+    // The user can still place / update orders, drafts, bill, KOT and pre-orders, but can't invoice (close a sale)
+    // or make credit notes. Same rule as the web app (Admin / Super Admin are never limited).
+    const receiverId = Number(user?.order_receiving_id ?? user?.permissions?.order_receiving_id) || 0;
+    const isReceiverLimited = receiverId > 0 && ![user?.role, user?.designation].some((r) => r === 'Admin' || r === 'Super Admin') && !user?.permissions?.is_admin;
+    const canInvoice = canPay && !isReceiverLimited;
     // credit notes: same rule as the desktop app (Admin, or the "refund" permission of the web app)
-    const canRefund = user?.role === 'Admin' || !!user?.permissions?.is_admin || (user?.permissions?.all || []).includes('refund-123');
+    const canRefund = !isReceiverLimited && (user?.role === 'Admin' || !!user?.permissions?.is_admin || (user?.permissions?.all || []).includes('refund-123'));
+    const noInvoiceMsg = () => (isReceiverLimited
+        ? tr("Your orders go to the cashier for payment. Place the order; the cashier makes the invoice.")
+        : tr("Waiters can't take payment. Place the order and send it to the cashier."));
     const firstWaiter = () => (isWaiter && C.waiters.some((w) => w.id === user.id) ? user.id : Number(C.settings.default_waiter_id) || C.waiters[0]?.id || '');
 
     const [cart, setCart] = useState([]);
@@ -295,7 +304,7 @@ export function usePos(user) {
         if (!cart.length) return notify(tr("Add at least one item to the order"));
         if (!type) return setModal({ name: 'orderType', then: { kind: action } });
         if (action === 'place') return commitOrder(type, tbl);
-        if (!canPay) return notify(tr("Waiters can't take payment. Place the order and send it to the cashier."));
+        if (!canInvoice) return notify(noInvoiceMsg());
         if (editingId) return notify(tr("Update the order first, then take payment from Running orders."));
         return openQuickPayment(type, tbl);
     };
@@ -388,6 +397,7 @@ export function usePos(user) {
     };
 
     const openOrderPayment = async (orderId) => {
+        if (!canInvoice) return notify(noInvoiceMsg());
         setBusy('calc');
         try {
             const o = await get(`/v1/orders/${orderId}`);
@@ -520,7 +530,7 @@ export function usePos(user) {
     };
 
     return {
-        user, isWaiter, canPay, canRefund, cart, orderType, table, waiter, setWaiter, customers, customer, customerId, setCustomerId, partner, setPartner, partnerRef, setPartnerRef,
+        user, isWaiter, canPay, canInvoice, canRefund, cart, orderType, table, waiter, setWaiter, customers, customer, customerId, setCustomerId, partner, setPartner, partnerRef, setPartnerRef,
         discount, charge, editingId, calc, calcErr, calcBusy, totals, srvFor, itemCount, running, sales, setSales, registerOpen, setRegisterOpen, online, busy, modal, setModal,
         prefs, savePrefs, zatcaQueue, preOrderTick, bumpPreOrders,
         onError, refreshRunning, searchCustomers, addCustomer, saveCustomer, addToCart, updateLine, setLineQty, removeLine, onItemPress, resetOrder, pickOrderType, pickTables, setOrderType, setTable,

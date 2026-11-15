@@ -484,6 +484,7 @@ export default {
     "Waiter": "النادل",
     "Waiter {name}": "النادل {name}",
     "Waiters can't take payment. Place the order and send it to the cashier.": "لا يمكن للنادل استلام الدفع. سجّل الطلب وأرسله إلى الكاشير.",
+    "Your orders go to the cashier for payment. Place the order; the cashier makes the invoice.": "تُرسل طلباتك إلى الكاشير للدفع. سجّل الطلب، والكاشير يصدر الفاتورة.",
     "Waiting for the previous invoice to finish with ZATCA…": "بانتظار انتهاء الفاتورة السابقة مع زاتكا…",
     "Walk-in Customer": "عميل نقدي",
     "Walk-in Customer must pay the full amount. Choose a customer to leave a due balance.": "يجب على العميل النقدي دفع المبلغ كاملًا. اختر عميلًا لترك مبلغ مستحق.",

@@ -40,6 +40,8 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
     const inset = useSafeAreaInsets();
     const [view, setView] = useState('order');
     const [cartOpen, setCartOpen] = useState(false);
+    // Modify a running order (from Running, Tables or Online): it is loaded into the cart -> go to the Order screen
+    useEffect(() => { if (pos.editingId) setView('order'); }, [pos.editingId]);
     const menu = useMenuFilter();
     const [menuView, setMenuView] = useMenuView();        // pictures / names only, saved on this device
     const plain = menuView === 'text';
@@ -77,7 +79,7 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
             {m?.name === 'partner' ? <PartnerSheet pos={pos} onClose={closeModal} /> : null}
             {m?.name === 'item' ? <ItemSheet pos={pos} item={m.item} line={m.line} onClose={closeModal} /> : null}
             {m?.name === 'variations' ? <VariationSheet pos={pos} item={m.item} onClose={closeModal} /> : null}
-            {m?.name === 'payment' ? <PaymentSheet pos={pos} m={m} onClose={closeModal} /> : null}
+            {m?.name === 'payment' && pos.canInvoice ? <PaymentSheet pos={pos} m={m} onClose={closeModal} /> : null}
             {m?.name === 'done' ? <DoneSheet pos={pos} m={m} onClose={closeModal} /> : null}
             {m?.name === 'order' ? <OrderSheet pos={pos} id={m.id} onClose={closeModal} /> : null}
             {m?.name === 'tableOrders' ? <TableOrdersSheet pos={pos} table={m.table} onClose={closeModal} /> : null}
@@ -86,9 +88,9 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
             {m?.name === 'leave' ? <LeaveSheet pos={pos} exit={m.exit} onClose={closeModal} onLeave={() => { closeModal(); if (m.exit) BackHandler.exitApp(); else onLogout(); }} /> : null}
             {m?.name === 'clearRunning' ? <ClearRunningSheet pos={pos} onClose={closeModal} /> : null}
             {m?.name === 'invoice' ? <InvoiceSheet pos={pos} id={m.id} onClose={closeModal} onRefund={(sale) => pos.setModal({ name: 'refund', sale })} /> : null}
-            {m?.name === 'refund' ? <RefundSheet pos={pos} sale={m.sale} onClose={closeModal} onDone={(id, refund) => pos.setSales((s) => s.map((x) => (x.id === id ? { ...x, refund } : x)))} /> : null}
+            {m?.name === 'refund' && pos.canRefund ? <RefundSheet pos={pos} sale={m.sale} onClose={closeModal} onDone={(id, refund) => pos.setSales((s) => s.map((x) => (x.id === id ? { ...x, refund } : x)))} /> : null}
             {m?.name === 'poForm' ? <PreOrderFormSheet pos={pos} po={m.po} onClose={closeModal} /> : null}
-            {m?.name === 'poDeliver' ? <PreOrderDeliverSheet pos={pos} po={m.po} onClose={closeModal} /> : null}
+            {m?.name === 'poDeliver' && pos.canInvoice ? <PreOrderDeliverSheet pos={pos} po={m.po} onClose={closeModal} /> : null}
             {needRegister ? <OpenRegisterSheet pos={pos} user={user} onOpened={() => pos.setRegisterOpen(true)} onLogout={onLogout} /> : null}
         </>
     );

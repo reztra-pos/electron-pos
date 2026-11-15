@@ -56,7 +56,7 @@ export function RunningView({ pos }) {
                                 <Money value={o.total_payable} bold className="text-[18px] font-extrabold text-ink" />
                                 <View className="flex-row" style={{ gap: 6 }}>
                                     <Btn size="sm" icon={Receipt} label={tr("Bill")} onPress={() => pos.printBill(o.id)} />
-                                    {pos.canPay ? <Btn size="sm" icon={Banknote} label={tr("Pay")} variant="primary" onPress={() => pos.openOrderPayment(o.id)} /> : null}
+                                    {pos.canInvoice ? <Btn size="sm" icon={Banknote} label={tr("Pay")} variant="primary" onPress={() => pos.openOrderPayment(o.id)} /> : null}
                                 </View>
                             </View>
                         </Pressable>
@@ -91,7 +91,7 @@ export function OrderSheet({ pos, id, onClose }) {
                 </View>
                 <View className="flex-row" style={{ gap: 8 }}>
                     {o.can_modify ? <Btn icon={Ban} label={tr("Cancel")} textClass="text-danger" onPress={async () => { if (await confirm(tr("Cancel this order? The kitchen will be told."), { confirmLabel: tr("Yes, cancel"), danger: true })) setCancelling(true); }} className="flex-1" /> : null}
-                    {pos.canPay ? <Btn icon={Banknote} variant="primary" label={tr("Pay")} onPress={() => pos.openOrderPayment(o.id)} className="flex-[2]"
+                    {pos.canInvoice ? <Btn icon={Banknote} variant="primary" label={tr("Pay")} onPress={() => pos.openOrderPayment(o.id)} className="flex-[2]"
                         right={<View className="ml-2"><Money value={o.totals.total_payable} bold className="text-white font-extrabold" /></View>} /> : null}
                 </View>
             </View>}>

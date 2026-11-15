@@ -484,6 +484,7 @@ export default {
     "Waiter": "वेटर",
     "Waiter {name}": "वेटर {name}",
     "Waiters can't take payment. Place the order and send it to the cashier.": "वेटर भुगतान नहीं ले सकते। ऑर्डर दें और कैशियर को भेजें।",
+    "Your orders go to the cashier for payment. Place the order; the cashier makes the invoice.": "आपके ऑर्डर भुगतान के लिए कैशियर के पास जाते हैं। ऑर्डर दें; इनवॉइस कैशियर बनाएगा।",
     "Waiting for the previous invoice to finish with ZATCA…": "पिछले बिल के ZATCA में पूरा होने का इंतज़ार…",
     "Walk-in Customer": "वॉक-इन ग्राहक",
     "Walk-in Customer must pay the full amount. Choose a customer to leave a due balance.": "वॉक-इन ग्राहक को पूरी राशि देनी होगी। बकाया छोड़ने के लिए ग्राहक चुनें।",
