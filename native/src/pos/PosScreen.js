@@ -36,7 +36,7 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
     const pos = usePos(user);
     const notes = useNotifications();
     const theme = useTheme();
-    const { isTablet, width, wide } = useLayout();
+    const { isTablet, width, wide, height } = useLayout();
     const inset = useSafeAreaInsets();
     const [view, setView] = useState('order');
     const [cartOpen, setCartOpen] = useState(false);
@@ -221,11 +221,13 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
             {cartOpen ? (
                 <Sheet title={pos.editingId ? tr("Editing order") : tr("Order")} subtitle={tr("{itemCount} items", { itemCount: pos.itemCount })} onClose={() => setCartOpen(false)} size="md" scroll={false}
                     footer={null}>
-                    <View style={{ maxHeight: 640 }}>
+                    {/* Only the item list scrolls. Its height is what is left of the screen after the header, order type,
+                        totals and buttons, so Draft / Place order / Pay now are always visible, however many items. */}
+                    <View style={{ flexShrink: 1, minHeight: 0 }}>
                         <OrderMeta pos={pos} />
-                        <View style={{ flexShrink: 1, minHeight: 120 }} className="mt-2"><CartLines pos={pos} /></View>
+                        <View style={{ flexShrink: 1, minHeight: 110, maxHeight: Math.max(150, height - inset.top - inset.bottom - 600) }} className="mt-2"><CartLines pos={pos} /></View>
                     </View>
-                    <View className="-mx-5 -mb-5"><CartTotals pos={pos} /><CartActions pos={pos} onDone={() => setCartOpen(false)} /></View>
+                    <View className="-mx-5 -mb-5" style={{ flexShrink: 0 }}><CartTotals pos={pos} /><CartActions pos={pos} onDone={() => setCartOpen(false)} /></View>
                 </Sheet>
             ) : null}
             {modals}

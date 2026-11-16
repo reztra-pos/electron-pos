@@ -1,4 +1,5 @@
-// Item options: quantity, modifiers (open-price ones ask for the price), combo choices, open price, item discount, note.
+// Item options: quantity, price (open price, or change the menu price), modifiers with their price (0 allowed), combo choices,
+// item discount, note.
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Trash2, Check } from 'lucide-react-native';
@@ -18,22 +19,30 @@ export function ItemSheet({ pos, item, line, onClose }) {
     const [combo, setCombo] = useState(() => line?.comboSelections?.length ? line.comboSelections : (item.comboGroups || []).map((g) => g.options[0]?.food_menu_id).filter(Boolean));
     const kitchenLine = !!line?.lineId;
     const listPrice = kitchenLine ? line.price : priceFor(item, pos.orderType, pos.partner) + comboExtra(item, combo, pos.orderType);
-    const price = item.openPrice ? Number(open) || 0 : listPrice;
+    // Price of a normal item can be changed for this order. null = menu price (follows order type / combo choice).
+    const [custom, setCustom] = useState(line?.priceEdited && !line?.openPrice ? String(line.price) : null);
+    const customOn = !item.openPrice && custom != null && custom.trim() !== '';
+    const priceBad = (customOn && !(Number(custom) >= 0)) || (item.openPrice && open.trim() !== '' && !(Number(open) >= 0));
+    const price = item.openPrice ? Number(open) || 0 : customOn ? Number(custom) || 0 : listPrice;
+    const priceEdited = customOn && Number(custom) !== listPrice;
     const unit = price + mods.reduce((s, m) => s + (Number(m.price) || 0), 0);
+    const modBad = mods.some((m) => String(m.entered ?? '').trim() !== '' && !(Number(m.entered) >= 0));
     const promoDisc = item.promotion?.type === 1 && !!item.promotion.discount;
     const discOn = C.settings.item_discount !== false && !promoDisc && !item.openPrice;
     const discNum = Number(disc) || 0;
     const discBad = discOn && discNum > 0 && (discMode === 'percent' ? discNum > 100 : discNum > price);
     const off = discOn && !discBad && discNum > 0 ? (discMode === 'percent' ? Math.round(price * discNum) / 100 : discNum) * qty : 0;
-    const needPrice = (item.openPrice && !(Number(open) > 0)) || mods.some((m) => m.openPrice && !(Number(m.entered) > 0));
+    // only an open-price item needs a price typed in; a modifier price may be 0
+    const needPrice = item.openPrice && !(Number(open) > 0);
 
     const toggle = (m) => setMods((ms) => (ms.some((x) => x.id === m.id) ? ms.filter((x) => x.id !== m.id) : [...ms, { ...m, price: m.openPrice ? 0 : m.price, entered: m.openPrice ? '' : String(m.price) }]));
+    // empty = 0
     const setModPrice = (id, v) => setMods((ms) => ms.map((x) => (x.id === id ? { ...x, entered: v, price: Number(v) || 0 } : x)));
     const pickCombo = (g, id) => setCombo((c) => [...c.filter((x) => !g.options.some((o) => o.food_menu_id === x)), id]);
 
     const save = () => {
         const data = {
-            qty: Math.max(1, qty), mods: mods.map(({ entered, ...m }) => m), note: note.trim(), price,
+            qty: Math.max(1, qty), mods: mods.map(({ entered, ...m }) => ({ ...m, price: Number(m.price) || 0 })), note: note.trim(), price, priceEdited,
             disc: discOn && discMode === 'percent' && discNum > 0 ? discNum : 0,
             discRaw: discOn && discMode === 'fixed' && discNum > 0 ? String(discNum) : null,
             comboSelections: item.comboGroups ? combo : [],
@@ -49,7 +58,15 @@ export function ItemSheet({ pos, item, line, onClose }) {
                 <Text className="text-ink-2">{item.code}{item.openPrice ? '' : tr(" · {v1} each", { v1: money(listPrice) })}</Text>
                 <Stepper big value={qty} min={1} onChange={(v) => setQty(Math.max(1, v))} />
             </View>
-            {item.openPrice ? <Field label={tr("Price ({currency})", { currency: C.outlet.currency })}><Input keyboardType="decimal-pad" value={open} onChangeText={setOpen} placeholder={tr("Enter the price")} autoFocus /></Field> : null}
+            {item.openPrice ? <Field label={tr("Price ({currency})", { currency: C.outlet.currency })} error={priceBad ? tr("Enter a valid price.") : null}><Input keyboardType="decimal-pad" value={open} onChangeText={setOpen} placeholder={tr("Enter the price")} autoFocus /></Field> : (
+                <Field label={tr("Price ({currency})", { currency: C.outlet.currency })} error={priceBad ? tr("Enter a valid price.") : null}>
+                    <View className="flex-row items-center" style={{ gap: 8 }}>
+                        <Input accessibilityLabel={tr("Item price")} keyboardType="decimal-pad" value={custom ?? String(listPrice)} onChangeText={setCustom} selectTextOnFocus className="flex-1" />
+                        {priceEdited ? <Btn size="sm" label={tr("Menu price")} onPress={() => setCustom(null)} /> : null}
+                    </View>
+                    {priceEdited ? <Text className="text-warn text-[12px] font-semibold mt-1">{tr("Changed from the menu price {v1}", { v1: money(listPrice) })}</Text> : null}
+                </Field>
+            )}
             {discOn ? (
                 <Field label={tr("Item discount")} error={discBad ? (discMode === 'percent' ? tr("A percentage cannot be more than 100%.") : tr("Discount cannot be more than the item price.")) : null}>
                     <View className="flex-row items-center" style={{ gap: 8 }}>
@@ -92,7 +109,7 @@ export function ItemSheet({ pos, item, line, onClose }) {
                                 {sel ? <Check size={15} color={COLORS.brand} /> : null}
                                 <Text className={`ml-1 font-semibold ${sel ? 'text-brand-dark' : 'text-ink'}`}>{m.name}{m.openPrice ? '' : ` +${money(m.price)}`}</Text>
                             </Pressable>
-                            {sel && m.openPrice ? <Input keyboardType="decimal-pad" value={sel.entered} onChangeText={(v) => setModPrice(m.id, v)} placeholder={tr("Price")} className="w-24 ml-2 h-11" /> : null}
+                            {sel ? <Input accessibilityLabel={tr("Price of {name}", { name: m.name })} keyboardType="decimal-pad" value={sel.entered} onChangeText={(v) => setModPrice(m.id, v)} placeholder="0" selectTextOnFocus className="w-24 ml-2 h-11" /> : null}
                         </View>
                     );
                 })}
@@ -105,7 +122,7 @@ export function ItemSheet({ pos, item, line, onClose }) {
             footer={<>
                 {line ? <Btn icon={Trash2} label={tr("Remove")} onPress={() => { pos.removeLine(line.key); onClose(); }} textClass="text-danger" /> : null}
                 <Btn label={tr("Cancel")} onPress={onClose} className="flex-1" />
-                <Btn variant="primary" className="flex-[2]" disabled={needPrice || discBad} onPress={save}
+                <Btn variant="primary" className="flex-[2]" disabled={needPrice || discBad || priceBad || modBad} onPress={save}
                     label={`${line ? tr('Update item') : tr('Add to order')} · ${money(unit * Math.max(1, qty) - off)}`} />
             </>}>
             {isTablet && right ? <View className="flex-row" style={{ gap: 20 }}>{left}{right}</View> : <View>{left}{right ? <View className="mt-2">{right}</View> : null}</View>}

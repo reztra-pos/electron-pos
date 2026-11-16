@@ -559,4 +559,10 @@ export default {
     "Paper size": "काग़ज़ का आकार",
     "Used by every receipt below that has no paper size of its own. Only for this device.": "नीचे की हर रसीद, जिसका अपना काग़ज़ आकार नहीं है, इसी का उपयोग करती है। केवल इस डिवाइस के लिए।",
     "Only for this device. The receipt is laid out for this width.": "केवल इस डिवाइस के लिए। रसीद इसी चौड़ाई के अनुसार बनती है।",
+    "Item price": "आइटम की कीमत",
+    "Menu price": "मेन्यू की कीमत",
+    "Changed from the menu price {v1}": "मेन्यू की कीमत {v1} से बदली गई",
+    "Price of {name}": "{name} की कीमत",
+    "Enter a valid price.": "सही कीमत डालें।",
+    "PRICE CHANGED": "कीमत बदली",
 };

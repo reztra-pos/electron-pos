@@ -559,4 +559,10 @@ export default {
     "Paper size": "مقاس الورق",
     "Used by every receipt below that has no paper size of its own. Only for this device.": "تستخدمه كل الإيصالات أدناه التي ليس لها مقاس ورق خاص. لهذا الجهاز فقط.",
     "Only for this device. The receipt is laid out for this width.": "لهذا الجهاز فقط. يُنسَّق الإيصال لهذا العرض.",
+    "Item price": "سعر الصنف",
+    "Menu price": "سعر القائمة",
+    "Changed from the menu price {v1}": "تم التغيير عن سعر القائمة {v1}",
+    "Price of {name}": "سعر {name}",
+    "Enter a valid price.": "أدخل سعرًا صحيحًا.",
+    "PRICE CHANGED": "تم تغيير السعر",
 };

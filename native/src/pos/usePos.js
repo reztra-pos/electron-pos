@@ -13,6 +13,12 @@ import { del, get, post, put, newKey } from '../lib/api';
 import { tr, trn } from '../lib/i18n';
 
 const hasTables = (t) => Array.isArray(t) && t.length > 0;
+// a modifier whose price was changed at the till (the server is sent that price)
+const modPriceChanged = (itemId, m) => {
+    const cat = C.byId[itemId]?.modifiers?.find((x) => x.id === m.id);
+    return !!cat && Number(m.price) !== Number(cat.price);
+};
+
 export const tblText = (t) => (t || []).map((x) => x.name).join(', ');
 
 export function usePos(user) {
@@ -128,7 +134,8 @@ export function usePos(user) {
             items: cart.map((l) => {
                 const it = {
                     food_menu_id: l.itemId, qty: l.qty,
-                    modifier_ids: l.mods.map((m) => (isOpenMod(l.itemId, m.id) ? { id: m.id, price: Number(m.price) || 0 } : m.id)),
+                    // open-price modifier, or a price changed at the till (0 allowed): send the price with it
+                    modifier_ids: l.mods.map((m) => (isOpenMod(l.itemId, m.id) || modPriceChanged(l.itemId, m) ? { id: m.id, price: Number(m.price) || 0 } : m.id)),
                     note: l.note || '',
                     discount: l.discRaw != null ? l.discRaw : Number(l.disc) > 0 ? `${Number(l.disc)}%` : '',
                 };

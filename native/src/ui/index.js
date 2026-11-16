@@ -25,7 +25,9 @@ export function Money({ value, className = '', bold = false, plain = false, sign
   const cur = plain ? '' : C.outlet.currency || '';
   const amount = `${sign}${money(value)}`;
   const symbol = cur ? (cur === RIYAL || cur.includes(RIYAL)
-    ? <Text style={{ fontFamily: bold ? 'SaudiRiyal-Bold' : 'SaudiRiyal' }}>{cur}</Text> : <Text>{cur}</Text>) : null;
+    // Android: a custom font with a bold weight (inherited from font-bold / font-extrabold) looks for a bold font file,
+    // doesn't find it and falls back to a font without the riyal sign -> a box. So the sign always uses the regular weight.
+    ? <Text style={{ fontFamily: 'SaudiRiyal', fontWeight: 'normal' }}>{cur}</Text> : <Text>{cur}</Text>) : null;
   if (!symbol) return <Text className={className}>{amount}</Text>;
   return C.outlet.curAfter
     ? <Text className={className}>{amount} {symbol}</Text>

@@ -50,7 +50,7 @@ function Line({ l, i, pos }) {
             <View className="flex-1 pr-2">
                 <Text className="text-[14px] font-bold text-ink" numberOfLines={2}>{(getLang() === 'ar' && C.byId[l.itemId]?.name2) || l.name}</Text>
                 {sub ? <Text className="text-[12px] text-brand-dark mt-0.5" numberOfLines={2}>{sub}</Text> : null}
-                <View className="flex-row items-center mt-0.5"><Money value={l.price} className="text-[12px] text-ink-3" /><Text className="text-[12px] text-ink-3"> {tr("each")}</Text>{l.lineId ? <Text className="text-[11px] text-warn ml-2 font-bold">{tr("IN KITCHEN")}</Text> : null}</View>
+                <View className="flex-row items-center mt-0.5"><Money value={l.price} className="text-[12px] text-ink-3" /><Text className="text-[12px] text-ink-3"> {tr("each")}</Text>{l.priceEdited ? <Text className="text-[11px] text-warn ml-2 font-bold">{tr("PRICE CHANGED")}</Text> : null}{l.lineId ? <Text className="text-[11px] text-warn ml-2 font-bold">{tr("IN KITCHEN")}</Text> : null}</View>
             </View>
             <Stepper value={l.qty} onChange={(q) => pos.setLineQty(l.key, q)} />
             <Money value={total} bold className="text-[14.5px] font-extrabold text-ink w-[78px] text-right" />
