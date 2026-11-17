@@ -21,7 +21,7 @@ react {
     //   The list of variants to that are debuggable. For those we're going to
     //   skip the bundling of the JS bundle and the assets. Default is "debug", "debugOptimized".
     //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
-    // debuggableVariants = ["liteDebug", "liteDebugOptimized", "prodDebug", "prodDebugOptimized"]
+    debuggableVariants = ["posDebug", "waiterDebug"]
 
     /* Bundling */
     //   A list containing the node command and its flags. Default is just 'node'.
@@ -84,6 +84,17 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0.0"
+        flavorDimensions "app"
+        productFlavors {
+            pos {
+                dimension "app"
+                applicationId "com.reztra.self"
+            }
+            waiter {
+                dimension "app"
+                applicationId "com.reztra.waiter"
+            }
+        }
     }
     signingConfigs {
         debug {
