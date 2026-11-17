@@ -36,7 +36,7 @@ NativeModules.ReztraPrinter = {
 };
 
 // REZTRA_TEST_SCREEN=phone|tablet picks the window size (default: jest's 750x1334 -> tablet layout)
-const SIZES = { phone: { width: 390, height: 844 }, tablet: { width: 1280, height: 800 } };
+const SIZES = { phone: { width: 390, height: 844 }, tablet: { width: 1280, height: 800 }, portrait: { width: 800, height: 1280 } };   // portrait = 9" tablet held upright
 const size = SIZES[process.env.REZTRA_TEST_SCREEN];
 if (size) {
     const RN = require('react-native');

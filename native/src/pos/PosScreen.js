@@ -192,7 +192,7 @@ export default function PosScreen({ user, device, onLogout, registerOpen: regIni
                     <View className="px-[18px] mt-3 flex-row" style={{ gap: 8 }}><SearchBox value={menu.query} onChange={menu.setQuery} className="flex-1" /><MenuViewToggle value={menuView} onChange={setMenuView} /></View>
                     <View className="px-[18px] py-3"><CategoryBar cat={menu.cat} setCat={menu.setCat} /></View>
                     <View className="flex-1 px-3">
-                        <ItemGrid items={menu.items} columns={2} width={width - 24} qtyById={qtyById} orderType={pos.orderType} partner={pos.partner} onPress={pos.onItemPress} footerSpace={pos.cart.length ? 80 : 0} plain={plain} />
+                        <ItemGrid items={menu.items} columns={Math.max(2, Math.floor((width - 24) / 180)) + (plain && width >= 600 ? 1 : 0)} width={width - 24} qtyById={qtyById} orderType={pos.orderType} partner={pos.partner} onPress={pos.onItemPress} footerSpace={pos.cart.length ? 80 : 0} plain={plain} />
                     </View>
                     {pos.cart.length ? (
                         <Pressable onPress={() => setCartOpen(true)} className="absolute left-3.5 right-3.5 bottom-3 h-[62px] rounded-[18px] bg-inverse flex-row items-center px-3" style={{ elevation: 8 }}>

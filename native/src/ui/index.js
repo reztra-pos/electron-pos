@@ -12,11 +12,16 @@ import { tr, useLang } from '../lib/i18n';
 export { COLORS };
 export { ThemeProvider, useTheme, tintFor } from './theme';
 
-/** tablet = shortest side 600dp or more (9" and up, landscape); phone = portrait */
+/**
+ * tablet layout = shortest side 600dp or more (9" and up) AND held landscape.
+ * A tablet held upright gets the portrait (phone) layout: Android 16+ ignores the app's landscape lock on tablets,
+ * and the side-by-side tablet layout does not fit a portrait screen (it was cut off on both sides).
+ */
 export function useLayout() {
   const { width, height } = useWindowDimensions();
-  const isTablet = Math.min(width, height) >= 600;
-  return { width, height, isTablet, wide: width >= 1366 };
+  const bigScreen = Math.min(width, height) >= 600;
+  const isTablet = bigScreen && width >= height;
+  return { width, height, isTablet, bigScreen, wide: width >= 1366 };
 }
 
 /* ---------------- money with the currency sign (Saudi Riyal sign needs its own font) ---------------- */
