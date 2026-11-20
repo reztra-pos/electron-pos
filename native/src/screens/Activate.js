@@ -2,11 +2,12 @@
 import React, { useState } from 'react';
 import { ScrollView, Text, TextInput, View } from 'react-native';
 import Clipboard from '../lib/clipboard';
-import { KeyRound, ClipboardPaste, Monitor, Store, CalendarClock, ShieldAlert, CheckCircle2 } from 'lucide-react-native';
+import { KeyRound, ClipboardPaste, Monitor, Store, CalendarClock, ShieldAlert, CheckCircle2, ScanLine } from 'lucide-react-native';
 import { Btn, COLORS, useLayout } from '../ui';
 import { activate, previewKey } from '../lib/api';
 import { deviceInfo } from '../lib/printer';
 import { tr } from '../lib/i18n';
+import ScanKey from './ScanKey';
 
 export default function ActivateScreen({ onActivated, notice = '' }) {
     const { isTablet } = useLayout();
@@ -14,6 +15,7 @@ export default function ActivateScreen({ onActivated, notice = '' }) {
     const [info, setInfo] = useState(null);
     const [busy, setBusy] = useState(null);
     const [err, setErr] = useState('');
+    const [scan, setScan] = useState(false);
 
     const check = async (k = key) => {
         setErr(''); setInfo(null);
@@ -21,6 +23,7 @@ export default function ActivateScreen({ onActivated, notice = '' }) {
         setBusy('check');
         try { setInfo(await previewKey(k)); } catch (e) { setErr(e.message); } finally { setBusy(null); }
     };
+    const scanned = (k) => { setScan(false); setKey(k); check(k); };
     const paste = async () => { const t = await Clipboard.getString(); setKey(t || ''); if (t) check(t); };
     const go = async () => {
         setBusy('go'); setErr('');
@@ -37,12 +40,13 @@ export default function ActivateScreen({ onActivated, notice = '' }) {
                         <Text className="text-[13.5px] text-ink-2">{tr("Connect this device to your outlet with a device key.")}</Text></View>
                 </View>
                 {notice ? <View className="flex-row items-start bg-danger-bg rounded-xl p-3 mt-3"><ShieldAlert size={18} color={COLORS.danger} /><Text className="text-danger font-semibold ml-2 flex-1">{notice}</Text></View> : null}
-                <Text className="text-ink-2 text-[13.5px] mt-4 leading-6">{tr("1. In the web app open Settings → POS Devices and copy the device API key.")}{'\n'}{tr("2. Paste it below, check the device and outlet, then tap Activate.")}</Text>
+                <Text className="text-ink-2 text-[13.5px] mt-4 leading-6">{tr("1. In the web app open Settings → POS Devices and copy the device API key.")}{'\n'}{tr("2. Paste it below or tap Scan QR, check the device and outlet, then tap Activate.")}</Text>
                 <Text className="text-[12.5px] font-bold text-ink-2 mt-4 mb-1.5">{tr("Device API key")}</Text>
                 <TextInput value={key} onChangeText={(t) => { setKey(t); setInfo(null); }} onEndEditing={() => check()} multiline placeholder={tr("RZT1.xxxxxxxx…")} placeholderTextColor={COLORS.ink3}
                     autoCapitalize="none" autoCorrect={false} className="min-h-[110px] rounded-xl border border-line p-3 text-[13px] text-ink" style={{ fontFamily: 'monospace', textAlignVertical: 'top' }} />
                 <View className="flex-row mt-3" style={{ gap: 8 }}>
                     <Btn label={tr("Paste")} icon={ClipboardPaste} onPress={paste} />
+                    <Btn label={tr("Scan QR")} icon={ScanLine} onPress={() => setScan(true)} />
                     <Btn label={info ? tr("Activate") : tr("Check key")} variant="primary" className="flex-1" busy={!!busy} disabled={!key.trim()} onPress={info ? go : () => check()} />
                 </View>
                 {err ? <Text className="text-danger font-semibold mt-3">{err}</Text> : null}
@@ -56,6 +60,7 @@ export default function ActivateScreen({ onActivated, notice = '' }) {
                     </View>
                 ) : null}
             </View>
+            <ScanKey visible={scan} onClose={() => setScan(false)} onScan={scanned} />
         </ScrollView>
     );
 }

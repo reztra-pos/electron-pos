@@ -27,6 +27,7 @@
     "nativewind": "4.2.7",
     "react": "19.3.0",
     "react-native": "0.88.1",
+    "react-native-camera-kit": "^18.0.1",
     "react-native-keychain": "11.0.0",
     "react-native-reanimated": "4.7.1",
     "react-native-safe-area-context": "^5.5.2",

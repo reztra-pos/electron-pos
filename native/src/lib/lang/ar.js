@@ -565,4 +565,11 @@ export default {
     "Price of {name}": "سعر {name}",
     "Enter a valid price.": "أدخل سعرًا صحيحًا.",
     "PRICE CHANGED": "تم تغيير السعر",
+    "Scan QR": "مسح QR",
+    "2. Paste it below or tap Scan QR, check the device and outlet, then tap Activate.": "2. الصقه أدناه أو اضغط مسح QR، تحقق من الجهاز والفرع، ثم اضغط تفعيل.",
+    "Point the camera at the device key QR code": "وجّه الكاميرا إلى رمز QR لمفتاح الجهاز",
+    "This QR is not a device key.": "رمز QR هذا ليس مفتاح جهاز.",
+    "Camera permission is needed to scan the QR code.": "يلزم إذن الكاميرا لمسح رمز QR.",
+    "Allow camera": "السماح بالكاميرا",
+    "Open settings": "فتح الإعدادات",
 };

@@ -17,6 +17,7 @@ jest.mock('react-native-keychain', () => ({
 }));
 jest.mock('@react-native-clipboard/clipboard', () => ({ __esModule: true, default: { getString: async () => global.__clip || '', setString: () => { } } }));
 jest.mock('react-native-safe-area-context', () => require('react-native-safe-area-context/jest/mock').default);
+jest.mock('react-native-camera-kit', () => ({ Camera: () => null, CameraType: { Back: 'back' } }));
 // icons render nothing in tests, but only names the real package exports exist (an unknown icon is undefined, as on the device)
 jest.mock('lucide-react-native', () => {
     const src = require('fs').readFileSync(require('path').join(__dirname, '../node_modules/lucide-react-native/dist/esm/lucide-react-native.mjs'), 'utf8');

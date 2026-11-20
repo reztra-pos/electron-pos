@@ -565,4 +565,11 @@ export default {
     "Price of {name}": "{name} की कीमत",
     "Enter a valid price.": "सही कीमत डालें।",
     "PRICE CHANGED": "कीमत बदली",
+    "Scan QR": "QR स्कैन करें",
+    "2. Paste it below or tap Scan QR, check the device and outlet, then tap Activate.": "2. नीचे पेस्ट करें या QR स्कैन करें, डिवाइस और आउटलेट जाँचें, फिर Activate दबाएँ।",
+    "Point the camera at the device key QR code": "कैमरा को डिवाइस की QR कोड पर रखें",
+    "This QR is not a device key.": "यह QR डिवाइस की नहीं है।",
+    "Camera permission is needed to scan the QR code.": "QR स्कैन करने के लिए कैमरा अनुमति चाहिए।",
+    "Allow camera": "कैमरा की अनुमति दें",
+    "Open settings": "सेटिंग्स खोलें",
 };
