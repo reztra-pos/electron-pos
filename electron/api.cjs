@@ -24,7 +24,7 @@ class ApiError extends Error {
 async function request(method, path, body, { useUser = true, deviceHeader = false, idempotencyKey = null, timeout = TIMEOUT_MS } = {}) {
   const d = device.load();
   if (!d) throw new ApiError("This PC is not activated.", { code: "DEVICE_NOT_ACTIVATED" });
-  const headers = { Accept: "application/json", "Content-Type": "application/json", "X-Device-Id": d.device_id };
+  const headers = { Accept: "application/json", "Content-Type": "application/json", "X-Device-Id": d.device_id, "ngrok-skip-browser-warning": "true" };
   if (useUser && userToken) headers.Authorization = `Bearer ${userToken}`;
   if (!useUser) headers.Authorization = `Bearer ${d.device_token}`;
   if (deviceHeader) headers["X-Device-Token"] = d.device_token;

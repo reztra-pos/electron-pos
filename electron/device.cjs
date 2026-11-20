@@ -40,7 +40,7 @@ async function preview(apiKey) {
   try {
     res = await net.fetch(`${k.url}/v1/devices/preview`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: { "Content-Type": "application/json", Accept: "application/json", "ngrok-skip-browser-warning": "true" },
       body: JSON.stringify({ device_id: k.device_id, code: k.code }),
       signal: AbortSignal.timeout(10000),
     });
@@ -61,7 +61,7 @@ async function activate(apiKey) {
     // net.fetch = Chromium networking: trusts the same certificates as Chrome / Windows (incl. mkcert for ddev)
     res = await net.fetch(`${k.url}/v1/devices/activate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: { "Content-Type": "application/json", Accept: "application/json", "ngrok-skip-browser-warning": "true" },
       body: JSON.stringify({
         device_id: k.device_id, code: k.code,
         machine: { hostname: os.hostname(), platform: process.platform, arch: process.arch },

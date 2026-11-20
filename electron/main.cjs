@@ -1,7 +1,7 @@
 // Electron main process — ONLINE mode.
 // The POS screen talks to the server for everything (menu, orders, kitchen, payments, ZATCA).
 // Only the device registration is kept on this PC (device.cjs). No local database, no offline queue.
-const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, dialog, session } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const device = require("./device.cjs");
@@ -195,6 +195,13 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on("second-instance", () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
   app.whenReady().then(() => {
+    session.defaultSession.webRequest.onBeforeSendHeaders(
+      { urls: ["*://*.ngrok-free.dev/*", "*://*.ngrok-free.app/*", "*://*.ngrok.io/*", "*://*.ngrok.app/*"] },
+      (details, callback) => {
+        details.requestHeaders["ngrok-skip-browser-warning"] = "true";
+        callback({ requestHeaders: details.requestHeaders });
+      }
+    );
     createWindow();
     if (device.load()) startDeviceCheck();
   });
