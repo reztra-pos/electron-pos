@@ -572,4 +572,5 @@ export default {
     "Camera permission is needed to scan the QR code.": "يلزم إذن الكاميرا لمسح رمز QR.",
     "Allow camera": "السماح بالكاميرا",
     "Open settings": "فتح الإعدادات",
+    "Reztra Waiter Panel": "لوحة النادل ريزترا",
 };

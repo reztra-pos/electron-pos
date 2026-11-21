@@ -572,4 +572,5 @@ export default {
     "Camera permission is needed to scan the QR code.": "QR स्कैन करने के लिए कैमरा अनुमति चाहिए।",
     "Allow camera": "कैमरा की अनुमति दें",
     "Open settings": "सेटिंग्स खोलें",
+    "Reztra Waiter Panel": "Reztra वेटर पैनल",
 };

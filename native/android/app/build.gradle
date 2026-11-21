@@ -89,10 +89,12 @@ android {
             pos {
                 dimension "app"
                 applicationId "com.reztra.self"
+                manifestPlaceholders = [appLabel: "Reztra POS"]
             }
             waiter {
                 dimension "app"
                 applicationId "com.reztra.waiter"
+                manifestPlaceholders = [appLabel: "Reztra Waiter"]
             }
         }
     }

@@ -1,7 +1,7 @@
 // Full-screen QR scanner for the device API key (the QR shown in the web app: Settings -> POS Devices -> Device Key).
 // Reads only codes that look like a device key ("RZT1."), then closes and hands the key back.
 import React, { useEffect, useRef, useState } from 'react';
-import { Linking, Modal, PermissionsAndroid, Platform, Pressable, Text, View } from 'react-native';
+import { Linking, Modal, PermissionsAndroid, Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { Camera, CameraType } from 'react-native-camera-kit';
 import { X, CameraOff } from 'lucide-react-native';
 import { Btn, COLORS } from '../ui';
@@ -19,6 +19,10 @@ export default function ScanKey({ visible, onClose, onScan }) {
     const [perm, setPerm] = useState('asking');
     const [hint, setHint] = useState('');
     const done = useRef(false);
+    const { width, height } = useWindowDimensions();
+    // square frame, 80% of the short side: only codes fully INSIDE the frame are read, and the
+    // default frame is a wide barcode strip that a QR code never fits into
+    const frame = Math.round(Math.min(width, height) * 0.8);
 
     useEffect(() => {
         if (!visible) return;
@@ -41,7 +45,7 @@ export default function ScanKey({ visible, onClose, onScan }) {
             <View style={{ flex: 1, backgroundColor: '#000' }}>
                 {perm === 'granted' ? (
                     <Camera style={{ flex: 1 }} cameraType={CameraType.Back} scanBarcode allowedBarcodeTypes={['qr']}
-                        onReadCode={onRead} showFrame laserColor={COLORS.brand || '#7c3aed'} frameColor="#ffffff" />
+                        onReadCode={onRead} showFrame barcodeFrameSize={{ width: frame, height: frame }} laserColor={COLORS.brand || '#7c3aed'} frameColor="#ffffff" />
                 ) : perm === 'asking' ? null : (
                     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
                         <CameraOff size={42} color="#fff" />

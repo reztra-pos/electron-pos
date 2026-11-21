@@ -8,6 +8,7 @@ import { firstError } from '../lib/format';
 import { LANGS, tr, useLang } from '../lib/i18n';
 import { dateLabel } from '../pos/DateTime';
 import { trialNow } from '../lib/trial';
+import { APP_NAME } from '../lib/appInfo';
 
 const PIN_LEN = 4;
 
@@ -94,7 +95,7 @@ export default function LoginScreen({ onLogin, notice = '', device, onReset }) {
             {isTablet ? (
                 <View className="flex-row items-center justify-center" style={{ gap: 60 }}>
                     <View style={{ maxWidth: 460 }}>
-                        <Text className="text-[40px] font-extrabold text-ink leading-[46px]">{tr("Welcome to")} <Text className="text-brand">{tr("Reztra POS")}</Text></Text>
+                        <Text className="text-[40px] font-extrabold text-ink leading-[46px]">{tr("Welcome to")} <Text className="text-brand">{tr(APP_NAME)}</Text></Text>
                         <Text className="text-[64px] font-extrabold text-ink mt-6">{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
                         <Text className="text-ink-2 font-semibold text-[16px] mb-5">{dateLabel(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`)}</Text>
                         <Text className="text-ink-2 text-[15px] leading-6">{tr("Take orders, send them to the kitchen, collect payments and print ZATCA invoices — all from this tablet.")}</Text>

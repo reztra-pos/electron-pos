@@ -6,7 +6,9 @@
 //   npm run apk:pos      -> only Reztra POS, production
 //   npm run apk:waiter   -> only Reztra Waiter, production
 //   npm run apk:trial    -> both apps, 3-day trial
-// The APKs are copied to release/ with a clear name. src/build-info.json is always set back to "no trial"
+// Each app is built on its own, so its bundle knows which app it is (src/build-info.json "app": shown as
+// "Reztra POS" / "Reztra Waiter Panel" inside the app).
+// The APKs are copied to release/ with a clear name. src/build-info.json is always set back to "no trial, pos"
 // afterwards (also when the build fails), so a normal run-android never makes a trial by mistake.
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -24,13 +26,16 @@ const run = (cmd, args, cwd = root) => {
 };
 let failed = false;
 try {
-  run('node', ['scripts/make-trial.mjs', mode]);
-  run(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', apps.map((a) => `assemble${cap(a)}Release`), join(root, 'android'));
-  run('node', ['scripts/copy-apk.mjs', ...apps]);
+  for (const a of apps) {
+    console.log(`\n===== Building ${a === 'pos' ? 'Reztra POS' : 'Reztra Waiter'} =====`);
+    run('node', ['scripts/make-trial.mjs', mode, a]);
+    run(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', [`assemble${cap(a)}Release`], join(root, 'android'));
+    run('node', ['scripts/copy-apk.mjs', a]);
+  }
 } catch (e) {
   failed = true;
   console.error(`\nBuild failed: ${e.message}`);
 } finally {
-  if (mode !== 'off') run('node', ['scripts/make-trial.mjs', 'off']);
+  run('node', ['scripts/make-trial.mjs', 'off', 'pos']);
 }
 process.exit(failed ? 1 : 0);
